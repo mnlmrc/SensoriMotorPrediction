@@ -1,6 +1,7 @@
 
 # Ignore the virtual environment
 smp0/venv/
+*.tgt
 .DS_Store
 smp0/.DS_Store
 smp1/.DS_Store
@@ -9,5 +10,6 @@ __pycache__/
 smp0/__pycache__/
 smp1/__pycache__/
 smp2/__pycache__/
+smp2/target
 venv/
 .DS_Store
