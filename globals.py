@@ -5,6 +5,7 @@ import numpy as np
 
 Dirs = ["/Volumes/diedrichsen_data$/data/SensoriMotorPrediction/",
         "/cifs/diedrichsen/data/SensoriMotorPrediction/",
+        "/Users/mnlmrc/Library/CloudStorage/GoogleDrive-mnlmrc@unife.it/My Drive/UWO/SensoriMotorPrediction/",
         "/Users/mnlmrc/Documents/data/SensoriMotorPrediction/"]
 
 # Find the first existing directory
