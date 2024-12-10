@@ -2,6 +2,7 @@
 # Ignore the virtual environment
 smp0/venv/
 *.tgt
+*.asv
 .DS_Store
 smp0/.DS_Store
 smp1/.DS_Store
