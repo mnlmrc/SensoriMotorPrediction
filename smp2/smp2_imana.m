@@ -225,7 +225,7 @@ function varargout = smp2_imana(what,varargin)
             if isempty(sn)
                 error('ANAT:reslice_LPI -> ''sn'' must be passed to this function.')
             end
-            subj_id = char(pinfo.subj_id(pinfo.sn==sn));
+            subj_id = pinfo.subj_id{pinfo.sn==sn};
             
             % (1) Reslice anatomical image to set it within LPI co-ordinate frames
             source = fullfile(baseDir,anatomicalDir,subj_id,[subj_id '_anatomical_raw.nii']);
@@ -259,7 +259,7 @@ function varargout = smp2_imana(what,varargin)
             if isempty(sn)
                 error('ANAT:centre_AC -> ''sn'' must be passed to this function.')
             end
-            subj_id = char(pinfo.subj_id(pinfo.sn==sn));
+            subj_id = pinfo.subj_id{pinfo.sn==sn};
             
             % path to the raw anatomical:
             anat_raw_file = fullfile(baseDir,anatomicalDir,subj_id,[subj_id '_anatomical.nii']);
