@@ -9,10 +9,10 @@ function varargout = smp2_functional(what, varargin)
         path = cbsPath;
     end
     
-    if isfolder("/Volumes/diedrichsen_data$//data/SensoriMotorPrediction/smp2/")
-        baseDir = "/Volumes/diedrichsen_data$//data/SensoriMotorPrediction/smp2/";
-    elseif isfolder("/cifs/diedrichsen/data/SensoriMotorPrediction/smp2/")
-        baseDir = "/cifs/diedrichsen/data/SensoriMotorPrediction/smp2/";
+    if isfolder('/Volumes/diedrichsen_data$//data/SensoriMotorPrediction/smp2/')
+        baseDir = '/Volumes/diedrichsen_data$//data/SensoriMotorPrediction/smp2/';
+    elseif isfolder('/cifs/diedrichsen/data/SensoriMotorPrediction/smp2/')
+        baseDir = '/cifs/diedrichsen/data/SensoriMotorPrediction/smp2/';
     else
         fprintf('Workdir not found. Mount or connect to server and try again.');
     end
@@ -200,14 +200,14 @@ function varargout = smp2_functional(what, varargin)
 
             [et1, et2, tert] = spmj_et1_et2_tert(baseDir, subj_id, sn);
 
-            spmj_makefieldmap(char(fullfile(baseDir, fmapDir, subj_id)), ...
+            spmj_makefieldmap(fullfile(baseDir, fmapDir, subj_id), ...
                               sprintf('%s_magnitude.nii', subj_id),...
                               sprintf('%s_phase.nii', subj_id),...
                               'phase_encode', -1, ... % It's -1 (A>>P) or 1 (P>>A) and can be found in imaging sequence specifications
                               'et1', et1, ...
                               'et2', et2, ...
                               'tert', tert, ...
-                              'func_dir',char(fullfile(baseDir, fmapDir, subj_id)),...
+                              'func_dir',fullfile(baseDir, fmapDir, subj_id),...
                               'epi_files', epi_files);
         
         case 'FUNC:realign_unwarp'      
@@ -230,14 +230,14 @@ function varargout = smp2_functional(what, varargin)
             subj_id = subj_row.subj_id{1};
 
             % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(sub_row.FuncRuns{1});
+            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
             run_names = {}; % Initialize as an empty cell array
             for run = runs
-                run_names{end+1} = sprintf('%s_run_%02d', subj_id, run);
+                run_names{end+1} = sprintf('run_%02d', run);
             end
 
             spmj_realign_unwarp(subj_id, ...
-                run_names, ...
+                 run_names, ...
                 'rawdata_dir',fullfile(baseDir,imagingRawDir),...
                 'fmap_dir',fullfile(baseDir,fmapDir),...
                 'raw_name','run',...
