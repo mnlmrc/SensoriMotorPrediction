@@ -144,12 +144,38 @@ function varargout = smp2_functional(what, varargin)
     
     
         case 'FUNC:make_fmap'                
-            % Description:
-            % Generates VDM files from the presubtracted phase & magnitude
-            % images acquired from the field map sequence. Also, just as a
-            % quality control this function creates unwarped EPIs from the
-            % functional data with the prefix 'u' for each run. 
-            % ADD OUTPUTS DESCRIPTION
+            % Differences in magnetic susceptibility between tissues (e.g.,
+            % air-tissue or bone-tissue interfaces) can cause
+            % inhomogeneities in the magnetic field. These inhomogeneities
+            % result in spatial distortions along the phase-encoding
+            % direction, which is the direction in which spatial location
+            % is encoded using a phase gradient. To account for these
+            % distortions, this step generates a Voxel Displacement Map
+            % (VDM) for each run, saved as files named
+            % vdm5_sc<subj_id>_phase_run_XX.nii in the fieldmap directory.
+            % 
+            % The VDM assigns a value in millimeters to each voxel,
+            % indicating how far it should be shifted along the
+            % phase-encoding direction to correct for the distortion. If
+            % you open the VDM in FSLeyes, you will notice that the
+            % distortion is particularly strong in the temporal lobe due to
+            % proximity to the nasal cavities, where significant
+            % differences in magnetic susceptibility occur.
+            % 
+            % In the fieldmap directory, you will also find the intermediate
+            % files bmask<subj_id>_magnitude.nii and
+            % fpm_sc<subj_id>_phase.nii that are used for VDM calculation
+            % 
+            % In the imaging_data_raw directory, you will find unwarped
+            % functional volumes named u<subj_id>_run_XX.nii. These
+            % correspond to the corrected first volume of each functional
+            % run. Open them in FSL to inspect how the distortion was
+            % corrected using the VDM (this step is for quality checking;
+            % the actual unwarping is performed in a later step).
+            % 
+            % In addition, the imaging_raw_data directory contains the
+            % intermediate file wfmag_<subj_id>_run_XX.nii that is
+            % necessary to perform unwarping in eah run.
             
             % handling input args:
             sn = [];
@@ -173,9 +199,6 @@ function varargout = smp2_functional(what, varargin)
             end
 
             [et1, et2, tert] = spmj_et1_et2_tert(baseDir, subj_id, sn);
-
-            % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
 
             spmj_makefieldmap(char(fullfile(baseDir, fmapDir, subj_id)), ...
                               sprintf('%s_magnitude.nii', subj_id),...
