@@ -1,4 +1,26 @@
-function varargout = template_functional_singlesess(what, varargin)
+function varargout = smp2_functional(what, varargin)
+
+    localPath = '/Users/mnlmrc/Documents/';
+    cbsPath = '/home/ROBARTS/memanue5/Documents/';
+    % Directory specification
+    if isfolder(localPath)
+        path = localPath;
+    elseif isfolder(cbsPath)
+        path = cbsPath;
+    end
+    
+    if isfolder("/Volumes/diedrichsen_data$//data/SensoriMotorPrediction/smp2/")
+        baseDir = "/Volumes/diedrichsen_data$//data/SensoriMotorPrediction/smp2/";
+    elseif isfolder("/cifs/diedrichsen/data/SensoriMotorPrediction/smp2/")
+        baseDir = "/cifs/diedrichsen/data/SensoriMotorPrediction/smp2/";
+    else
+        fprintf('Workdir not found. Mount or connect to server and try again.');
+    end
+    
+    bidsDir = 'BIDS'; % Raw data post AutoBids conversion
+    imagingRawDir = 'imaging_data_raw'; % Temporary directory for raw functional data
+    imagingDir = 'imaging_data'; % Preprocesses functional data
+    fmapDir = 'fieldmaps'; % Fieldmap dir after moving from BIDS and SPM make fieldmap
 
     pinfo = dload(fullfile(baseDir,'participants.tsv'));
 
@@ -20,10 +42,10 @@ function varargout = template_functional_singlesess(what, varargin)
             subj_row=getrow(pinfo, pinfo.sn== sn);
             
             % get subj_id
-            subj_id = subj_row.participant_id{1};
+            subj_id = subj_row.subj_id{1};
 
             % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(sub_row.FuncRuns{1});
+            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
 
             % loop on runs of sess:
             for run = runs
@@ -63,7 +85,7 @@ function varargout = template_functional_singlesess(what, varargin)
             % directory. After you run this function you will find
             % two files named <subj_id>_phase.nii and 
             % <subj_id>_magnitude.nii in the 
-            % <project_id>/fieldmaps/<subj_id>/sess<N>/ directory.
+            % <project_id>/fieldmaps/<subj_id>/ directory.
             
             % handling input args:
             sn = [];
@@ -76,7 +98,7 @@ function varargout = template_functional_singlesess(what, varargin)
             subj_row=getrow(pinfo, pinfo.sn== sn);
             
             % get subj_id
-            subj_id = subj_row.participant_id{1};
+            subj_id = subj_row.subj_id{1};
             
             % pull fmap raw names from the participant.tsv:
             fmapMagnitudeName_tmp = pinfo.fmapMagnitudeName{pinfo.sn==sn};
@@ -140,27 +162,33 @@ function varargout = template_functional_singlesess(what, varargin)
             subj_row=getrow(pinfo, pinfo.sn== sn);
             
             % get subj_id
-            subj_id = subj_row.participant_id{1};
+            subj_id = subj_row.subj_id{1};
             
-            % Prefix of the functional files:
-            prefixepi  = '';
+            % get runs (FuncRuns column needs to be in participants.tsv)    
+            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
+            
+            file_list = {}; % Initialize as an empty cell array
+            for run = runs
+                file_list{end+1} = sprintf('%s_run_%02d.nii', subj_id, run);
+            end
 
             [et1, et2, tert] = spmj_et1_et2_tert(baseDir, subj_id, sn);
 
             % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(sub_row.FuncRuns{1});
+            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
 
             % subfolderFieldmap = sprintf('sess%d',sess);
             % function to create the makefieldmap job and passing it to the SPM
             % job manager:
-            spmj_makefieldmap(baseDir,subj_id,runs, ...
+            spmj_makefieldmap(fullfile(baseDir, fmapDir, subj_id), ...
+                              sprintf('%s_magnitude.nii', subj_id),...
+                              sprintf('%s_phase.nii', subj_id),...
+                              'phase_encode', -1, ... % It's -1 (A>>P) or 1 (P>>A) and can be found in imaging sequence specifications
                               'et1', et1, ...
                               'et2', et2, ...
                               'tert', tert, ...
-                              'image', 1, ... % remove numDummys?
-                              'prefix',prefixepi, ...
-                              'rawdataDir',fullfile(baseDir,imagingRawDir,subj_id), ...
-                              'subfolderFieldmap','');
+                              'func_dir',fullfile(baseDir,imagingRawDir,subj_id),...
+                              'epi_files', file_list);
         
         case 'FUNC:realign_unwarp'      
             % Do spm_realign_unwarp
