@@ -535,7 +535,7 @@ function varargout = smp2_imana(what,varargin)
             % EPI images often contain smooth artifacts caused by MRI
             % physics which make the intensity of signal from the same
             % tissue (e.g., grey matter, white matter) non-uniform. This
-            % step perform bias correction and created an image where the
+            % step perform bias correction and creates an image where the
             % signal from each tissue type is more uniform. This image is
             % then co-registered to the anatomical image. Bias correction
             % help make co-registration more accurate. If the realignment

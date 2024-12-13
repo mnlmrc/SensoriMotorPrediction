@@ -229,13 +229,13 @@ function varargout = smp2_functional(what, varargin)
 
             % get runs (FuncRuns column needs to be in participants.tsv)    
             runs = spmj_dotstr2array(subj_row.FuncRuns{1});
-            run_names = {}; % Initialize as an empty cell array
+            run_list = {}; % Initialize as an empty cell array
             for run = runs
-                run_names{end+1} = sprintf('run_%02d', run);
+                run_list{end+1} = sprintf('run_%02d', run);
             end
 
             spmj_realign_unwarp(subj_id, ...
-                 run_names, ...
+                 run_list, ...
                 'rawdata_dir',fullfile(baseDir,imagingRawDir),...
                 'fmap_dir',fullfile(baseDir,fmapDir),...
                 'raw_name','run',...
@@ -286,7 +286,7 @@ function varargout = smp2_functional(what, varargin)
             subj_row=getrow(pinfo, pinfo.sn== sn);
             
             % get subj_id
-            subj_id = subj_row.participant_id{1};
+            subj_id = subj_row.subj_id{1};
 
             % get runs (FuncRuns column needs to be in participants.tsv)    
             runs = spmj_dotstr2array(subj_row.FuncRuns{1});
@@ -306,25 +306,25 @@ function varargout = smp2_functional(what, varargin)
                 % move to destination:
                 [status,msg] = movefile(source,dest);
                 if ~status  
-                    error('BIDS:move_realigned_images -> %s',msg)
+                    error('FUNC:move_realigned_images -> %s',msg)
                 end
 
-                % realign parameters names:
-                source = fullfile(baseDir,imagingRawDir,subj_id,['rp_', subj_id, '_run_', run, '.txt']);
-                dest = fullfile(baseDir,imagingDir,subj_id,['rp_', subj_id, '_run_', run, '.txt']);
-                % move to destination:
-                [status,msg] = movefile(source,dest);
-                if ~status  
-                    error('BIDS:move_realigned_images -> %s',msg)
-                end
+%                 % realign parameters names:
+%                 source = fullfile(baseDir,imagingRawDir,subj_id,sprintf('rp_%s_run_%02d.txt', subj_id,  run));
+%                 dest = fullfile(baseDir,imagingDir,subj_id,sprintf('rp_%s_run_%02d.txt', subj_id,  run));
+%                 % move to destination:
+%                 [status,msg] = movefile(source,dest);
+%                 if ~status  
+%                     error('FUNC:move_realigned_images -> %s',msg)
+%                 end
             end
             
             % mean epi name - the generated file name will be different for
             % rtm=0 and rtm=1. Extra note: rtm is an option in
             % realign_unwarp function. Refer to spmj_realign_unwarp().
             if rtm==0   % if registered to first volume of each run:
-                source = fullfile(baseDir,imagingRawDir,subj_id,['mean', prefix, subj_id, '_run_', run, '.nii']);
-                dest = fullfile(baseDir,imagingDir,subj_id,['mean', prefix, subj_id, '_run_', run, '.nii']);
+                source = fullfile(baseDir,imagingRawDir,subj_id, sprintf('mean%s%s_run_01.nii', prefix, subj_id));
+                dest = fullfile(baseDir,imagingDir,subj_id, sprintf('mean%s%s_run_01.nii', prefix, subj_id));
             else        % if registered to mean image of each run:
                 source = fullfile(baseDir,imagingRawDir,subj_id,[prefix, 'meanepi_', subj_id, '.nii']);
                 dest = fullfile(baseDir,imagingDir,subj_id,[prefix, 'meanepi_', subj_id, '.nii']);
@@ -336,9 +336,37 @@ function varargout = smp2_functional(what, varargin)
             end
             % end
         
-    
-    
-    
+        case 'FUNC:meanimage_bias_correction'
+            
+            % handling input args:
+            sn = [];
+            prefix = 'u';   % prefix of the 4D images after realign(+unwarp)
+            rtm = 0;        % realign_unwarp registered to the first volume (0) or mean image (1).
+            vararginoptions(varargin,{'sn','prefix','rtm'})
+            if isempty(sn)
+                error('FUNC:meanimage_bias_correction -> ''sn'' must be passed to this function.')
+            end
+
+            % get participant row from participant.tsv
+            subj_row=getrow(pinfo, pinfo.sn== sn);
+            
+            % get subj_id
+            subj_id = subj_row.subj_id{1};
+
+            % get runs (FuncRuns column needs to be in participants.tsv)    
+            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
+            run_list = {}; % Initialize as an empty cell array
+            for run = runs
+                run_list{end+1} = sprintf('run_%02d', run);
+            end
+
+            if rtm==0   % if registered to first volume of each run:
+                P{1} = fullfile(baseDir, imagingDir, subj_id, sprintf('mean%s%s_run_01.nii', prefix, subj_id));
+            else        % if registered to mean image of each run:
+                P{1} = fullfile(baseDir, imagingDir, subj_id, [prefix, 'meanepi_', subj_id, '.nii']);
+            end
+            spmj_bias_correct(P);
+
     
     end 
 
