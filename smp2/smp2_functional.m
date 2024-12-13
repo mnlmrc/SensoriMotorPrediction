@@ -263,9 +263,9 @@ function varargout = smp2_functional(what, varargin)
             % get runs (FuncRuns column needs to be in participants.tsv)    
             runs = spmj_dotstr2array(sub_row.FuncRuns{1});
             
-            file_list = {}; % Initialize as an empty cell array
+            run_list = {}; % Initialize as an empty cell array
             for run = runs
-                file_list{end+1} = ['rp_', subj_id, '_run_', run, '.txt'];
+                run_list{end+1} = ['rp_', subj_id, '_run_', run, '.txt'];
             end
 
             smpj_plot_mov_corr(file_list)
@@ -289,12 +289,12 @@ function varargout = smp2_functional(what, varargin)
             subj_id = subj_row.participant_id{1};
 
             % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(sub_row.FuncRuns{1});
+            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
             
             % loop on runs of the session:
             for run = runs
                 % realigned (and unwarped) images names:
-                file_name = [prefix, subj_id, '_run_', run, '.nii'];
+                file_name = sprintf('%s%s_run_%02d.nii',prefix, subj_id, run);
                 source = fullfile(baseDir,imagingRawDir,subj_id,file_name);
                 dest = fullfile(baseDir,imagingDir,subj_id);
                 if ~exist(dest,'dir')
