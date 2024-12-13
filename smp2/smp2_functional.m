@@ -167,9 +167,9 @@ function varargout = smp2_functional(what, varargin)
             % get runs (FuncRuns column needs to be in participants.tsv)    
             runs = spmj_dotstr2array(subj_row.FuncRuns{1});
             
-            file_list = {}; % Initialize as an empty cell array
+            epi_files = {}; % Initialize as an empty cell array
             for run = runs
-                file_list{end+1} = sprintf('%s_run_%02d.nii', subj_id, run);
+                epi_files{end+1} = sprintf('%s_run_%02d.nii', subj_id, run);
             end
 
             [et1, et2, tert] = spmj_et1_et2_tert(baseDir, subj_id, sn);
@@ -180,15 +180,15 @@ function varargout = smp2_functional(what, varargin)
             % subfolderFieldmap = sprintf('sess%d',sess);
             % function to create the makefieldmap job and passing it to the SPM
             % job manager:
-            spmj_makefieldmap(fullfile(baseDir, fmapDir, subj_id), ...
+            spmj_makefieldmap('/Volumes/Diedrichsen_data$/data/SensoriMotorPrediction/smp2/fieldmaps/subj102', ...
                               sprintf('%s_magnitude.nii', subj_id),...
                               sprintf('%s_phase.nii', subj_id),...
                               'phase_encode', -1, ... % It's -1 (A>>P) or 1 (P>>A) and can be found in imaging sequence specifications
                               'et1', et1, ...
                               'et2', et2, ...
                               'tert', tert, ...
-                              'func_dir',fullfile(baseDir,imagingRawDir,subj_id),...
-                              'epi_files', file_list);
+                              'func_dir','/Volumes/Diedrichsen_data$/data/SensoriMotorPrediction/smp2/imaging_data_raw/subj102',...
+                              'epi_files', epi_files);
         
         case 'FUNC:realign_unwarp'      
             % Do spm_realign_unwarp
