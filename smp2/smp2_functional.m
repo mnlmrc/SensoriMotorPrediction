@@ -212,8 +212,6 @@ function varargout = smp2_functional(what, varargin)
         
         case 'FUNC:realign_unwarp'      
             % Do spm_realign_unwarp
-
-            startTR         = 1;                                                   % first TR after the dummy scans
             
             % handling input args:
             sn = [];
