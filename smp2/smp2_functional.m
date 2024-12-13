@@ -227,19 +227,21 @@ function varargout = smp2_functional(what, varargin)
             subj_row=getrow(pinfo, pinfo.sn== sn);
             
             % get subj_id
-            subj_id = subj_row.participant_id{1};
+            subj_id = subj_row.subj_id{1};
 
             % get runs (FuncRuns column needs to be in participants.tsv)    
             runs = spmj_dotstr2array(sub_row.FuncRuns{1});
+            run_names = {}; % Initialize as an empty cell array
+            for run = runs
+                run_names{end+1} = sprintf('%s_run_%02d', subj_id, run);
+            end
 
-            % Prefix of the functional files (default 'a')
-            prefixepi  = '';
-
-            spmj_realign_unwarp(baseDir,subj_id,runs, startTR, inf, ...
-                                'prefix',prefixepi,...
-                                'rawdataDir',fullfile(baseDir,imagingRawDir,subj_id),...
-                                'subfolderFieldmap','',...
-                                'rtm',rtm);
+            spmj_realign_unwarp(subj_id, ...
+                run_names, ...
+                'rawdata_dir',fullfile(baseDir,imagingRawDir),...
+                'fmap_dir',fullfile(baseDir,fmapDir),...
+                'raw_name','run',...
+                'rtm',rtm);
         
     
         case 'FUNC:inspect_realign'
