@@ -518,7 +518,7 @@ function varargout = smp2_functional(what, varargin)
         
             % bias corrected mean epi image:
             if rtm==0
-                nam{1} = fullfile(baseDir,imagingDir,subj_id,sprintf('mean%s%s_%s.nii', prefix, subj_id, run_list{1}));
+                nam{1} = fullfile(baseDir,imagingDir,subj_id,sprintf('bmean%s%s_%s.nii', prefix, subj_id, run_list{1}));
             else
                 nam{1} = fullfile(baseDir,imagingDir,subj_id,['rb' prefix 'meanepi_' subj_id '.nii']);
             end
