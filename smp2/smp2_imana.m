@@ -760,8 +760,18 @@ function varargout = smp2_imana(what,varargin)
             glm = [];
             vararginoptions(varargin,{'sn', 'glm'})
 
-            subj_id = pinfo.subj_id{pinfo.sn==sn};
-            runs = str2double(split(pinfo.runsSess1{pinfo.sn==sn}, '.')); 
+            % get participant row from participant.tsv
+            subj_row=getrow(pinfo, pinfo.sn== sn);
+            
+            % get subj_id
+            subj_id = subj_row.subj_id{1};
+    
+            % get runs (FuncRuns column needs to be in participants.tsv)    
+            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
+            run_list = {}; % Initialize as an empty cell array
+            for run = runs
+                run_list{end+1} = sprintf('run_%02d', run);
+            end 
             
             operation  = sprintf('GLM:make_glm%d', glm);
             
@@ -1189,7 +1199,18 @@ function varargout = smp2_imana(what,varargin)
                 error('GLM:design -> ''glm'' must be passed to this function.')
             end
 
-            subj_id = pinfo.subj_id{pinfo.sn==sn};
+            % get participant row from participant.tsv
+            subj_row=getrow(pinfo, pinfo.sn== sn);
+            
+            % get subj_id
+            subj_id = subj_row.subj_id{1};
+    
+            % get runs (FuncRuns column needs to be in participants.tsv)    
+            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
+            run_list = {}; % Initialize as an empty cell array
+            for run = runs
+                run_list{end+1} = sprintf('run_%02d', run);
+            end
 
             % Load data once, outside of session loop
             % D = dload(fullfile(baseDir,behavDir,subj_id, sprintf('smp2_%d.dat', sn)));
@@ -1199,11 +1220,6 @@ function varargout = smp2_imana(what,varargin)
             regressors = unique(Dd.eventtype);
             nRegr = length(regressors); 
 
-            % pull list of runs from the participant.tsv:
-            run_list = pinfo.('runsSess1'){pinfo.sn==sn};
-            run_list_vec = str2double(split(run_list,'.'));
-            run_list = arrayfun(@(x) sprintf('%02d', x), run_list_vec, 'UniformOutput', false);
-        
             % init J
             J = [];
             T = [];
@@ -1219,7 +1235,7 @@ function varargout = smp2_imana(what,varargin)
             % each TR
             J.timing.fmri_t0 = 1;
         
-            for run = run_list_vec'
+            for run = runs
                 % Setup scans for current session
                 J.sess(run).scans = {fullfile(baseDir, imagingDir, subj_id, sprintf('%s_run_%02d.nii', subj_id, run))};
         
