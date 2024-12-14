@@ -11,7 +11,7 @@ import globals as gl
 import pandas as pd
 from force import Force
 from plot import make_colors, make_tAx, make_yref
-import tkinter as tk
+# import tkinter as tk
 import seaborn as sns
 from rsa import plot_rdm, draw_contours
 import nibabel as nb
@@ -24,51 +24,51 @@ sys.path.append('/Users/mnlmrc/Documents/GitHub')
 import surfAnalysisPy as surf
 
 
-def GUI():
-    def on_submit():
-        global what, experiment, session, participant_id
-        what = case_var.get()
-        experiment = experiment_entry.get() or None
-        session = session_entry.get() or None
-        participant_id = participant_id_entry.get().split(',') if participant_id_entry.get() else None
-        root.destroy()
-
-    root = tk.Tk()
-    root.title("Case Selector")
-
-    tk.Label(root, text="Select Case:").pack()
-    case_var = tk.StringVar(root)
-    case_var.set("FORCE:mov2npz")  # default value
-    # cases = [
-    #     "FORCE:mov2npz",
-    #     "FORCE:timec_avg",
-    #     "FORCE:timec2bins",
-    #     "FORCE:dist_timec",
-    #     "PLOT:bins_force",
-    #     "PLOT:timec_force",
-    #     "PLOT:timec_dist_force",
-    # ]
-    case_menu = tk.OptionMenu(root, case_var, *cases)
-    case_menu.pack()
-
-    tk.Label(root, text="Experiment:").pack()
-    experiment_entry = tk.Entry(root)
-    experiment_entry.insert(0, "smp<n>")  # default value
-    experiment_entry.pack()
-
-    tk.Label(root, text="Session:").pack()
-    session_entry = tk.Entry(root)
-    session_entry.insert(0, "<session>")  # default value
-    session_entry.pack()
-
-    tk.Label(root, text="Participant ID (comma-separated):").pack()
-    participant_id_entry = tk.Entry(root)
-    participant_id_entry.pack()
-
-    submit_button = tk.Button(root, text="Run", command=on_submit)
-    submit_button.pack()
-
-    root.mainloop()
+# def GUI():
+#     def on_submit():
+#         global what, experiment, session, participant_id
+#         what = case_var.get()
+#         experiment = experiment_entry.get() or None
+#         session = session_entry.get() or None
+#         participant_id = participant_id_entry.get().split(',') if participant_id_entry.get() else None
+#         root.destroy()
+#
+#     root = tk.Tk()
+#     root.title("Case Selector")
+#
+#     tk.Label(root, text="Select Case:").pack()
+#     case_var = tk.StringVar(root)
+#     case_var.set("FORCE:mov2npz")  # default value
+#     # cases = [
+#     #     "FORCE:mov2npz",
+#     #     "FORCE:timec_avg",
+#     #     "FORCE:timec2bins",
+#     #     "FORCE:dist_timec",
+#     #     "PLOT:bins_force",
+#     #     "PLOT:timec_force",
+#     #     "PLOT:timec_dist_force",
+#     # ]
+#     case_menu = tk.OptionMenu(root, case_var, *cases)
+#     case_menu.pack()
+#
+#     tk.Label(root, text="Experiment:").pack()
+#     experiment_entry = tk.Entry(root)
+#     experiment_entry.insert(0, "smp<n>")  # default value
+#     experiment_entry.pack()
+#
+#     tk.Label(root, text="Session:").pack()
+#     session_entry = tk.Entry(root)
+#     session_entry.insert(0, "<session>")  # default value
+#     session_entry.pack()
+#
+#     tk.Label(root, text="Participant ID (comma-separated):").pack()
+#     participant_id_entry = tk.Entry(root)
+#     participant_id_entry.pack()
+#
+#     submit_button = tk.Button(root, text="Run", command=on_submit)
+#     submit_button.pack()
+#
+#     root.mainloop()
 
 
 def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, stimFinger=None, cue=None,
