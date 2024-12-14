@@ -833,12 +833,7 @@ function varargout = smp2_imana(what,varargin)
              
             % Display VIF values
             vif_table = array2table( vif_values, 'VariableNames', [SPM.Sess(1).U.name]);
-            disp(vif_table);
-
-
-        
-
-        
+            disp(vif_table);  
 
         case 'GLM:make_glm10'
 
@@ -2214,7 +2209,6 @@ function varargout = smp2_imana(what,varargin)
             varargout{2} = y_hat;
 
             
-
         case 'HRF:plot_all'
 
             sn = [];
@@ -2303,8 +2297,7 @@ function varargout = smp2_imana(what,varargin)
 
             % saveas(fig, fullfile(baseDir, 'figures', subj_id, sprintf('hrf.%s.glm%d.%s.%s.png', atlas, glm, hem, eventname)))
 
-
-        
+    
         case 'HRF:plot_all2'
 
             sn = [];
