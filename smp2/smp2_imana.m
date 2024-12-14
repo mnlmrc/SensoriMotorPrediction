@@ -1655,7 +1655,7 @@ function varargout = smp2_imana(what,varargin)
 
             sn = [];
             glm = [];
-            hrf_params = [4 15.5 1 1 6 0 32];
+            hrf_params = [6 14 1 1 6 0 32];
             vararginoptions(varargin,{'sn', 'glm', 'hrf_params'})
             
             spm_get_defaults('cmdline', true);  % Suppress GUI prompts, no request for overwirte
