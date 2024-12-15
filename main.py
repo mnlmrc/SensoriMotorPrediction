@@ -556,7 +556,7 @@ if __name__ == "__main__":
     parser.add_argument('what', nargs='?', default=None, choices=cases)
     parser.add_argument('--experiment', default='smp2', help='')
     parser.add_argument('--session', default='training', help='')
-    parser.add_argument('--participant_id', nargs='+', default=None, help='')
+    parser.add_argument('--participant_id', default=None, help='')
     parser.add_argument('--GoNogo', default=None, help='')
     parser.add_argument('--stimFinger', default=None, help='')
     parser.add_argument('--cue', default=None, help='')
