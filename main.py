@@ -21,7 +21,7 @@ import sys
 
 sys.path.append('/Users/mnlmrc/Documents/GitHub')
 
-import surfAnalysisPy as surf
+# import surfAnalysisPy as surf
 
 
 # def GUI():
