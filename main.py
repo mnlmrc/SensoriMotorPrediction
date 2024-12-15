@@ -137,8 +137,8 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             # for p in participant_id:
             # load ROI file into python
             print('loading R...')
-            mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, participant_id[0],
-                                                f'{participant_id[0]}_ROI_region.mat'))
+            mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, participant_id,
+                                                f'{participant_id}_ROI_region.mat'))
             R_cell = mat['R'][0]
             R = list()
             for r in R_cell:
@@ -150,7 +150,7 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             print(f'region:{roi}, hemisphere:{Hem}, {len(R["data"])} voxels')
 
             # define path
-            pathGlm = os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', participant_id[0])
+            pathGlm = os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', participant_id)
 
             # load SPM
             print('loading iB...')
@@ -165,7 +165,7 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
 
             # load reginfo
             print('loading reginfo...')
-            reginfo = pd.read_csv(os.path.join(pathGlm, f'{participant_id[0]}_reginfo.tsv'), sep='\t')
+            reginfo = pd.read_csv(os.path.join(pathGlm, f'{participant_id}_reginfo.tsv'), sep='\t')
 
             # load residual mean squared for univariate pre-whitening
             ResMS = nb.load(os.path.join(pathGlm, 'ResMS.nii'))
@@ -188,7 +188,7 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             rdm.reorder(np.argsort(rdm.pattern_descriptors['conds']))
             rdm.reorder(gl.rdm_index[f'glm{glm}'])
             rdm.pattern_descriptors['conds'] = [c.replace(" ", "") for c in rdm.pattern_descriptors['conds']]
-            rdm.save(os.path.join(gl.baseDir, experiment, gl.rdmDir, participant_id[0], f'glm{glm}.{Hem}.{roi}.hdf5'),
+            rdm.save(os.path.join(gl.baseDir, experiment, gl.rdmDir, participant_id, f'glm{glm}.{Hem}.{roi}.hdf5'),
                      overwrite=True, file_type='hdf5')
             # RDMs.append(rdm)
 
