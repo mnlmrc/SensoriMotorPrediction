@@ -206,7 +206,7 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             Hem = ['L', 'R']
             for H in Hem:
                 for r in rois:
-                    main('RDM:roi', experiment=experiment, participant_id=participant_id[0], roi=r, Hem=H, glm=glm)
+                    main('RDM:roi', experiment=experiment, participant_id=participant_id, roi=r, Hem=H, glm=glm)
 
         # endregion
 
