@@ -133,70 +133,70 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
         # region RDM:roi
         case 'RDM:roi':
 
-            RDMs = list()
-            for p in participant_id:
-                # load ROI file into python
-                print('loading R...')
-                mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, p, f'{p}_ROI_region.mat'))
-                R_cell = mat['R'][0]
-                R = list()
-                for r in R_cell:
-                    R.append({field: r[field].item() for field in r.dtype.names})
+            # RDMs = list()
+            # for p in participant_id:
+            # load ROI file into python
+            print('loading R...')
+            mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, p, f'{p}_ROI_region.mat'))
+            R_cell = mat['R'][0]
+            R = list()
+            for r in R_cell:
+                R.append({field: r[field].item() for field in r.dtype.names})
 
-                # find roi where to calc RDM
-                R = R[[True if (r['name'] == roi) and (r['hem'] == Hem) else False for r in R].index(True)]
+            # find roi where to calc RDM
+            R = R[[True if (r['name'] == roi) and (r['hem'] == Hem) else False for r in R].index(True)]
 
-                print(f'region:{roi}, hemisphere:{Hem}, {len(R["data"])} voxels')
+            print(f'region:{roi}, hemisphere:{Hem}, {len(R["data"])} voxels')
 
-                # define path
-                pathGlm = os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', p)
+            # define path
+            pathGlm = os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', p)
 
-                # load SPM
-                print('loading iB...')
-                try:
-                    iB = mat73.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
-                except:
-                    iB = scipy.io.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
+            # load SPM
+            print('loading iB...')
+            try:
+                iB = mat73.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
+            except:
+                iB = scipy.io.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
 
-                # retrieve beta dirs
-                files = [file for f, file in enumerate(os.listdir(pathGlm)) if
-                         file.startswith('beta') and f + 1 < iB[0]]
+            # retrieve beta dirs
+            files = [file for f, file in enumerate(os.listdir(pathGlm)) if
+                     file.startswith('beta') and f + 1 < iB[0]]
 
-                # load reginfo
-                print('loading reginfo...')
-                reginfo = pd.read_csv(os.path.join(pathGlm, f'{p}_reginfo.tsv'), sep='\t')
+            # load reginfo
+            print('loading reginfo...')
+            reginfo = pd.read_csv(os.path.join(pathGlm, f'{p}_reginfo.tsv'), sep='\t')
 
-                # load residual mean squared for univariate pre-whitening
-                ResMS = nb.load(os.path.join(pathGlm, 'ResMS.nii'))
+            # load residual mean squared for univariate pre-whitening
+            ResMS = nb.load(os.path.join(pathGlm, 'ResMS.nii'))
 
-                beta_prewhitened = list()
-                for f in files:
-                    vol = nb.load(os.path.join(pathGlm, f))
-                    beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
-                    res = nt.sample_image(ResMS, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
-                    beta_prewhitened.append(beta / np.sqrt(res))
+            beta_prewhitened = list()
+            for f in files:
+                vol = nb.load(os.path.join(pathGlm, f))
+                beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
+                res = nt.sample_image(ResMS, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
+                beta_prewhitened.append(beta / np.sqrt(res))
 
-                beta_prewhitened = np.array(beta_prewhitened)
-                dataset = rsa.data.Dataset(
-                    beta_prewhitened,
-                    channel_descriptors={'channel': np.array(['vox_' + str(x) for x in range(beta_prewhitened.shape[-1])])},
-                    obs_descriptors={'conds': reginfo.name,
-                                     'run': reginfo.run})
-                rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run')
-                rdm.rdm_descriptors = {'roi': R["name"], 'hem': R["hem"], 'index': [0]}
-                rdm.reorder(np.argsort(rdm.pattern_descriptors['conds']))
-                rdm.reorder(gl.rdm_index[f'glm{glm}'])
-                rdm.pattern_descriptors['conds'] = [c.replace(" ", "") for c in rdm.pattern_descriptors['conds']]
-                rdm.save(os.path.join(gl.baseDir, experiment, gl.rdmDir, p, f'glm{glm}.{Hem}.{roi}.hdf5'),
-                         overwrite=True, file_type='hdf5')
-                RDMs.append(rdm)
+            beta_prewhitened = np.array(beta_prewhitened)
+            dataset = rsa.data.Dataset(
+                beta_prewhitened,
+                channel_descriptors={'channel': np.array(['vox_' + str(x) for x in range(beta_prewhitened.shape[-1])])},
+                obs_descriptors={'conds': reginfo.name,
+                                 'run': reginfo.run})
+            rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run')
+            rdm.rdm_descriptors = {'roi': R["name"], 'hem': R["hem"], 'index': [0]}
+            rdm.reorder(np.argsort(rdm.pattern_descriptors['conds']))
+            rdm.reorder(gl.rdm_index[f'glm{glm}'])
+            rdm.pattern_descriptors['conds'] = [c.replace(" ", "") for c in rdm.pattern_descriptors['conds']]
+            rdm.save(os.path.join(gl.baseDir, experiment, gl.rdmDir, participant_id[0], f'glm{glm}.{Hem}.{roi}.hdf5'),
+                     overwrite=True, file_type='hdf5')
+            # RDMs.append(rdm)
 
-            RDMs = rsa.rdm.concat(RDMs).mean()
-            RDMs.pattern_descriptors['conds'] = [c.replace(" ", "") for c in RDMs.pattern_descriptors['conds']]
-            RDMs.save(os.path.join(gl.baseDir, experiment, gl.rdmDir, f'glm{glm}.{Hem}.{roi}.hdf5'),
-                      overwrite=True, file_type='hdf5')
-
-            return RDMs
+            # RDMs = rsa.rdm.concat(RDMs).mean()
+            # RDMs.pattern_descriptors['conds'] = [c.replace(" ", "") for c in RDMs.pattern_descriptors['conds']]
+            # RDMs.save(os.path.join(gl.baseDir, experiment, gl.rdmDir, f'glm{glm}.{Hem}.{roi}.hdf5'),
+            #           overwrite=True, file_type='hdf5')
+            #
+            # return RDMs
         # endregion
 
         # region RDM:rois
