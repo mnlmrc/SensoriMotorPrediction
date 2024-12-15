@@ -175,7 +175,7 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             res = nt.sample_image(ResMS, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
 
             betas_prewhitened = list()
-            betas = list
+            betas = list()
             for n_regr in range(reginfo.shape[0]):
                 vol = nb.load(os.path.join(pathGlm, f'beta_{n_regr+1:04d}.nii'))
                 beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
