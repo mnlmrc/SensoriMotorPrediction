@@ -162,9 +162,9 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             except:
                 iB = scipy.io.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
 
-            # retrieve beta dirs
-            files = [file for f, file in enumerate(os.listdir(pathGlm)) if
-                     file.startswith('beta') and f + 1 < iB[0]]
+            # # retrieve beta dirs
+            # files = [file for f, file in enumerate(os.listdir(pathGlm)) if
+            #          file.startswith('beta') and f + 1 < iB[0]]
 
             # load reginfo
             print('loading reginfo...')
@@ -172,21 +172,24 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
 
             # load residual mean squared for univariate pre-whitening
             ResMS = nb.load(os.path.join(pathGlm, 'ResMS.nii'))
+            res = nt.sample_image(ResMS, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
 
-            beta_prewhitened = list()
-            for f in files:
-                vol = nb.load(os.path.join(pathGlm, f))
+            betas_prewhitened = list()
+            betas = list
+            for n_regr in range(reginfo.shape[0]):
+                vol = nb.load(os.path.join(pathGlm, f'beta_{n_regr+1:04d}.nii'))
                 beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
-                res = nt.sample_image(ResMS, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
-                beta_prewhitened.append(beta / np.sqrt(res))
+                betas.append(beta)
+                betas_prewhitened.append(beta / np.sqrt(res))
 
-            beta_prewhitened = np.array(beta_prewhitened)
+            betas_prewhitened = np.array(betas_prewhitened)
+            betas = np.array(betas)
             dataset = rsa.data.Dataset(
-                beta_prewhitened,
-                channel_descriptors={'channel': np.array(['vox_' + str(x) for x in range(beta_prewhitened.shape[-1])])},
+                betas,
+                channel_descriptors={'channel': np.array(['vox_' + str(x) for x in range(betas.shape[-1])])},
                 obs_descriptors={'conds': reginfo.name,
                                  'run': reginfo.run})
-            rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run')
+            rdm = rsa.rdm.calc_rdm(dataset, method='euclidean', descriptor='conds', cv_descriptor='run')
             rdm.rdm_descriptors = {'roi': R["name"], 'hem': R["hem"], 'index': [0]}
             rdm.reorder(np.argsort(rdm.pattern_descriptors['conds']))
             rdm.reorder(gl.rdm_index[f'glm{glm}'])
