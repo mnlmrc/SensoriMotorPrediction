@@ -137,7 +137,8 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             # for p in participant_id:
             # load ROI file into python
             print('loading R...')
-            mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, p, f'{p}_ROI_region.mat'))
+            mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, participant_id[0],
+                                                f'{participant_id[0]}_ROI_region.mat'))
             R_cell = mat['R'][0]
             R = list()
             for r in R_cell:
@@ -149,7 +150,7 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             print(f'region:{roi}, hemisphere:{Hem}, {len(R["data"])} voxels')
 
             # define path
-            pathGlm = os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', p)
+            pathGlm = os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', participant_id[0])
 
             # load SPM
             print('loading iB...')
@@ -164,7 +165,7 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
 
             # load reginfo
             print('loading reginfo...')
-            reginfo = pd.read_csv(os.path.join(pathGlm, f'{p}_reginfo.tsv'), sep='\t')
+            reginfo = pd.read_csv(os.path.join(pathGlm, f'{participant_id[0]}_reginfo.tsv'), sep='\t')
 
             # load residual mean squared for univariate pre-whitening
             ResMS = nb.load(os.path.join(pathGlm, 'ResMS.nii'))
@@ -205,7 +206,7 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             Hem = ['L', 'R']
             for H in Hem:
                 for r in rois:
-                    main('RDM:roi', experiment=experiment, roi=r, Hem=H, glm=glm)
+                    main('RDM:roi', experiment=experiment, participant_id=participant_id[0], roi=r, Hem=H, glm=glm)
 
         # endregion
 
@@ -584,8 +585,8 @@ if __name__ == "__main__":
     ylim = args.ylim
     vsep = args.vsep
 
-    if what is None:
-        GUI()
+    # if what is None:
+    #     GUI()
 
     pinfo = pd.read_csv(os.path.join(gl.baseDir, experiment, 'participants.tsv'), sep='\t')
 
