@@ -141,11 +141,19 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
                                                 f'{participant_id}_ROI_region.mat'))
             R_cell = mat['R'][0]
             R = list()
+
+            # Convert R_cell to a list of dictionaries
             for r in R_cell:
                 R.append({field: r[field].item() for field in r.dtype.names})
 
-            # find roi where to calc RDM
-            R = R[[True if (r['name'] == roi) and (r['hem'] == Hem) else False for r in R].index(True)]
+            # Find roi where to calculate RDM
+            matching_indices = [i for i, r in enumerate(R) if (r['name'] == roi) and (r['hem'] == Hem)]
+
+            if matching_indices:
+                # Select the first matching entry
+                R = R[matching_indices[0]]
+            else:
+                raise ValueError(f"No matching ROI found for name='{roi}' and hem='{Hem}'.")
 
             print(f'region:{roi}, hemisphere:{Hem}, {len(R["data"])} voxels')
 
