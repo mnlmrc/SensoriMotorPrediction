@@ -1655,7 +1655,7 @@ function varargout = smp2_imana(what,varargin)
 
             sn = [];
             glm = [];
-            hrf_params = [6 14 1 1 6 0 32];
+            hrf_params = [6 12 1 1 6 0 32]; % best 6 14
             vararginoptions(varargin,{'sn', 'glm', 'hrf_params'})
             
             spm_get_defaults('cmdline', true);  % Suppress GUI prompts, no request for overwirte
@@ -2022,7 +2022,9 @@ function varargout = smp2_imana(what,varargin)
             D.ons = (Dd.startTimeReal / 1000) / TR;
             D.ons = D.ons + (Dd.BN - 1) * nScan;
             D.block = Dd.BN;
-            D.eventname = Dd.GoNogo;            
+            D.GoNogo = Dd.GoNogo;     
+            D.cue = Dd.cue;
+            D.stimFinger = Dd.stimFinger;
             
             for r=1:size(y_raw,2)
                 for i=1:size(D.block,1)
