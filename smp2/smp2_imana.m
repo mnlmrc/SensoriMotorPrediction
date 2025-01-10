@@ -1170,6 +1170,174 @@ function varargout = smp2_imana(what,varargin)
             events.Duration = events.Duration ./ 1000;                 
                        
             varargout{1}= events;
+            
+        case 'GLM:make_glm12'
+
+            sn = [];
+            vararginoptions(varargin,{'sn'})
+
+            subj_id = pinfo.subj_id{pinfo.sn==sn};
+
+            D = dload(fullfile(baseDir, behavDir, subj_id, ['smp2_' subj_id(5:end) '.dat']));
+
+            go = strcmp(D.GoNogo, "go");
+
+            %% planning 0%
+            plan0.BN = D.BN(D.cue==93);
+            plan0.TN = D.TN(D.cue==93);
+            plan0.cue = D.cue(D.cue==93);
+            plan0.stimFinger = D.stimFinger(D.cue==93);
+            plan0.Onset = D.startTimeReal(D.cue==93) + D.baselineWait(D.cue==93);
+            plan0.Duration = zeros(length(plan0.BN), 1);
+            plan0.eventtype = repmat({'0%'}, [length(plan0.BN), 1]);
+
+            %% planning 25%
+            plan25.BN = D.BN(D.cue==12);
+            plan25.TN = D.TN(D.cue==12);
+            plan25.cue = D.cue(D.cue==12);
+            plan25.stimFinger = D.stimFinger(D.cue==12);
+            plan25.Onset = D.startTimeReal(D.cue==12) + D.baselineWait(D.cue==12);
+            plan25.Duration = zeros(length(plan25.BN), 1);
+            plan25.eventtype = repmat({'25%'}, [length(plan25.BN), 1]);
+
+            %% planning 50% 
+            plan50.BN = D.BN(D.cue==44);
+            plan50.TN = D.TN(D.cue==44);
+            plan50.cue = D.cue(D.cue==44);
+            plan50.stimFinger = D.stimFinger(D.cue==44);
+            plan50.Onset = D.startTimeReal(D.cue==44) + D.baselineWait(D.cue==44);
+            plan50.Duration = zeros(length(plan50.BN), 1);
+            plan50.eventtype = repmat({'50%'}, [length(plan50.BN), 1]);
+
+            %% planning 75% 
+            plan75.BN = D.BN(D.cue==21);
+            plan75.TN = D.TN(D.cue==21);
+            plan75.cue = D.cue(D.cue==21);
+            plan75.stimFinger = D.stimFinger(D.cue==21);
+            plan75.Onset = D.startTimeReal(D.cue==21) + D.baselineWait(D.cue==21);
+            plan75.Duration = zeros(length(plan75.BN), 1);
+            plan75.eventtype = repmat({'75%'}, [length(plan75.BN), 1]);
+
+            %% planning 100% 
+            plan100.BN = D.BN(D.cue==39);
+            plan100.TN = D.TN(D.cue==39);
+            plan100.cue = D.cue( D.cue==39);
+            plan100.stimFinger = D.stimFinger( D.cue==39);
+            plan100.Onset = D.startTimeReal( D.cue==39) + D.baselineWait( D.cue==39);
+            plan100.Duration = zeros(length(plan100.BN), 1);
+            plan100.eventtype = repmat({'100%'}, [length(plan100.BN), 1]);
+
+            %% ring 0% (go)
+            ring0.BN = D.BN(go & D.cue==93 & D.stimFinger==99919);
+            ring0.TN = D.TN(go & D.cue==93 & D.stimFinger==99919);
+            ring0.cue = D.cue(go & D.cue==93 & D.stimFinger==99919);
+            ring0.stimFinger = D.stimFinger(go & D.cue==93 & D.stimFinger==99919);
+            ring0.Onset = D.startTimeReal(go & D.cue==93 & D.stimFinger==99919)...
+                + D.baselineWait(go & D.cue==93 & D.stimFinger==99919) ...
+                + D.planTime(go & D.cue==93 & D.stimFinger==99919);
+            ring0.Duration = zeros(length(ring0.BN), 1);
+            ring0.eventtype = repmat({'0%,ring'}, [length(ring0.BN), 1]);
+
+            %% ring 25% (go)
+            ring25.BN = D.BN(go & D.cue==12 & D.stimFinger==99919);
+            ring25.TN = D.TN(go & D.cue==12 & D.stimFinger==99919);
+            ring25.cue = D.cue(go & D.cue==12 & D.stimFinger==99919);
+            ring25.stimFinger = D.stimFinger(go & D.cue==12 & D.stimFinger==99919);
+            ring25.Onset = D.startTimeReal(go & D.cue==12 & D.stimFinger==99919)...
+                + D.baselineWait(go & D.cue==12 & D.stimFinger==99919)...
+                + D.planTime(go & D.cue==12 & D.stimFinger==99919);
+            ring25.Duration = zeros(length(ring25.BN), 1);
+            ring25.eventtype = repmat({'25%,ring'}, [length(ring25.BN), 1]);
+
+            %% ring 50% (go)
+            ring50.BN = D.BN(go & D.cue==44 & D.stimFinger==99919);
+            ring50.TN = D.TN(go & D.cue==44 & D.stimFinger==99919);
+            ring50.cue = D.cue(go & D.cue==44 & D.stimFinger==99919);
+            ring50.stimFinger = D.stimFinger(go & D.cue==44 & D.stimFinger==99919);
+            ring50.Onset = D.startTimeReal(go & D.cue==44 & D.stimFinger==99919)... 
+                + D.baselineWait(go & D.cue==44 & D.stimFinger==99919)...
+                + D.planTime(go & D.cue==44 & D.stimFinger==99919);
+            ring50.Duration = zeros(length(ring50.BN), 1);
+            ring50.eventtype = repmat({'50%,ring'}, [length(ring50.BN), 1]);
+
+            %% ring 75% (go)
+            ring75.BN = D.BN(go & D.cue==21 & D.stimFinger==99919);
+            ring75.TN = D.TN(go & D.cue==21 & D.stimFinger==99919);
+            ring75.cue = D.cue(go & D.cue==21 & D.stimFinger==99919);
+            ring75.stimFinger = D.stimFinger(go & D.cue==21 & D.stimFinger==99919);
+            ring75.Onset = D.startTimeReal(go & D.cue==21 & D.stimFinger==99919)...
+                + D.baselineWait(go & D.cue==21 & D.stimFinger==99919)...
+                + D.planTime(go & D.cue==21 & D.stimFinger==99919);
+            ring75.Duration = zeros(length(ring75.BN), 1);
+            ring75.eventtype = repmat({'75%,ring'}, [length(ring75.BN), 1]);
+
+            %% index 25% (go)
+            index25.BN = D.BN(go & D.cue==12 & D.stimFinger==91999);
+            index25.TN = D.TN(go & D.cue==12 & D.stimFinger==91999);
+            index25.cue = D.cue(go & D.cue==12 & D.stimFinger==91999);
+            index25.stimFinger = D.stimFinger(go & D.cue==12 & D.stimFinger==91999);
+            index25.Onset = D.startTimeReal(go & D.cue==12 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==12 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==12 & D.stimFinger==91999);
+            index25.Duration = zeros(length(index25.BN), 1);
+            index25.eventtype = repmat({'25%,index'}, [length(index25.BN), 1]);
+
+            %% index 50% (go)
+            index50.BN = D.BN(go & D.cue==44 & D.stimFinger==91999);
+            index50.TN = D.TN(go & D.cue==44 & D.stimFinger==91999);
+            index50.cue = D.cue(go & D.cue==44 & D.stimFinger==91999);
+            index50.stimFinger = D.stimFinger(go & D.cue==44 & D.stimFinger==91999);
+            index50.Onset = D.startTimeReal(go & D.cue==44 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==44 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==44 & D.stimFinger==91999);
+            index50.Duration = zeros(length(index50.BN), 1);
+            index50.eventtype = repmat({'50%,index'}, [length(index50.BN), 1]);
+
+            %% index 75% (go)
+            index75.BN = D.BN(go & D.cue==21 & D.stimFinger==91999);
+            index75.TN = D.TN(go & D.cue==21 & D.stimFinger==91999);
+            index75.cue = D.cue(go & D.cue==21 & D.stimFinger==91999);
+            index75.stimFinger = D.stimFinger(go & D.cue==21 & D.stimFinger==91999);
+            index75.Onset = D.startTimeReal(go & D.cue==21 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==21 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==21 & D.stimFinger==91999);
+            index75.Duration = zeros(length(index75.BN), 1);
+            index75.eventtype = repmat({'75%,index'}, [length(index75.BN), 1]);
+
+            %% index 100% (go)
+            index100.BN = D.BN(go & D.cue==39 & D.stimFinger==91999);
+            index100.TN = D.TN(go & D.cue==39 & D.stimFinger==91999);
+            index100.cue = D.cue(go & D.cue==39 & D.stimFinger==91999);
+            index100.stimFinger = D.stimFinger(go & D.cue==39 & D.stimFinger==91999);
+            index100.Onset = D.startTimeReal(go & D.cue==39 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==39 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==39 & D.stimFinger==91999);
+            index100.Duration = zeros(length(index100.BN), 1);
+            index100.eventtype = repmat({'100%,index'}, [length(index100.BN), 1]);
+            
+            %% make table
+            
+            plan0 = struct2table(plan0);
+            plan25 = struct2table(plan25);
+            plan50 = struct2table(plan50);
+            plan75 = struct2table(plan75);
+            plan100 = struct2table(plan100);
+            ring0 = struct2table(ring0);
+            ring25 = struct2table(ring25);
+            ring50 = struct2table(ring50);
+            ring75 = struct2table(ring75);
+            index25 = struct2table(index25);
+            index50 = struct2table(index50);
+            index75 = struct2table(index75);
+            index100 = struct2table(index100);
+
+            events = [plan0; plan25; plan50; plan75; plan100; ring0; ring25; ring50; ring75; index25; index50; index75; index100];
+            
+            %% convert to secs
+            events.Onset = events.Onset ./ 1000;
+            events.Duration = events.Duration ./ 1000;                 
+                       
+            varargout{1}= events;
 
         case 'GLM:design'
 
@@ -1184,7 +1352,8 @@ function varargout = smp2_imana(what,varargin)
             sn = [];
             glm = [];
             hrf_params = [5 14 1 1 6 0 32];
-            vararginoptions(varargin,{'sn', 'glm', 'hrf_params'})
+            derivs = [0 0];
+            vararginoptions(varargin,{'sn', 'glm', 'hrf_params', 'derivs'})
 
             if isempty(sn)
                 error('GLM:design -> ''sn'' must be passed to this function.')
@@ -1276,12 +1445,36 @@ function varargout = smp2_imana(what,varargin)
                     TT.sn        = sn;
                     TT.run       = run;
                     TT.name      = regressors(regr);
+                    
+                    T = addstruct(T, TT);
+                    
+                    if sum(derivs) == 1
+                        TT.sn        = sn;
+                        TT.run       = run;
+                        TT.name      = [regressors{regr} ',deriv1'];
+                        
+                         T = addstruct(T, TT);
+                         
+                    elseif sum(derivs) == 2
+                        TT.sn        = sn;
+                        TT.run       = run;
+                        TT.name      = [regressors{regr} ',deriv1'];
+                        
+                        T = addstruct(T, TT);
+                        
+                        TT.sn        = sn;
+                        TT.run       = run;
+                        TT.name      = [regressors{regr} ',deriv2'];
+                        
+                        T = addstruct(T, TT);
+                        
+                    end
                     % TT.cue       = cue_id;
                     % TT.epoch     = epoch;
                     % TT.stimFinger = stimFinger_id;
                     % TT.instr = instr;       
 
-                    T = addstruct(T, TT);
+                    
 
                 end
 
@@ -1327,7 +1520,7 @@ function varargout = smp2_imana(what,varargin)
 
                 % Specify hrf parameters for convolution with
                 % regressors
-                J.bases.hrf.derivs = [0 0];
+                J.bases.hrf.derivs = derivs;
                 J.bases.hrf.params = hrf_params;  % positive and negative peak of HRF - set to [] if running wls (?)
                 defaults.stats.fmri.hrf=J.bases.hrf.params; 
                 
@@ -1380,6 +1573,9 @@ function varargout = smp2_imana(what,varargin)
             % remove empty rows (e.g., when skipping runs)
             J.sess = J.sess(~arrayfun(@(x) all(structfun(@isempty, x)), J.sess));
             
+            if ~exist(J.dir{1},"dir")
+                mkdir(J.dir{1});
+            end            
             
             dsave(fullfile(J.dir{1},sprintf('%s_reginfo.tsv', subj_id)), T);
             spm_rwls_run_fmri_spec(J);
@@ -1465,13 +1661,72 @@ function varargout = smp2_imana(what,varargin)
                 SPM.SPM.swd = subj_est_dir;
 
                 iB = SPM.SPM.xX.iB;
+                regr_name = SPM.SPM.xX.name;
 
                 save(fullfile(subj_est_dir, "iB.mat"), "iB");
+                
+                save(fullfile(subj_est_dir, "regr_name.mat"), "regr_name");
             
                 spm_rwls_spm(SPM.SPM);
             end
 
             cd(currentDir)
+            
+        case 'GLM:combine_beta_derivs'
+            
+            sn = [];
+            glm = [];            
+            derivs = [0 0];
+            
+            vararginoptions(varargin, {'sn', 'glm', 'derivs'})
+                        
+            subj_id = pinfo.subj_id{pinfo.sn==sn};
+
+            % get the subject id folder name
+            fprintf('combine betas from non-derivs and derivs for participant %s\n', subj_id)
+            glm_dir = fullfile(baseDir, sprintf('glm%d', glm), subj_id);
+            
+            T = dload(fullfile(glm_dir, sprintf('%s_reginfo.tsv', subj_id)));
+            sT = [];
+            runs  = T.run;
+            regressors = T.name;
+            
+            for regr = 1:sum(derivs) + 1:length(regressors)                
+                for d = 0:sum(derivs)
+                    
+                    fprintf('run %d, computing regressor %s\n', runs(regr), regressors{regr});
+                    
+                    beta_path = fullfile(glm_dir, sprintf('beta_%04d.nii', regr + d));
+                                        
+                    V = spm_vol(beta_path);                    
+                    Y_tmp = spm_read_vols(V);
+                    
+                    if d==0
+                        Y = zeros(size(Y_tmp));
+                        V1 = V;
+                        beta_sign = sign(Y_tmp);
+                    end
+                    
+                    Y = Y + Y_tmp.^2;
+                    
+                end
+                
+                V_sum = V1; % Use the metadata of the first beta file
+                V_sum.fname = fullfile(glm_dir, sprintf('sbeta_%04d.nii', regr)); % Output file name
+                
+                Y_sum = beta_sign .* sqrt(Y);
+                
+                spm_write_vol(V_sum, Y_sum);
+                
+                TT.sn        = sn;
+                TT.run       = runs(regr);
+                TT.name      = regressors(regr);
+
+                sT = addstruct(sT, TT);
+                
+            end
+            
+            dsave(fullfile(glm_dir,sprintf('s%s_reginfo.tsv', subj_id)), sT);
 
         case 'GLM:T_contrasts'
             
@@ -1504,7 +1759,7 @@ function varargout = smp2_imana(what,varargin)
                 SPM  = rmfield(SPM,'xCon');
             end
 
-            T    = dload(fullfile(glm_dir, sprintf('%s_reginfo.tsv', subj_id)));
+            T = dload(fullfile(glm_dir, sprintf('%s_reginfo.tsv', subj_id)));
             contrasts = unique(T.name);
 
             for c = 1:length(contrasts)
@@ -1656,7 +1911,8 @@ function varargout = smp2_imana(what,varargin)
             sn = [];
             glm = [];
             hrf_params = [6 12 1 1 6 0 32]; % best 6 14
-            vararginoptions(varargin,{'sn', 'glm', 'hrf_params'})
+            derivs = [0, 0];
+            vararginoptions(varargin,{'sn', 'glm', 'hrf_params', 'derivs'})
             
             spm_get_defaults('cmdline', true);  % Suppress GUI prompts, no request for overwirte
 
@@ -1669,7 +1925,7 @@ function varargout = smp2_imana(what,varargin)
                 end
                 
                 smp2_imana('GLM:make_event', 'sn', s, 'glm', glm)
-                smp2_imana('GLM:design', 'sn', s, 'glm', glm, 'hrf_params', hrf_params)
+                smp2_imana('GLM:design', 'sn', s, 'glm', glm, 'hrf_params', hrf_params, 'derivs', derivs)
                 smp2_imana('GLM:estimate', 'sn', s, 'glm', glm)
                 smp2_imana('GLM:T_contrasts', 'sn', s, 'glm', glm)
                 smp2_imana('SURF:vol2surf', 'sn', s, 'glm', glm, 'type', 'spmT')
