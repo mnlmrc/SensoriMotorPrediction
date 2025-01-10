@@ -61,7 +61,7 @@ def plot_bins(df):
 
 
 def make_yref(axs, reference_length=5, pos='left'):
-    midpoint_y = (axs.get_ylim()[0] + axs.get_ylim()[1]) / 2  # Calculate the one-third of the y-axis
+    midpoint_y = (axs.get_ylim()[0] + axs.get_ylim()[1]) / 5  # Calculate the one-third of the y-axis
 
     if pos == 'left':
         reference_x = axs.get_xlim()[0]

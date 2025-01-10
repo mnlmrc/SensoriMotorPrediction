@@ -21,59 +21,12 @@ import sys
 
 sys.path.append('/Users/mnlmrc/Documents/GitHub')
 
-# import surfAnalysisPy as surf
-
-
-# def GUI():
-#     def on_submit():
-#         global what, experiment, session, participant_id
-#         what = case_var.get()
-#         experiment = experiment_entry.get() or None
-#         session = session_entry.get() or None
-#         participant_id = participant_id_entry.get().split(',') if participant_id_entry.get() else None
-#         root.destroy()
-#
-#     root = tk.Tk()
-#     root.title("Case Selector")
-#
-#     tk.Label(root, text="Select Case:").pack()
-#     case_var = tk.StringVar(root)
-#     case_var.set("FORCE:mov2npz")  # default value
-#     # cases = [
-#     #     "FORCE:mov2npz",
-#     #     "FORCE:timec_avg",
-#     #     "FORCE:timec2bins",
-#     #     "FORCE:dist_timec",
-#     #     "PLOT:bins_force",
-#     #     "PLOT:timec_force",
-#     #     "PLOT:timec_dist_force",
-#     # ]
-#     case_menu = tk.OptionMenu(root, case_var, *cases)
-#     case_menu.pack()
-#
-#     tk.Label(root, text="Experiment:").pack()
-#     experiment_entry = tk.Entry(root)
-#     experiment_entry.insert(0, "smp<n>")  # default value
-#     experiment_entry.pack()
-#
-#     tk.Label(root, text="Session:").pack()
-#     session_entry = tk.Entry(root)
-#     session_entry.insert(0, "<session>")  # default value
-#     session_entry.pack()
-#
-#     tk.Label(root, text="Participant ID (comma-separated):").pack()
-#     participant_id_entry = tk.Entry(root)
-#     participant_id_entry.pack()
-#
-#     submit_button = tk.Button(root, text="Run", command=on_submit)
-#     submit_button.pack()
-#
-#     root.mainloop()
-
+import surfAnalysisPy as surf
 
 def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, stimFinger=None, cue=None,
-         glm=None, Hem=None, regressor=None, roi=None,
+         glm=None, Hem=None, regressor=None, roi=None, derivs=None, prefix=None,
          fig=None, axs=None, vsep=None, xlim=None, ylim=None, vmin=None, vmax=None, ref_len=None):
+
     if participant_id is None:
         participant_id = gl.participants[experiment]
 
@@ -162,12 +115,9 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             except:
                 iB = scipy.io.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
 
-            # # retrieve beta dirs
-            # files = [file for f, file in enumerate(os.listdir(pathGlm)) if
-            #          file.startswith('beta') and f + 1 < iB[0]]
-
             # load reginfo
             print('loading reginfo...')
+
             reginfo = pd.read_csv(os.path.join(pathGlm, f'{participant_id}_reginfo.tsv'), sep='\t')
 
             # load residual mean squared for univariate pre-whitening
@@ -176,8 +126,8 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
 
             betas_prewhitened = list()
             betas = list()
-            for n_regr in range(reginfo.shape[0]):
-                vol = nb.load(os.path.join(pathGlm, f'beta_{n_regr+1:04d}.nii'))
+            for n_regr in np.arange(0, reginfo.shape[0], derivs.sum() + 1):
+                vol = nb.load(os.path.join(pathGlm, f'{prefix}beta_{n_regr+1:04d}.nii'))
                 beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
                 betas.append(beta)
                 betas_prewhitened.append(beta / np.sqrt(res))
@@ -185,11 +135,11 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             betas_prewhitened = np.array(betas_prewhitened)
             betas = np.array(betas)
             dataset = rsa.data.Dataset(
-                betas,
-                channel_descriptors={'channel': np.array(['vox_' + str(x) for x in range(betas.shape[-1])])},
-                obs_descriptors={'conds': reginfo.name,
-                                 'run': reginfo.run})
-            rdm = rsa.rdm.calc_rdm(dataset, method='euclidean', descriptor='conds', cv_descriptor='run')
+                betas_prewhitened,
+                channel_descriptors={'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
+                obs_descriptors={'conds': reginfo.name.iloc[::derivs.sum() + 1].reset_index(drop=True),
+                                 'run': reginfo.run[::derivs.sum() + 1].reset_index(drop=True)})
+            rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run')
             rdm.rdm_descriptors = {'roi': R["name"], 'hem': R["hem"], 'index': [0]}
             rdm.reorder(np.argsort(rdm.pattern_descriptors['conds']))
             rdm.reorder(gl.rdm_index[f'glm{glm}'])
@@ -212,7 +162,8 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             Hem = ['L', 'R']
             for H in Hem:
                 for r in rois:
-                    main('RDM:roi', experiment=experiment, participant_id=participant_id, roi=r, Hem=H, glm=glm)
+                    main('RDM:roi', experiment=experiment, participant_id=participant_id, roi=r, Hem=H, glm=glm,
+                         derivs=derivs, prefix=prefix)
 
         # endregion
 
@@ -573,6 +524,8 @@ if __name__ == "__main__":
     parser.add_argument('--xlim', default=None, help='')
     parser.add_argument('--ylim', default=None, help='')
     parser.add_argument('--vsep', default=None, help='')
+    parser.add_argument('--derivs', nargs='+', type=int, default=[0, 0], help='')
+    parser.add_argument('--prefix', default='', help='')
 
     args = parser.parse_args()
 
@@ -590,14 +543,13 @@ if __name__ == "__main__":
     xlim = args.xlim
     ylim = args.ylim
     vsep = args.vsep
-
-    # if what is None:
-    #     GUI()
+    derivs = np.array(args.derivs)
+    prefix = args.prefix
 
     pinfo = pd.read_csv(os.path.join(gl.baseDir, experiment, 'participants.tsv'), sep='\t')
 
     main(what=what, experiment=experiment, session=session, participant_id=participant_id, GoNogo=GoNogo,
-         stimFinger=stimFinger, cue=cue, glm=glm, Hem=Hem, regressor=regressor, roi=roi,
+         stimFinger=stimFinger, cue=cue, glm=glm, Hem=Hem, regressor=regressor, roi=roi, derivs=derivs, prefix=prefix,
          vsep=8, xlim=[-1, 1], ylim=[0, 40])
 
     plt.show()
