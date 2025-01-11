@@ -174,8 +174,8 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
         # region PCM:FixedModel
         case 'PCM:FixedModel':
 
-            Z_all = make_Z_all('smp2', sn)
-            Z_cue = make_Z_cue('smp2', sn)
+            Z_all = make_Z_all('smp2', sn=sn, glm=glm)
+            Z_cue = make_Z_cue('smp2', sn=sn, glm=glm)
             M_all, G_all = FixedModel('all', Z_all)
             M_cue, G_cue = FixedModel('cue', Z_cue)
 
@@ -207,8 +207,8 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
 
             dataset = pcm.dataset.Dataset(
                 betas,
-                obs_descriptors={'cond_vec': reginfo.name.iloc[::derivs.sum() + 1].reset_index(drop=True),
-                                 'part_vec': reginfo.run[::derivs.sum() + 1].reset_index(drop=True)})
+                obs_descriptors={'cond_vec': reginfo.name,
+                                 'part_vec': reginfo.run})
 
             T, theta = pcm.inference.fit_model_individ(dataset, [M_cue, M_all], fixed_effect='block')
 

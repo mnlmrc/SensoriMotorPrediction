@@ -10,64 +10,64 @@ import os
 import nibabel as nb
 import nitools as nt
 
-
 import matplotlib.pyplot as plt
 
 
-def make_Z_all(experiment='smp2', sn=None):
+def make_Z_all(experiment='smp2', sn=None, glm=None):
 
-    participant_id = f'subj{sn}'
+    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
+                                       f'subj{sn}_reginfo.tsv'), sep="\t")
 
-    # Load the .dat file
-    dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, participant_id, f'{experiment}_{sn}.dat'), sep='\t')
+    # Extract percentage and finger information from the "name" column
+    reginfo['percentage'] = reginfo['name'].str.extract(r'(\d+%)')[0]
+    reginfo['finger'] = reginfo['name'].str.extract(r',(index|ring)')[0].fillna('nogo')
 
-    # Define unique cues and fingers
-    unique_cues = [93, 12, 44, 21, 39]
-    unique_fingers = [91999, 99919, 99999]
+    # Define unique percentages and fingers for one-hot encoding
+    unique_percentages = ['0%', '25%', '50%', '75%', '100%']
+    unique_fingers = ['index', 'ring', 'nogo']
 
     # Initialize the design matrix
-    Z = np.zeros((len(dat), len(unique_cues) + len(unique_fingers)), dtype=int)
+    Z = np.zeros((len(reginfo), len(unique_percentages) + len(unique_fingers)), dtype=int)
 
     # Fill in the design matrix
-    for i, row in dat.iterrows():
-        # Cue columns
-        if row['cue'] in unique_cues:
-            cue_index = unique_cues.index(row['cue'])
-            Z[i, cue_index] = 1
+    for i, row in reginfo.iterrows():
+        # Percentage columns
+        percentage_idx = unique_percentages.index(row['percentage'])
+        Z[i, percentage_idx] = 1
 
         # Finger columns
-        if row['stimFinger'] in unique_fingers:
-            finger_index = unique_fingers.index(row['stimFinger']) + len(unique_cues)
-            Z[i, finger_index] = 1
+        finger_idx = unique_fingers.index(row['finger']) + len(unique_percentages)
+        Z[i, finger_idx] = 1
 
     return Z
 
-def make_Z_cue(experiment='smp2', sn=None):
 
-    participant_id = f'subj{sn}'
+def make_Z_cue(experiment='smp2', sn=None, glm=None):
 
-    # Load the .dat file
-    dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, participant_id, f'{experiment}_{sn}.dat'), sep='\t')
+    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
+                                       f'subj{sn}_reginfo.tsv'), sep="\t")
 
-    # Define unique cues and fingers
-    unique_cues = [93, 12, 44, 21, 39]
+    # Extract percentage and finger information from the "name" column
+    reginfo['percentage'] = reginfo['name'].str.extract(r'(\d+%)')[0]
+    reginfo['finger'] = reginfo['name'].str.extract(r',(index|ring)')[0].fillna('nogo')
+
+    # Define unique percentages and fingers for one-hot encoding
+    unique_percentages = ['0%', '25%', '50%', '75%', '100%']
 
     # Initialize the design matrix
-    Z = np.zeros((len(dat), len(unique_cues)), dtype=int)
+    Z = np.zeros((len(reginfo), len(unique_percentages)), dtype=int)
 
     # Fill in the design matrix
-    for i, row in dat.iterrows():
-        # Cue columns
-        if row['cue'] in unique_cues:
-            cue_index = unique_cues.index(row['cue'])
-            Z[i, cue_index] = 1
+    for i, row in reginfo.iterrows():
+        # Percentage columns
+        percentage_idx = unique_percentages.index(row['percentage'])
+        Z[i, percentage_idx] = 1
 
     return Z
 
 
 def FixedModel(name, Z):
-
-    G = np.matmul(Z.T, Z)
+    G = np.matmul(Z, Z.T)
     M = pcm.model.FixedModel(name, G)
 
     return M, G
@@ -108,4 +108,3 @@ def FixedModel(name, Z):
 #     vol = nb.load(os.path.join(gl.baseDir, 'smp2', gl.glmDir + '12', f'subj{sn}', f'beta_{n_regr + 1:04d}.nii'))
 #     beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
 #     betas.append(beta)
-
