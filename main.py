@@ -543,26 +543,10 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    cases = [
-        'FORCE:mov2npz',
-        'FORCE:timec_avg',
-        'FORCE:timec2bins',
-        'FORCE:timec_dist',
-        'RDM:roi',
-        'RDM:rois',
-        'PLOT:bins_force',
-        'PLOT:rdm_force',
-        'PLOT:timec_force',
-        'PLOT:timec_dist_force',
-        'PLOT:timec_dist_force_session',
-        'PLOT:flatmap',
-        'PLOT:hrf_roi'
-    ]
-
     parser.add_argument('what', nargs='?', default=None, choices=cases)
     parser.add_argument('--experiment', default='smp2', help='')
     parser.add_argument('--session', default='training', help='')
-    parser.add_argument('--participant_id', default=None, help='')
+    parser.add_argument('--sn', default=None, help='')
     parser.add_argument('--GoNogo', default=None, help='')
     parser.add_argument('--stimFinger', default=None, help='')
     parser.add_argument('--cue', default=None, help='')
@@ -581,7 +565,7 @@ if __name__ == "__main__":
     what = args.what
     experiment = args.experiment
     session = args.session
-    participant_id = args.participant_id
+    sn = args.sn
     GoNogo = args.GoNogo
     stimFinger = args.stimFinger
     cue = args.cue
@@ -597,7 +581,7 @@ if __name__ == "__main__":
 
     pinfo = pd.read_csv(os.path.join(gl.baseDir, experiment, 'participants.tsv'), sep='\t')
 
-    main(what=what, experiment=experiment, session=session, participant_id=participant_id, GoNogo=GoNogo,
+    main(what=what, experiment=experiment, session=session, sn=sn, GoNogo=GoNogo,
          stimFinger=stimFinger, cue=cue, glm=glm, Hem=Hem, regressor=regressor, roi=roi, derivs=derivs, prefix=prefix,
          vsep=8, xlim=[-1, 1], ylim=[0, 40])
 
