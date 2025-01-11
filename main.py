@@ -544,7 +544,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('what', nargs='?', default=None, choices=cases)
+    parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', default='smp2', help='')
     parser.add_argument('--session', default='training', help='')
     parser.add_argument('--sn', default=None, help='')
