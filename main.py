@@ -23,6 +23,7 @@ import PcmPy as pcm
 import sys
 
 sys.path.append('/Users/mnlmrc/Documents/GitHub')
+sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub')
 
 import surfAnalysisPy as surf
 
