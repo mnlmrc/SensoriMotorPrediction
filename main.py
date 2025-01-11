@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 import globals as gl
 import pandas as pd
 from force import Force
+from pcm import make_Z_all, FixedModel, make_Z_cue
 from plot import make_colors, make_tAx, make_yref
 # import tkinter as tk
 import seaborn as sns
@@ -17,18 +18,20 @@ from rsa import plot_rdm, draw_contours
 import nibabel as nb
 import rsatoolbox as rsa
 
+import PcmPy as pcm
+
 import sys
 
 sys.path.append('/Users/mnlmrc/Documents/GitHub')
 
 import surfAnalysisPy as surf
 
-def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, stimFinger=None, cue=None,
+def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=None, cue=None,
          glm=None, Hem=None, regressor=None, roi=None, derivs=None, prefix=None,
          fig=None, axs=None, vsep=None, xlim=None, ylim=None, vmin=None, vmax=None, ref_len=None):
 
-    if participant_id is None:
-        participant_id = gl.participants[experiment]
+    # if participant_id is None:
+    #     participant_id = gl.participants[experiment]
 
     match what:
 
@@ -108,12 +111,12 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
             # define path
             pathGlm = os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', participant_id)
 
-            # load SPM
-            print('loading iB...')
-            try:
-                iB = mat73.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
-            except:
-                iB = scipy.io.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
+            # # load SPM
+            # print('loading iB...')
+            # try:
+            #     iB = mat73.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
+            # except:
+            #     iB = scipy.io.loadmat(os.path.join(pathGlm, f'iB.mat'))['iB'].squeeze()
 
             # load reginfo
             print('loading reginfo...')
@@ -164,6 +167,52 @@ def main(what, experiment=None, session=None, participant_id=None, GoNogo=None, 
                 for r in rois:
                     main('RDM:roi', experiment=experiment, participant_id=participant_id, roi=r, Hem=H, glm=glm,
                          derivs=derivs, prefix=prefix)
+
+        # endregion
+
+        # region PCM:FixedModel
+        case 'PCM:FixedModel':
+
+            Z_all = make_Z_all('smp2', sn)
+            Z_cue = make_Z_cue('smp2', sn)
+            M_all, G_all = FixedModel('all', Z_all)
+            M_cue, G_cue = FixedModel('cue', Z_cue)
+
+            mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}',
+                                                f'subj{sn}_ROI_region.mat'))
+            R_cell = mat['R'][0]
+            R = list()
+            for r in R_cell:
+                R.append({field: r[field].item() for field in r.dtype.names})
+
+            # find roi where to calc RDM
+            R = R[[True if (r['name'].size > 0) and (r['name'] == 'M1') and (r['hem'] == 'L')
+                   else False for r in R].index(True)]
+
+            reginfo = pd.read_csv(
+                os.path.join(gl.baseDir, 'smp2', gl.glmDir + '12', f'subj{sn}', f'subj{sn}_reginfo.tsv'),
+                sep='\t')
+
+            betas = list()
+            for n_regr in np.arange(0, reginfo.shape[0]):
+                print(f'loading regressor #{n_regr + 1}')
+
+                vol = nb.load(
+                    os.path.join(gl.baseDir, 'smp2', gl.glmDir + '12', f'subj{sn}', f'beta_{n_regr + 1:04d}.nii'))
+                beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
+                betas.append(beta)
+
+            betas = np.array(betas)
+
+            dataset = pcm.dataset.Dataset(
+                betas,
+                channel_descriptors={
+                    'channel': np.array(['vox_' + str(x) for x in range(betas.shape[-1])])},
+                obs_descriptors={'conds': reginfo.name.iloc[::derivs.sum() + 1].reset_index(drop=True),
+                                 'run': reginfo.run[::derivs.sum() + 1].reset_index(drop=True)})
+
+
+            pass
 
         # endregion
 
