@@ -207,13 +207,12 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
 
             dataset = pcm.dataset.Dataset(
                 betas,
-                channel_descriptors={
-                    'channel': np.array(['vox_' + str(x) for x in range(betas.shape[-1])])},
-                obs_descriptors={'conds': reginfo.name.iloc[::derivs.sum() + 1].reset_index(drop=True),
-                                 'run': reginfo.run[::derivs.sum() + 1].reset_index(drop=True)})
+                obs_descriptors={'cond_vec': reginfo.name.iloc[::derivs.sum() + 1].reset_index(drop=True),
+                                 'part_vec': reginfo.run[::derivs.sum() + 1].reset_index(drop=True)})
 
+            T, theta = pcm.inference.fit_model_individ(dataset, [M_cue, M_all], fixed_effect='block')
 
-            pass
+            print(T)
 
         # endregion
 
