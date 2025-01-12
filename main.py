@@ -220,7 +220,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
                 obs_descriptors={'cond_vec': reginfo.name,
                                  'part_vec': reginfo.run})
 
-            T, theta = pcm.inference.fit_model_individ(dataset, [M_cue, M_all], fixed_effect='block')
+            T, theta = pcm.inference.fit_model_individ(dataset, [M_all, M_cue, M_stimFinger], fixed_effect='block')
 
             print(T)
 
