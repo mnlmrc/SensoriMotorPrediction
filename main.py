@@ -187,7 +187,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
 
             M_all, G_all = FixedModel('all', Z_all)
             M_cue, G_cue = FixedModel('cue', Z_cue)
-            M_stimFinger, G_stimFinger = FixedModel('cue', Z_stimFinger)
+            M_stimFinger, G_stimFinger = FixedModel('stimFinger', Z_stimFinger)
 
             mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}',
                                                 f'subj{sn}_ROI_region.mat'))
