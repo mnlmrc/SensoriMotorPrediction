@@ -189,9 +189,12 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
             R = R[[True if (r['name'].size > 0) and (r['name'] == roi) and (r['hem'] == Hem)
                    else False for r in R].index(True)]
 
+            ResMS = nb.load(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}', 'ResMS.nii'))
+            res = nt.sample_image(ResMS, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
+
             betas = list()
             for n_regr in np.arange(0, reginfo.shape[0]):
-                print(f'loading regressor #{n_regr + 1}')
+                print(f'ROI.{Hem}.{roi} - loading regressor #{n_regr + 1}')
 
                 vol = nb.load(
                     os.path.join(gl.baseDir, 'smp2', gl.glmDir + '12', f'subj{sn}', f'beta_{n_regr + 1:04d}.nii'))
@@ -200,7 +203,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
 
             betas = np.array(betas)
 
-            return betas
+            return betas, res
 
         # endregion
 
@@ -210,11 +213,13 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
             Hem = ['L', 'R']
             for H in Hem:
                 for r in rois:
-                    betas = main('BETAS:save_to_numpy_roi', experiment=experiment, sn=sn, roi=r, Hem=H, glm=glm,
+                    betas, res = main('BETAS:save_to_numpy_roi', experiment=experiment, sn=sn, roi=r, Hem=H, glm=glm,
                                      derivs=derivs, prefix=prefix)
 
                     np.save(os.path.join(gl.baseDir, experiment, gl.glmDir + str(glm), f'subj{sn}',
                                          f'ROI.{H}.{r}.beta.npy'), betas)
+                    np.save(os.path.join(gl.baseDir, experiment, gl.glmDir + str(glm), f'subj{sn}',
+                                         f'ROI.{H}.{r}.res.npy'), res)
         # endregion
 
         # region PCM:FixedModel
