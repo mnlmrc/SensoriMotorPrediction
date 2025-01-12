@@ -241,30 +241,14 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
             M_stimFinger, G_stimFinger = FixedModel('stimFinger', Z_stimFinger)
             MC = pcm.model.ComponentModel('cue+stimFinger', [G_cue, G_stimFinger])
 
-            mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}',
-                                                f'subj{sn}_ROI_region.mat'))
-            R_cell = mat['R'][0]
-            R = list()
-            for r in R_cell:
-                R.append({field: r[field].item() for field in r.dtype.names})
-
-            # find roi where to calc RDM
-            R = R[[True if (r['name'].size > 0) and (r['name'] == 'M1') and (r['hem'] == 'L')
-                   else False for r in R].index(True)]
-
-            betas = list()
-            for n_regr in np.arange(0, reginfo.shape[0]):
-                print(f'loading regressor #{n_regr + 1}')
-
-                vol = nb.load(
-                    os.path.join(gl.baseDir, 'smp2', gl.glmDir + '12', f'subj{sn}', f'beta_{n_regr + 1:04d}.nii'))
-                beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
-                betas.append(beta)
-
-            betas = np.array(betas)
+            betas = np.load(
+                os.path.join(gl.baseDir, experiment, gl.glmDir + str(glm), f'subj{sn}', 'ROI.L.M1.betas.npy'))
+            res = np.load(
+                os.path.join(gl.baseDir, experiment, gl.glmDir + str(glm), f'subj{sn}', 'ROI.L.M1.res.npy'))
+            betas_prewhitened = betas / np.sqrt(res)
 
             dataset = pcm.dataset.Dataset(
-                betas,
+                betas_prewhitened,
                 obs_descriptors={'cond_vec': reginfo.name,
                                  'part_vec': reginfo.run})
 
