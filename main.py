@@ -188,6 +188,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
             M_all, G_all = FixedModel('all', Z_all)
             M_cue, G_cue = FixedModel('cue', Z_cue)
             M_stimFinger, G_stimFinger = FixedModel('stimFinger', Z_stimFinger)
+            MC = pcm.model.ComponentModel('cue+stimFinger', [M_cue + M_stimFinger])
 
             mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}',
                                                 f'subj{sn}_ROI_region.mat'))
@@ -220,7 +221,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
                 obs_descriptors={'cond_vec': reginfo.name,
                                  'part_vec': reginfo.run})
 
-            T, theta = pcm.inference.fit_model_individ(dataset, [M_all, M_cue, M_stimFinger], fixed_effect='block')
+            T, theta = pcm.inference.fit_model_individ(dataset, [M_all, M_cue, M_stimFinger, MC], fixed_effect='block')
 
             print(T)
 
