@@ -27,10 +27,10 @@ sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub')
 
 import surfAnalysisPy as surf
 
+
 def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=None, cue=None,
          glm=None, Hem=None, regressor=None, roi=None, derivs=None, prefix=None,
          fig=None, axs=None, vsep=None, xlim=None, ylim=None, vmin=None, vmax=None, ref_len=None):
-
     # if participant_id is None:
     #     participant_id = gl.participants[experiment]
 
@@ -131,7 +131,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
             betas_prewhitened = list()
             betas = list()
             for n_regr in np.arange(0, reginfo.shape[0], derivs.sum() + 1):
-                vol = nb.load(os.path.join(pathGlm, f'{prefix}beta_{n_regr+1:04d}.nii'))
+                vol = nb.load(os.path.join(pathGlm, f'{prefix}beta_{n_regr + 1:04d}.nii'))
                 beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
                 betas.append(beta)
                 betas_prewhitened.append(beta / np.sqrt(res))
@@ -140,7 +140,8 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
             betas = np.array(betas)
             dataset = rsa.data.Dataset(
                 betas_prewhitened,
-                channel_descriptors={'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
+                channel_descriptors={
+                    'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
                 obs_descriptors={'conds': reginfo.name.iloc[::derivs.sum() + 1].reset_index(drop=True),
                                  'run': reginfo.run[::derivs.sum() + 1].reset_index(drop=True)})
             rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run')
@@ -169,6 +170,51 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
                     main('RDM:roi', experiment=experiment, participant_id=participant_id, roi=r, Hem=H, glm=glm,
                          derivs=derivs, prefix=prefix)
 
+        # endregion
+
+        # region BETAS:save_to_numpy_roi
+        case 'BETAS:save_to_numpy_roi':
+
+            reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
+                                               f'subj{sn}_reginfo.tsv'), sep="\t")
+
+            mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}',
+                                                f'subj{sn}_ROI_region.mat'))
+            R_cell = mat['R'][0]
+            R = list()
+            for r in R_cell:
+                R.append({field: r[field].item() for field in r.dtype.names})
+
+            # find roi
+            R = R[[True if (r['name'].size > 0) and (r['name'] == roi) and (r['hem'] == Hem)
+                   else False for r in R].index(True)]
+
+            betas = list()
+            for n_regr in np.arange(0, reginfo.shape[0]):
+                print(f'loading regressor #{n_regr + 1}')
+
+                vol = nb.load(
+                    os.path.join(gl.baseDir, 'smp2', gl.glmDir + '12', f'subj{sn}', f'beta_{n_regr + 1:04d}.nii'))
+                beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
+                betas.append(beta)
+
+            betas = np.array(betas)
+
+            return betas
+
+        # endregion
+
+        # region RDM:rois
+        case 'BETA:save_to_numpy_rois':
+            rois = gl.rois['ROI']
+            Hem = ['L', 'R']
+            for H in Hem:
+                for r in rois:
+                    betas = main('BETA:save_to_numpy_roi', experiment=experiment, sn=sn, roi=r, Hem=H, glm=glm,
+                                     derivs=derivs, prefix=prefix)
+
+                    np.save(os.path.join(gl.baseDir, experiment, gl.glmDir + str(glm), f'subj{sn}',
+                                         f'ROI.{H}.{r}.beta.npy'), betas)
         # endregion
 
         # region PCM:FixedModel
@@ -201,10 +247,6 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
             R = R[[True if (r['name'].size > 0) and (r['name'] == 'M1') and (r['hem'] == 'L')
                    else False for r in R].index(True)]
 
-            reginfo = pd.read_csv(
-                os.path.join(gl.baseDir, 'smp2', gl.glmDir + '12', f'subj{sn}', f'subj{sn}_reginfo.tsv'),
-                sep='\t')
-
             betas = list()
             for n_regr in np.arange(0, reginfo.shape[0]):
                 print(f'loading regressor #{n_regr + 1}')
@@ -233,10 +275,12 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
             if fig is None or axs is None:
                 fig, axs = plt.subplots()
 
-            force = main('FORCE:timec_avg', experiment, session, participant_id, GoNogo=GoNogo)  # dimord: (subj, cue, stimFinger, channel, time)
+            force = main('FORCE:timec_avg', experiment, session, participant_id,
+                         GoNogo=GoNogo)  # dimord: (subj, cue, stimFinger, channel, time)
             # clamp = np.load(os.path.join(gl.baseDir, 'smp0', 'clamped', 'smp0_clamped.npy')).mean(axis=0)[[1, 3]]
 
-            tAx = make_tAx(force) if GoNogo == 'go' else make_tAx(force, (0, 0))  # in nogo trials tAx is not corrected for the latency of perturbation
+            tAx = make_tAx(force) if GoNogo == 'go' else make_tAx(force, (
+            0, 0))  # in nogo trials tAx is not corrected for the latency of perturbation
 
             colors = make_colors(5)
             palette = {cue: color for cue, color in zip(gl.clabels, colors)}
@@ -247,14 +291,14 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
                 for c, ch in enumerate(gl.channels['mov']):
                     if GoNogo == 'go':
                         # for sf, stimF in enumerate(['index', 'ring']):
-                            # axs[sf].set_title(f'{stimF} perturbation')
+                        # axs[sf].set_title(f'{stimF} perturbation')
 
                         y = force.mean(axis=0)[:, sf, c] + c * vsep
                         yerr = force.std(axis=0)[:, sf, c] / np.sqrt(force.shape[0])
 
                         axs.plot(tAx[sf], y[col], color=palette[color])
                         axs.fill_between(tAx[sf], y[col] - yerr[col], y[col] + yerr[col],
-                                             color=palette[color], lw=0, alpha=.2)
+                                         color=palette[color], lw=0, alpha=.2)
 
                     elif GoNogo == 'nogo':
 
@@ -529,8 +573,8 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
                                                             (T_dict['eventname'] == 'go') &
                                                             (T_dict['hem'] == Hem)).flatten()], axis=0))
                 y_raw_nogo.append(np.nanmean(T_dict['y_raw'][((T_dict['name'] == roi) &
-                                                            (T_dict['eventname'] == 'nogo') &
-                                                            (T_dict['hem'] == Hem)).flatten()], axis=0))
+                                                              (T_dict['eventname'] == 'nogo') &
+                                                              (T_dict['hem'] == Hem)).flatten()], axis=0))
 
             y_adj_go = np.array(y_adj_go).mean(axis=0)
             y_hat_go = np.array(y_hat_go).mean(axis=0)
@@ -550,6 +594,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
 
             return fig, axs
         # endregion
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
