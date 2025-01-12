@@ -174,10 +174,20 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
         # region PCM:FixedModel
         case 'PCM:FixedModel':
 
-            Z_all = make_Z_all('smp2', sn=sn, glm=glm)
-            Z_cue = make_Z_cue('smp2', sn=sn, glm=glm)
+            reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
+                                               f'subj{sn}_reginfo.tsv'), sep="\t")
+            reginfo[['cue', 'stimFinger']] = reginfo['name'].str.split(',', expand=True)
+            reginfo.cue = reginfo.cue.str.replace(" ", "")
+            reginfo.stimFinger = reginfo.stimFinger.fillna('nogo')
+            reginfo = reginfo[reginfo['run'] == 1]
+
+            Z_all = pcm.matrix.indicator(reginfo.name)
+            Z_cue = pcm.matrix.indicator(reginfo.cue)
+            Z_stimFinger = pcm.matrix.indicator(reginfo.stimFinger)
+
             M_all, G_all = FixedModel('all', Z_all)
             M_cue, G_cue = FixedModel('cue', Z_cue)
+            M_stimFinger, G_stimFinger = FixedModel('cue', Z_stimFinger)
 
             mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}',
                                                 f'subj{sn}_ROI_region.mat'))
