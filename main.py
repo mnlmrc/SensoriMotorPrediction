@@ -172,7 +172,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
         # endregion
 
         # region PCM:FixedModel
-        case 'PCM:FixedModel':
+        case 'PCM':
 
             reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
                                                f'subj{sn}_reginfo.tsv'), sep="\t")
@@ -188,7 +188,7 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
             M_all, G_all = FixedModel('all', Z_all)
             M_cue, G_cue = FixedModel('cue', Z_cue)
             M_stimFinger, G_stimFinger = FixedModel('stimFinger', Z_stimFinger)
-            MC = pcm.model.ComponentModel('cue+stimFinger', [M_cue + M_stimFinger])
+            MC = pcm.model.ComponentModel('cue+stimFinger', [M_cue, M_stimFinger])
 
             mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}',
                                                 f'subj{sn}_ROI_region.mat'))
