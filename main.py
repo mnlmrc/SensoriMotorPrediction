@@ -205,12 +205,12 @@ def main(what, experiment=None, session=None, sn=None, GoNogo=None, stimFinger=N
         # endregion
 
         # region RDM:rois
-        case 'BETA:save_to_numpy_rois':
+        case 'BETAS:save_to_numpy_rois':
             rois = gl.rois['ROI']
             Hem = ['L', 'R']
             for H in Hem:
                 for r in rois:
-                    betas = main('BETA:save_to_numpy_roi', experiment=experiment, sn=sn, roi=r, Hem=H, glm=glm,
+                    betas = main('BETAS:save_to_numpy_roi', experiment=experiment, sn=sn, roi=r, Hem=H, glm=glm,
                                      derivs=derivs, prefix=prefix)
 
                     np.save(os.path.join(gl.baseDir, experiment, gl.glmDir + str(glm), f'subj{sn}',
