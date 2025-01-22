@@ -1,4 +1,5 @@
 function varargout = smp2_functional(what, varargin)
+<<<<<<< Updated upstream
 
     localPath = '/Users/mnlmrc/Documents/';
     cbsPath = '/home/ROBARTS/memanue5/Documents/';
@@ -19,6 +20,20 @@ function varargout = smp2_functional(what, varargin)
     
     bidsDir = 'BIDS'; % Raw data post AutoBids conversion
     anatomicalDir = 'anatomicals';
+=======
+    
+    % Use a different baseDir when using your local machine or the cbs
+    % server. Add more directory if needed.
+    if isfolder("/Volumes/diedrichsen_data$/data/SensoriMotorPrediction/smp2/")
+        baseDir = "/Volumes/diedrichsen_data$/data/SensoriMotorPrediction/smp2/";
+    elseif isfolder("/path/to/project/cifs/directory/")
+        baseDir = "/path/to/project/cifs/directory/";
+    else
+        fprintf('Workdir not found. Mount or connect to server and try again.');
+    end
+
+    bidsDir = 'BIDS'; % Raw data post AutoBids conversion
+>>>>>>> Stashed changes
     imagingRawDir = 'imaging_data_raw'; % Temporary directory for raw functional data
     imagingDir = 'imaging_data'; % Preprocesses functional data
     fmapDir = 'fieldmaps'; % Fieldmap dir after moving from BIDS and SPM make fieldmap
@@ -201,6 +216,7 @@ function varargout = smp2_functional(what, varargin)
 
             [et1, et2, tert] = spmj_et1_et2_tert(baseDir, subj_id, sn);
 
+<<<<<<< Updated upstream
             spmj_makefieldmap(fullfile(baseDir, fmapDir, subj_id), ...
                               sprintf('%s_magnitude.nii', subj_id),...
                               sprintf('%s_phase.nii', subj_id),...
@@ -210,6 +226,33 @@ function varargout = smp2_functional(what, varargin)
                               'tert', tert, ...
                               'func_dir',fullfile(baseDir, fmapDir, subj_id),...
                               'epi_files', epi_files);
+=======
+            % get runs (FuncRuns column needs to be in participants.tsv)    
+            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
+            epi_files = {};
+            for run = runs
+                epi_files = [epi_files sprintf('%s_run_%02d.nii', subj_id, run)];
+            end
+
+            fmap_dir = fullfile(baseDir,fmapDir,subj_id);
+            func_dir = fullfile(baseDir,imagingDir,subj_id);
+            magnitude_img = [sprintf('%s_magnitude.nii', subj_id)];
+            phasediff_img = [sprintf('%s_phase.nii', subj_id)];
+
+            % magnitude_img = cellstr(magnitude_img);
+            % phasediff_img = cellstr(phasediff_img);
+            % epi_files = cellstr(epi_files);
+
+            spmj_makefieldmap(fmap_dir, ...
+                  magnitude_img,...
+                  phasediff_img,...
+                  'phase_encode', -1, ... % It's -1 (A>>P) or 1 (P>>A) and can be found in imaging sequence specifications
+                  'et1', et1, ...
+                  'et2', et2, ...
+                  'tert', tert, ...
+                  'func_dir',func_dir,...
+                  'epi_files', epi_files);
+>>>>>>> Stashed changes
         
         case 'FUNC:realign_unwarp'      
             % Do spm_realign_unwarp
