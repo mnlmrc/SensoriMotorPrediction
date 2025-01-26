@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 import numpy as np
 
@@ -99,6 +100,28 @@ cue_mapping = {
 stimFinger_mapping = {91999: 'index',
                       99919: 'ring',
                       99999: 'nogo'}
+
+### colours ###
+cmap = plt.get_cmap("coolwarm")
+colors = [cmap(i) for i in np.linspace(0, 1, 5)]
+
+colour_mapping = {
+    '0%': colors[0],
+    '25%': colors[1],
+    '50%': colors[2],
+    '75%': colors[3],
+    '100%': colors[4],
+    '25%,index': colors[1],
+    '50%,index': colors[2],
+    '75%,index': colors[3],
+    '100%,index': colors[4],
+    '0%,ring': colors[0],
+    '25%,ring': colors[1],
+    '50%,ring': colors[2],
+    '75%,ring': colors[3],
+}
+
+###############
 
 # make rdm masks for cue vs stimFinger effect (plus interaction)
 mask_stimFinger = np.zeros([28], dtype=bool)

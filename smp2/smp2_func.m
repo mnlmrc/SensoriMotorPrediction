@@ -24,16 +24,17 @@ function varargout = smp2_func(what, varargin)
     addpath([path 'GitHub/surfing/toolbox_fast_marching/'])
     addpath([path 'GitHub/region/'])
     
-    if isfolder('/Volumes/diedrichsen_data$//data/SensoriMotorPrediction/smp2/')
-        baseDir = '/Volumes/diedrichsen_data$//data/SensoriMotorPrediction/smp2/';
-    elseif isfolder('/cifs/diedrichsen/data/SensoriMotorPrediction/smp2/')
-        baseDir = '/cifs/diedrichsen/data/SensoriMotorPrediction/smp2/';
+    % Use a different baseDir when using your local machine or the cbs
+    % server. Add more directory if needed.
+    if isfolder("/Volumes/diedrichsen_data$/data/SensoriMotorPrediction/smp2/")
+        baseDir = "/Volumes/diedrichsen_data$/data/SensoriMotorPrediction/smp2/";
+    elseif isfolder("/path/to/project/cifs/directory/")
+        baseDir = "/path/to/project/cifs/directory/";
     else
         fprintf('Workdir not found. Mount or connect to server and try again.');
     end
-    
+
     bidsDir = 'BIDS'; % Raw data post AutoBids conversion
-    anatomicalDir = 'anatomicals';
     imagingRawDir = 'imaging_data_raw'; % Temporary directory for raw functional data
     imagingDir = 'imaging_data'; % Preprocesses functional data
     fmapDir = 'fieldmaps'; % Fieldmap dir after moving from BIDS and SPM make fieldmap
@@ -198,6 +199,7 @@ function varargout = smp2_func(what, varargin)
                               'tert', tert, ...
                               'func_dir',fullfile(baseDir, imagingRawDir, subj_id),...
                               'epi_files', epi_files);
+
         
         case 'FUNC:realign_unwarp'      
             % Do spm_realign_unwarp
