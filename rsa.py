@@ -26,7 +26,7 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
         betas_prewhitened,
         channel_descriptors={
             'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
-        obs_descriptors={'conds': reginfo.name,
+        obs_descriptors={'conds': reginfo.name.str.replace(" ", ""),
                          'run': reginfo.run})
     rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run')
     rdm.rdm_descriptors = {'roi': [roi], 'hem': [Hem], 'index': [0]}
