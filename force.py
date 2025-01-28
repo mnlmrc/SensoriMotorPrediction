@@ -6,10 +6,6 @@ import numpy as np
 import pandas as pd
 import globals as gl
 
-import rsatoolbox as rsa
-
-from rsa import calc_rdm_unbalanced, calc_rdm
-
 
 def load_mov(filename):
     try:

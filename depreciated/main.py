@@ -1,7 +1,6 @@
 import argparse
 import os
 
-import mat73
 import nitools as nt
 import nitools.gifti
 import numpy as np
@@ -10,11 +9,11 @@ from matplotlib import pyplot as plt
 import globals as gl
 import pandas as pd
 from force import Force
-from pcm import make_Z_all, FixedModel, make_Z_cue
-from myplot import make_colors, make_tAx, make_yref
+from pcm import FixedModel
+from myplot import make_colors, make_tAx
 # import tkinter as tk
 import seaborn as sns
-from rsa import plot_rdm, draw_contours
+from depreciated.rsa import plot_rdm, draw_contours
 import nibabel as nb
 import rsatoolbox as rsa
 
