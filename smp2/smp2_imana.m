@@ -1137,21 +1137,19 @@ function varargout = smp2_imana(what,varargin)
 
             subj_id = pinfo.subj_id{pinfo.sn==sn};
              
-            for sess = 1:pinfo.numSess(pinfo.sn==sn)
-                fprintf('- Doing glm%d estimation for subj %s\n', glm, subj_id);
-                subj_est_dir = fullfile(baseDir, sprintf('glm%d', glm), subj_id);                
-                SPM = load(fullfile(subj_est_dir,'SPM.mat'));
-                SPM.SPM.swd = subj_est_dir;
+            fprintf('- Doing glm%d estimation for subj %s\n', glm, subj_id);
+            subj_est_dir = fullfile(baseDir, sprintf('glm%d', glm), subj_id);                
+            SPM = load(fullfile(subj_est_dir,'SPM.mat'));
+            SPM.SPM.swd = subj_est_dir;
 
-                iB = SPM.SPM.xX.iB;
-                regr_name = SPM.SPM.xX.name;
+            iB = SPM.SPM.xX.iB;
+            regr_name = SPM.SPM.xX.name;
 
-                save(fullfile(subj_est_dir, "iB.mat"), "iB");
-                
-                save(fullfile(subj_est_dir, "regr_name.mat"), "regr_name");
-            
-                spm_rwls_spm(SPM.SPM);
-            end
+            save(fullfile(subj_est_dir, "iB.mat"), "iB");
+
+            save(fullfile(subj_est_dir, "regr_name.mat"), "regr_name");
+
+            spm_rwls_spm(SPM.SPM);
 
             cd(currentDir)
             
@@ -1791,7 +1789,7 @@ function varargout = smp2_imana(what,varargin)
         case 'ROI:define'
             
             sn = [];
-            glm = 10;
+            glm = 12;
             atlas = 'ROI';
             
             vararginoptions(varargin,{'sn', 'atlas', 'glm'});

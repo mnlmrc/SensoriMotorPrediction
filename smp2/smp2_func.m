@@ -28,13 +28,15 @@ function varargout = smp2_func(what, varargin)
     % server. Add more directory if needed.
     if isfolder("/Volumes/diedrichsen_data$/data/SensoriMotorPrediction/smp2/")
         baseDir = "/Volumes/diedrichsen_data$/data/SensoriMotorPrediction/smp2/";
-    elseif isfolder("/path/to/project/cifs/directory/")
-        baseDir = "/path/to/project/cifs/directory/";
+    elseif isfolder("/cifs/diedrichsen/data/SensoriMotorPrediction/smp2")
+        workdir = "/cifs/diedrichsen/data/SensoriMotorPrediction/smp2";
     else
         fprintf('Workdir not found. Mount or connect to server and try again.');
     end
-
+    
+    baseDir         = (sprintf('%s/',workdir));
     bidsDir = 'BIDS'; % Raw data post AutoBids conversion
+    anatomicalDir   = 'anatomicals'; 
     imagingRawDir = 'imaging_data_raw'; % Temporary directory for raw functional data
     imagingDir = 'imaging_data'; % Preprocesses functional data
     fmapDir = 'fieldmaps'; % Fieldmap dir after moving from BIDS and SPM make fieldmap
@@ -44,7 +46,8 @@ function varargout = smp2_func(what, varargin)
     % handling input args:
     sn = [];
     rtm = 0;
-    vararginoptions(varargin,{'sn', 'rtm'})
+    prefix = 'u';
+    vararginoptions(varargin,{'sn', 'rtm', 'prefix'})
     if isempty(sn)
         error('BIDS:move_unzip_raw_func -> ''sn'' must be passed to this function.')
     end
@@ -220,22 +223,6 @@ function varargout = smp2_func(what, varargin)
             % looks for motion correction logs into imaging_data, needs to
             % be run after realigned images are moved there from
             % imaging_data_raw
-
-            % handling input args:
-            sn = []; 
-            vararginoptions(varargin,{'sn'})
-            if isempty(sn)
-                error('FUNC:inspect_realign_parameters -> ''sn'' must be passed to this function.')
-            end
-
-            % get participant row from participant.tsv
-            subj_row=getrow(pinfo, pinfo.sn== sn);
-            
-            % get subj_id
-            subj_id = subj_row.participant_id{1};
-
-            % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(sub_row.FuncRuns{1});
             
             run_list = {}; % Initialize as an empty cell array
             for run = runs
@@ -246,24 +233,6 @@ function varargout = smp2_func(what, varargin)
 
         case 'FUNC:move_realigned_images'          
             % Move images created by realign(+unwarp) into imaging_data
-            
-            % handling input args:
-            sn = [];
-            prefix = 'u';   % prefix of the 4D images after realign(+unwarp)
-            rtm = 0;        % realign_unwarp registered to the first volume (0) or mean image (1).
-            vararginoptions(varargin,{'sn','prefix','rtm'})
-            if isempty(sn)
-                error('FUNC:move_realigned_images -> ''sn'' must be passed to this function.')
-            end
-
-            % get participant row from participant.tsv
-            subj_row=getrow(pinfo, pinfo.sn== sn);
-            
-            % get subj_id
-            subj_id = subj_row.subj_id{1};
-
-            % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
             
             % loop on runs of the session:
             for run = runs
@@ -312,23 +281,6 @@ function varargout = smp2_func(what, varargin)
         
         case 'FUNC:meanimage_bias_correction'
             
-            % handling input args:
-            sn = [];
-            prefix = 'u';   % prefix of the 4D images after realign(+unwarp)
-            rtm = 0;        % realign_unwarp registered to the first volume (0) or mean image (1).
-            vararginoptions(varargin,{'sn','prefix','rtm'})
-            if isempty(sn)
-                error('FUNC:meanimage_bias_correction -> ''sn'' must be passed to this function.')
-            end
-
-            % get participant row from participant.tsv
-            subj_row=getrow(pinfo, pinfo.sn== sn);
-            
-            % get subj_id
-            subj_id = subj_row.subj_id{1};
-
-            % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
             run_list = {}; % Initialize as an empty cell array
             for run = runs
                 run_list{end+1} = sprintf('run_%02d', run);
