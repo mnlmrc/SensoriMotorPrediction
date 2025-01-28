@@ -22,13 +22,15 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
     betas_prewhitened = betas / np.sqrt(res)
 
     betas_prewhitened = np.array(betas_prewhitened)
+
     dataset = rsa.data.Dataset(
-        betas_prewhitened,
+        betas_prewhitened - betas_prewhitened.mean(axis=0),
         channel_descriptors={
             'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
         obs_descriptors={'conds': reginfo.name.str.replace(" ", ""),
                          'run': reginfo.run})
-    rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run')
+    # remove_mean removes the mean ACROSS VOXELS for each condition
+    rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run', remove_mean=False)
     rdm.rdm_descriptors = {'roi': [roi], 'hem': [Hem], 'index': [0]}
     rdm.reorder(rdm_index[f'glm{glm}'])
 
@@ -41,9 +43,6 @@ def main():
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default=None)
     parser.add_argument('--sn', type=int, default=None)
-    # parser.add_argument('--day', type=int, default=None)
-    # parser.add_argument('--Hem', type=str, default=None)
-    # parser.add_argument('--roi', type=str, default=None)
     parser.add_argument('--glm', type=int, default=None)
 
     args = parser.parse_args()
