@@ -8,13 +8,69 @@ import numpy as np
 
 import rsatoolbox as rsa
 
+import PcmPy as pcm
 
-def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
-    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}',  f'subj{sn}',
+
+def calc_G_cosine(experiment=None, sn=None, Hem=None, roi=None, glm=None):
+    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
                                        f'subj{sn}_reginfo.tsv'), sep="\t")
 
     betas = np.load(
-        os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}',  f'subj{sn}',
+        os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
+                     f'ROI.{Hem}.{roi}.beta.npy'))
+    res = np.load(
+        os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}', f'ROI.{Hem}.{roi}.res.npy'))
+
+    betas_prewhitened = betas / np.sqrt(res)
+
+    betas_prewhitened = np.array(betas_prewhitened)
+
+    condition = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
+
+    Z = pcm.matrix.indicator(condition)
+
+    G, Sig = pcm.est_G_crossval(betas_prewhitened, Z, reginfo.run)
+
+    cos = G_to_cosine(G)
+
+    return cos
+
+
+def G_to_cosine(G):
+    """
+    Converts a second moment matrix G into a cosine angle matrix.
+
+    Parameters:
+        G (numpy.ndarray)
+            An n_cond x n_cond second-moment matrix.
+
+    Returns:
+        angle_matrix (numpy.ndarray)
+            An n_cond x n_cond matrix where each entry (i, j) represents
+            the cosine angle between condition i and condition j.
+    """
+    # Normalize each row to unit length
+    norm_G = np.linalg.norm(G, axis=1, keepdims=True)
+    G_norm = G / norm_G
+
+    # Compute cosine similarity matrix
+    cosine_similarity = np.dot(G_norm, G_norm.T)
+
+    # Clip to prevent numerical issues outside the valid domain of arccos
+    cosine_similarity = np.clip(cosine_similarity, -1.0, 1.0)
+
+    # Compute cosine angles in radians
+    cos = np.arccos(cosine_similarity)
+
+    return cos
+
+
+def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
+    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
+                                       f'subj{sn}_reginfo.tsv'), sep="\t")
+
+    betas = np.load(
+        os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
                      f'ROI.{Hem}.{roi}.beta.npy'))
     res = np.load(
         os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}', f'ROI.{Hem}.{roi}.res.npy'))
@@ -24,7 +80,7 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
     betas_prewhitened = np.array(betas_prewhitened)
 
     dataset = rsa.data.Dataset(
-        betas_prewhitened - betas_prewhitened.mean(axis=0),
+        betas_prewhitened,
         channel_descriptors={
             'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
         obs_descriptors={'conds': reginfo.name.str.replace(" ", ""),

@@ -101,6 +101,22 @@ stimFinger_mapping = {91999: 'index',
                       99919: 'ring',
                       99999: 'nogo'}
 
+regressor_mapping = {
+    '0%': 0,
+    '25%': 1,
+    '50%': 2,
+    '75%': 3,
+    '100%': 4,
+    '25%,index': 5,
+    '50%,index': 6,
+    '75%,index': 7,
+    '100%,index': 8,
+    '0%,ring': 9,
+    '25%,ring': 10,
+    '50%,ring': 11,
+    '75%,ring': 12,
+}
+
 ### colours ###
 cmap = plt.get_cmap("coolwarm")
 colors = [cmap(i) for i in np.linspace(0, 1, 5)]
