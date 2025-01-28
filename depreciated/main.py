@@ -11,7 +11,7 @@ import globals as gl
 import pandas as pd
 from force import Force
 from pcm import make_Z_all, FixedModel, make_Z_cue
-from plot import make_colors, make_tAx, make_yref
+from myplot import make_colors, make_tAx, make_yref
 # import tkinter as tk
 import seaborn as sns
 from rsa import plot_rdm, draw_contours

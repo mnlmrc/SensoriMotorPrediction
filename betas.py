@@ -88,16 +88,6 @@ def main():
 
     args = parser.parse_args()
 
-    if args.what == 'save_roi_contrasts':
-        contrasts = get_roi_contrasts(
-            experiment=args.experiment,
-            sn=args.sn,
-            Hem=args.Hem,
-            roi=args.roi,
-            glm=args.glm,
-        )
-        np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
-                             f'ROI.{args.Hem}.{args.roi}.beta.npy'), contrasts)
     if args.what == 'save_rois_contrasts':
         Hem = ['L', 'R']
         rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
@@ -113,6 +103,36 @@ def main():
                 )
                 np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                      f'ROI.{H}.{roi}.con.npy'), contrasts)
+    if args.what == 'save_rois_betas':
+        Hem = ['L', 'R']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        for H in Hem:
+            for roi in rois:
+                print(f'Hemisphere: {H}, region:{roi}')
+                betas = get_roi_betas(
+                    experiment=args.experiment,
+                    sn=args.sn,
+                    Hem=H,
+                    roi=roi,
+                    glm=args.glm,
+                )
+                np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
+                                     f'ROI.{H}.{roi}.beta.npy'), betas)
+    if args.what == 'save_rois_ResMS':
+        Hem = ['L', 'R']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        for H in Hem:
+            for roi in rois:
+                print(f'Hemisphere: {H}, region:{roi}')
+                res = get_roi_ResMS(
+                    experiment=args.experiment,
+                    sn=args.sn,
+                    Hem=H,
+                    roi=roi,
+                    glm=args.glm,
+                )
+                np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
+                                     f'ROI.{H}.{roi}.res.npy'), res)
     else:
         parser.print_help()
 
