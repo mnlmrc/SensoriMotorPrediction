@@ -42,6 +42,9 @@ def get_roi_betas(experiment=None, sn=None, Hem=None, roi=None, glm=None):
         betas.append(beta)
 
     betas = np.array(betas)
+    betas = betas[:, ~np.all(np.isnan(betas), axis=0)]
+
+    assert betas.ndim == 2
 
     return betas
 
@@ -51,6 +54,8 @@ def get_roi_ResMS(experiment=None, sn=None, Hem=None, roi=None, glm=None):
 
     ResMS = nb.load(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}', 'ResMS.nii'))
     res = nt.sample_image(ResMS, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
+
+    res = res[~np.isnan(res)]
 
     return res
 
@@ -71,6 +76,7 @@ def get_roi_contrasts(experiment=None, sn=None, Hem=None, roi=None, glm=None):
         contrasts.append(con)
 
     contrasts = np.array(contrasts)
+    contrasts = contrasts[:, ~np.all(np.isnan(contrasts), axis=0)]
 
     return contrasts
 
@@ -105,7 +111,7 @@ def main():
                                      f'ROI.{H}.{roi}.con.npy'), contrasts)
     if args.what == 'save_rois_betas':
         Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        rois = [ 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
         for H in Hem:
             for roi in rois:
                 print(f'Hemisphere: {H}, region:{roi}')
