@@ -403,7 +403,7 @@ function smp2_glm(what, varargin)
                 end
 
                 % Specify high pass filter
-                J.sess(run).hpf = Inf;
+                J.sess(run).hpf = 128;
 
                 % J.sess(run).multi
                 % Purpose: Specifies multiple conditions for a session. Usage: It is used
@@ -475,23 +475,6 @@ function smp2_glm(what, varargin)
                 J.cvi =  'fast';
                 
             end
-
-            % T.cue000 = strcmp(T.cue, 'cue0');
-            % T.cue025 = strcmp(T.cue, 'cue25');
-            % T.cue050 = strcmp(T.cue, 'cue50');
-            % T.cue075 = strcmp(T.cue, 'cue75');
-            % T.cue100 = strcmp(T.cue, 'cue100');
-            % 
-            % T.index = strcmp(T.stimFinger, 'index');
-            % T.ring = strcmp(T.stimFinger, 'ring');
-            % 
-            % T.plan = strcmp(T.epoch, 'plan');
-            % T.exec = strcmp(T.epoch, 'exec');
-            % 
-            % T.go = strcmp(T.instr, 'go');
-            % T.nogo = strcmp(T.instr, 'nogo');
-            % 
-            % T.rest = strcmp(T.name, 'rest');
 
 
             % remove empty rows (e.g., when skipping runs)
