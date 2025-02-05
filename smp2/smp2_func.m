@@ -229,7 +229,7 @@ function varargout = smp2_func(what, varargin)
                 run_list{end+1} = ['rp_', subj_id, '_run_', run, '.txt'];
             end
 
-            smpj_plot_mov_corr(file_list)
+            smpj_plot_mov_corr(run_list)
 
         case 'FUNC:move_realigned_images'          
             % Move images created by realign(+unwarp) into imaging_data
@@ -296,26 +296,6 @@ function varargout = smp2_func(what, varargin)
         case 'FUNC:coreg'                                                      
             % coregister rbumean image to anatomical image for each session
 
-            % co registration is performed on the file
-            % bmeanusubjXXX_run_01.nii !!!!!!!!
-            
-            % handling input args:
-            sn = [];
-            prefix = 'u';   % prefix of the 4D images after realign(+unwarp)
-            rtm = 0;        % realign_unwarp registered to the first volume (0) or mean image (1).
-            vararginoptions(varargin,{'sn','prefix','rtm'})
-            if isempty(sn)
-                error('FUNC:coreg -> ''sn'' must be passed to this function.')
-            end
-
-            % get participant row from participant.tsv
-            subj_row=getrow(pinfo, pinfo.sn== sn);
-            
-            % get subj_id
-            subj_id = subj_row.subj_id{1};
-            
-            % loop on sessions:
-            % for sess = 1:pinfo.numSess(pinfo.sn==sn)
             % (1) Manually seed the functional/anatomical registration
             % - Open fsleyes
             % - Add anatomical image and b*mean*.nii (bias corrected mean) image to overlay
@@ -336,8 +316,6 @@ function varargout = smp2_func(what, varargin)
             
             % (2) Run automated co-registration to register bias-corrected meanimage to anatomical image
             
-            % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
             run_list = {}; % Initialize as an empty cell array
             for run = runs
                 run_list{end+1} = sprintf('run_%02d', run);
@@ -375,24 +353,7 @@ function varargout = smp2_func(what, varargin)
             % we change the transformation matrices of all the functional
             % volumes to the transform matrix of the coregistered image,
             % they will all tranform into the anatomical coordinates space.
-    
-            % handling input args:
-            sn = [];
-            prefix = 'u';   % prefix of the 4D images after realign(+unwarp)
-            rtm = 0;        % realign_unwarp registered to the first volume (0) or mean image (1).
-            vararginoptions(varargin,{'sn','prefix','rtm'})
-            if isempty(sn)
-                error('FUNC:make_samealign -> ''sn'' must be passed to this function.')
-            end
 
-            % get participant row from participant.tsv
-            subj_row=getrow(pinfo, pinfo.sn== sn);
-            
-            % get subj_id
-            subj_id = subj_row.subj_id{1};
-    
-            % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
             run_list = {}; % Initialize as an empty cell array
             for run = runs
                 run_list{end+1} = sprintf('run_%02d', run);
@@ -419,23 +380,6 @@ function varargout = smp2_func(what, varargin)
         case 'FUNC:make_maskImage'       
             % Make mask images (noskull and gray_only) for 1st level glm
             
-            % handling input args:
-            sn = [];
-            prefix = 'u';   % prefix of the 4D images after realign(+unwarp)
-            rtm = 0;        % realign_unwarp registered to the first volume (0) or mean image (1).
-            vararginoptions(varargin,{'sn','prefix','rtm'})
-            if isempty(sn)
-                error('FUNC:make_maskImage -> ''sn'' must be passed to this function.')
-            end
-
-            % get participant row from participant.tsv
-            subj_row=getrow(pinfo, pinfo.sn== sn);
-            
-            % get subj_id
-            subj_id = subj_row.subj_id{1};
-    
-            % get runs (FuncRuns column needs to be in participants.tsv)    
-            runs = spmj_dotstr2array(subj_row.FuncRuns{1});
             run_list = {}; % Initialize as an empty cell array
             for run = runs
                 run_list{end+1} = sprintf('run_%02d', run);
