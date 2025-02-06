@@ -49,10 +49,10 @@ function varargout = smp2_anat(what, varargin)
     wbDir           = 'surfaceWB';
     freesurferDir = 'surfaceFreesurfer'; % freesurfer reconall output
     
-    
     sn=[];
     atlas = 'ROI';
-    vararginoptions(varargin,{'sn', 'atlas'})
+    Hem = 'L';
+    vararginoptions(varargin,{'sn', 'atlas', 'Hem'})
     if isempty(sn)
         error('SURF:reconall -> ''sn'' must be passed to this function.')
     end
@@ -285,7 +285,30 @@ function varargout = smp2_anat(what, varargin)
             
             save(fullfile(output_path, sprintf('%s_%s_region.mat',subj_id, atlas)), 'R');
 
+        case 'TESSELLATION:single_tessel'
             
+            if isfolder('/Volumes/diedrichsen_data$/data/Atlas_templates/fs_LR_32')
+                atlasDir = '/Volumes/diedrichsen_data$/data/Atlas_templates/fs_LR_32';
+            elseif isfolder('/cifs/diedrichsen/data/Atlas_templates/fs_LR_32')
+                atlasDir = '/cifs/diedrichsen/data/Atlas_templates/fs_LR_32';
+            end
+            
+            atlasH = {sprintf('%s.32k.L.label.gii', atlas), sprintf('%s.32k.R.label.gii', atlas)};
+            atlas_gii = {gifti(fullfile(atlasDir, atlasH{1})), gifti(fullfile(atlasDir, atlasH{1}))};
+
+            subj_id = pinfo.subj_id{pinfo.sn==sn};
+            
+            R.white = fullfile(baseDir, wbDir, subj_id, [subj_id '.' Hem '.white.32k.surf.gii']);
+            R.pial = fullfile(baseDir, wbDir, subj_id, [subj_id '.' Hem '.pial.32k.surf.gii']);
+            R.image = fullfile(baseDir, anatomicalDir, subj_id, 'rmask_gray.nii');
+            R.linedef = [5 0 1];
+            key = atlas_gii{h}.labels.key(reg);
+            R.location = find(atlas_gii{h}.cdata==key);
+            R.hem = Hem{h};
+            R.name = atlas_gii{h}.labels.name{reg};
+            R.type = 'surf_nodes_wb';
+            
+            R = region_calcregions(R);
             
         
     end
