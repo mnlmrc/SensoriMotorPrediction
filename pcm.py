@@ -74,9 +74,29 @@ def FixedModel(name, Z):
     return M, G
 
 
+def find_matlab_function(function_name):
+    """Search for the MATLAB function file in known locations"""
+    try:
+        # Use 'find' command in Linux/macOS, or 'where' in Windows
+        result = subprocess.run(["find", "/", "-name", f"{function_name}.m"], capture_output=True, text=True,
+                                stderr=subprocess.DEVNULL)
+        paths = result.stdout.strip().split("\n")
+
+        # Return the first valid path found
+        for path in paths:
+            if os.path.isfile(path):
+                return os.path.dirname(path)
+    except Exception as e:
+        print(f"Error finding MATLAB function: {e}")
+    return None
+
+
 def tessellation(atlas='Icosahedron-1002'):
 
-    subprocess.run(["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", f"smp2_anat('TESSELLATION:single_tessel', 'atlas', '{atlas}'); exit"])
+    path = find_matlab_function('smp2_anat')
+
+    matlab_cmd = f"cd('{path}'); smp2_anat('TESSELLATION:single_tessel', 'atlas', '{atlas}'); exit"
+    subprocess.run(["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", matlab_cmd])
 
 
 if __name__ == '__main__':
