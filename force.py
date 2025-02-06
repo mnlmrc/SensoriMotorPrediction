@@ -416,7 +416,7 @@ def main():
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default=None)
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--session', type=str, default=None)
+    parser.add_argument('--session', type=str, default='behavioural')
 
     args = parser.parse_args()
 
