@@ -7,6 +7,7 @@ import globals as gl
 import pandas as pd
 import numpy as np
 import os
+import subprocess
 import nibabel as nb
 import nitools as nt
 
@@ -72,6 +73,12 @@ def FixedModel(name, Z):
 
     return M, G
 
-def tessellation():
+
+def tessellation(atlas='Icosahedron-1002'):
+
+    subprocess.run(["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", f"smp2_anat('TESSELLATION:single_tessel', 'atlas', {atlas}); exit"])
 
 
+if __name__ == '__main__':
+    tessellation(atlas='Icosahedron-1002')
+    
