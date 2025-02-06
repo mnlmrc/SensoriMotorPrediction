@@ -293,6 +293,8 @@ function varargout = smp2_anat(what, varargin)
                 atlasDir = '/cifs/diedrichsen/data/Atlas_templates/fs_LR_32';
             end
             
+            print(atlas)
+            
             atlasH = {sprintf('%s.32k.L.label.gii', atlas), sprintf('%s.32k.R.label.gii', atlas)};
             atlas_gii = {gifti(fullfile(atlasDir, atlasH{1})), gifti(fullfile(atlasDir, atlasH{1}))};
 
@@ -309,6 +311,8 @@ function varargout = smp2_anat(what, varargin)
             R.type = 'surf_nodes_wb';
             
             R = region_calcregions(R);
+            
+            print('all good!')
             
         
     end
