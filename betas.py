@@ -11,9 +11,9 @@ import nibabel as nb
 import nitools as nt
 
 
-def get_roi(experiment=None, sn=None, Hem=None, roi=None):
+def get_roi(experiment=None, sn=None, Hem=None, roi=None, atlas='ROI'):
     mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}',
-                                        f'subj{sn}_ROI_region.mat'))
+                                        f'subj{sn}_{atlas}_region.mat'))
     R_cell = mat['R'][0]
     R = list()
     for r in R_cell:
