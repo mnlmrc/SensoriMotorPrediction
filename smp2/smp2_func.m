@@ -307,12 +307,7 @@ function varargout = smp2_func(what, varargin)
             %   changing the 6 paramters (tranlation xyz and rotation xyz) 
             %   and Do not change the scales! 
             % - When done, click apply and close the tool tab. Then to save
-            %   the changes, click on the save icon next to the mean image 
-            %   name in the 'Overlay list' and save the new image by adding
-            %   'r' in the beginning of the name: rb*mean*.nii. If you don't
-            %   set the format to be .nii, fsleyes automatically saves it as
-            %   a .nii.gz so either set it or gunzip afterwards to make it
-            %   compatible with SPM.
+            %   the changes.
             
             % (2) Run automated co-registration to register bias-corrected meanimage to anatomical image
             
