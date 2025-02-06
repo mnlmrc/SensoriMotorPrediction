@@ -96,13 +96,8 @@ def find_matlab_function(function_name):
 
 
 def tessellation(atlas='Icosahedron-1002'):
-    path = find_matlab_function('smp2_anat')
 
-    if path is None:
-        print("Error: Could not find smp2_anat.m")
-        return  # Stop execution
-
-    matlab_cmd = f"cd('{path}'); smp2_anat('TESSELLATION:single_tessel', 'atlas', '{atlas}'); exit"
+    matlab_cmd = f"cd('~/Documents/GitHub/sensori-motor-prediction/smp2/'); smp2_anat('TESSELLATION:single_tessel', 'atlas', '{atlas}'); exit"
 
     subprocess.run(["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", matlab_cmd])
 
