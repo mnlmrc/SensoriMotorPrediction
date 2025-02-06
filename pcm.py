@@ -97,7 +97,8 @@ def find_matlab_function(function_name):
 
 def tessellation(atlas='Icosahedron-1002'):
 
-    matlab_cmd = f"cd('~/Documents/GitHub/sensori-motor-prediction/smp2/'); smp2_anat('TESSELLATION:single_tessel', 'atlas', '{atlas}'); exit"
+    matlab_cmd = (f"cd('~/Documents/GitHub/sensori-motor-prediction/smp2/'); "
+                  f"smp2_anat('TESSELLATION:single_tessel', 'sn', 106, 'atlas', '{atlas}'); exit")
 
     subprocess.run(["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", matlab_cmd])
 
