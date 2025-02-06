@@ -76,9 +76,8 @@ def FixedModel(name, Z):
 
 def tessellation(atlas='Icosahedron-1002'):
 
-    subprocess.run(["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", f"smp2_anat('TESSELLATION:single_tessel', 'atlas', {atlas}); exit"])
+    subprocess.run(["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", f"smp2_anat('TESSELLATION:single_tessel', 'atlas', '{atlas}'); exit"])
 
 
 if __name__ == '__main__':
     tessellation(atlas='Icosahedron-1002')
-    
