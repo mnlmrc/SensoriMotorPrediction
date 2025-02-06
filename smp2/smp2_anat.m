@@ -285,8 +285,6 @@ function varargout = smp2_anat(what, varargin)
             
             save(fullfile(output_path, sprintf('%s_%s_region.mat',subj_id, atlas)), 'R');
 
-        case 'TESSELLATION:define'
-
             
             
         
