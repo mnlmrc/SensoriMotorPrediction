@@ -111,7 +111,7 @@ def main():
                                      f'ROI.{H}.{roi}.con.npy'), contrasts)
     if args.what == 'save_rois_betas':
         Hem = ['L', 'R']
-        rois = [ 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        rois = [ 'SMA','PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
         for H in Hem:
             for roi in rois:
                 print(f'Hemisphere: {H}, region:{roi}')
