@@ -192,7 +192,7 @@ if __name__ == '__main__':
                 T_gr.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_gr.exec+plan.glm{args.glm}.{H}.{roi}.tsv'),
                             sep='\t')
 
-        if args.what == 'save_rois_pcm_plan':
+      if args.what == 'save_rois_pcm_plan':
 
             Z_base = np.eye(5)  # Identity matrix
             A = []
