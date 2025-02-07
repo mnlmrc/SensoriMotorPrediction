@@ -270,7 +270,7 @@ if __name__ == '__main__':
                 np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                          f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_in)
                 np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                     f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_cv)
+                                     f'theta_cv.plan.glm{args.glm}.{H}.{roi}.npy'), theta_cv)
                 np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                     f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_gr)
+                                     f'theta_gr.plan.glm{args.glm}.{H}.{roi}.npy'), theta_gr)
 
