@@ -4,6 +4,11 @@ import os.path
 import PcmPy as pcm
 import scipy
 
+import pickle
+
+import warnings
+warnings.filterwarnings("ignore")
+
 import globals as gl
 import pandas as pd
 import numpy as np
@@ -257,20 +262,21 @@ if __name__ == '__main__':
                                                               fixed_effect='block')
                 T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
-                T_in.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                         f'T_in.plan.glm{args.glm}.{H}.{roi}.tsv'),
-                            sep='\t')
-                T_cv.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                         f'T_cv.plan.glm{args.glm}.{H}.{roi}.tsv'),
-                            sep='\t')
-                T_gr.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                         f'T_gr.plan.glm{args.glm}.{H}.{roi}.tsv'),
-                            sep='\t')
+                T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                         f'T_in.plan.glm{args.glm}.{H}.{roi}.pkl'))
+                T_cv.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                         f'T_cv.plan.glm{args.glm}.{H}.{roi}.pkl'))
+                T_gr.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                         f'T_gr.plan.glm{args.glm}.{H}.{roi}.pkl'))
+                            
+                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                       f'theta_in.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                        pickle.dump(theta_in, f)
 
-                np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                         f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_in)
-                np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                     f'theta_cv.plan.glm{args.glm}.{H}.{roi}.npy'), theta_cv)
-                np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                     f'theta_gr.plan.glm{args.glm}.{H}.{roi}.npy'), theta_gr)
+                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                       f'theta_cv.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                        pickle.dump(theta_cv, f)
 
+                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                       f'theta_gr.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                        pickle.dump(theta_gr, f)
