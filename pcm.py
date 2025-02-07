@@ -192,85 +192,85 @@ if __name__ == '__main__':
                 T_gr.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_gr.exec+plan.glm{args.glm}.{H}.{roi}.tsv'),
                             sep='\t')
 
-      if args.what == 'save_rois_pcm_plan':
+    if args.what == 'save_rois_pcm_plan':
 
-            Z_base = np.eye(5)  # Identity matrix
-            A = []
-            for i in range(5):
-                for j in range(5):
-                    if i != j:  # Only modify off-diagonal elements
-                        Z_new = Z_base.copy()
-                        Z_new[i, j] = 1  # Set one off-diagonal element to 1
-                        A.append(Z_new)
-            A = np.stack(A, axis=0)
+        Z_base = np.eye(5)  # Identity matrix
+        A = []
+        for i in range(5):
+            for j in range(5):
+                if i != j:  # Only modify off-diagonal elements
+                    Z_new = Z_base.copy()
+                    Z_new[i, j] = 1  # Set one off-diagonal element to 1
+                    A.append(Z_new)
+        A = np.stack(A, axis=0)
 
-            assert A.ndim == 3
+        assert A.ndim == 3
 
-            np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                 f'features.plan.npy'), A)
+        np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                             f'features.plan.npy'), A)
 
-            M = []
-            M.append(pcm.FixedModel('null', np.eye(5)))
-            M.append(pcm.FeatureModel('cue', A))
-            M.append(pcm.FreeModel('ceil', 5))  # Noise ceiling model
+        M = []
+        M.append(pcm.FixedModel('null', np.eye(5)))
+        M.append(pcm.FeatureModel('cue', A))
+        M.append(pcm.FreeModel('ceil', 5))  # Noise ceiling model
 
-            snS = [102, 103, 104, 106, 107]
+        snS = [102, 103, 104, 106, 107]
 
-            Hem = ['L', 'R']
-            rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
-            for H in Hem:
-                for roi in rois:
+        Hem = ['L', 'R']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        for H in Hem:
+            for roi in rois:
 
-                    N = len(snS)
+                N = len(snS)
 
-                    G_hat_betas = np.zeros((N, 5, 5))
-                    Y = list()
+                G_hat_betas = np.zeros((N, 5, 5))
+                Y = list()
 
-                    for s, sn in enumerate(snS):
-                        reginfo = pd.read_csv(
-                            os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
-                                         f'subj{sn}_reginfo.tsv'), sep='\t')
+                for s, sn in enumerate(snS):
+                    reginfo = pd.read_csv(
+                        os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
+                                     f'subj{sn}_reginfo.tsv'), sep='\t')
 
-                        betas = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                                     f'subj{sn}', f'ROI.{H}.{roi}.beta.npy'))
-                        res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                                   f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
+                    betas = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
+                                                 f'subj{sn}', f'ROI.{H}.{roi}.beta.npy'))
+                    res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
+                                               f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
 
-                        betas_prewhitened = betas / res
+                    betas_prewhitened = betas / res
 
-                        cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
-                        part_vec = reginfo.run
+                    cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
+                    part_vec = reginfo.run
 
-                        idx = cond_vec.isin(gl.cues)
+                    idx = cond_vec.isin(gl.cues)
 
-                        obs_des = {'cond_vec': cond_vec[idx],
-                                   'part_vec': part_vec[idx]}
+                    obs_des = {'cond_vec': cond_vec[idx],
+                               'part_vec': part_vec[idx]}
 
-                        Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
+                    Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
 
-                        G_hat_betas[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                                                               Y[s].obs_descriptors['part_vec'],
-                                                               X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+                    G_hat_betas[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                                                           Y[s].obs_descriptors['part_vec'],
+                                                           X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
-                    T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-                    T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True,
-                                                                  fixed_effect='block')
-                    T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+                T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+                T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True,
+                                                              fixed_effect='block')
+                T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
-                    T_in.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                             f'T_in.plan.glm{args.glm}.{H}.{roi}.tsv'),
-                                sep='\t')
-                    T_cv.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                             f'T_cv.plan.glm{args.glm}.{H}.{roi}.tsv'),
-                                sep='\t')
-                    T_gr.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                             f'T_gr.plan.glm{args.glm}.{H}.{roi}.tsv'),
-                                sep='\t')
+                T_in.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                         f'T_in.plan.glm{args.glm}.{H}.{roi}.tsv'),
+                            sep='\t')
+                T_cv.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                         f'T_cv.plan.glm{args.glm}.{H}.{roi}.tsv'),
+                            sep='\t')
+                T_gr.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                         f'T_gr.plan.glm{args.glm}.{H}.{roi}.tsv'),
+                            sep='\t')
 
-                    np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                             f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_in)
-                    np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                         f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_cv)
-                    np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                         f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_gr)
+                np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                         f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_in)
+                np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                     f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_cv)
+                np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                     f'theta_in.plan.glm{args.glm}.{H}.{roi}.npy'), theta_gr)
 
