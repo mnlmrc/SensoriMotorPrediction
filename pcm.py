@@ -75,27 +75,6 @@ def FixedModel(name, Z):
     return M, G
 
 
-def find_matlab_function(function_name):
-    """Search for the MATLAB function file in known locations"""
-    try:
-        # Run the 'find' command and capture output
-        result = subprocess.run(["find", "/", "-name", f"{function_name}.m"], stdout=subprocess.PIPE, text=True,
-                                stderr=subprocess.DEVNULL)
-
-        # Extract paths
-        paths = result.stdout.strip().split("\n")
-
-        # Check if paths exist and return the first valid directory
-        for path in paths:
-            if os.path.isfile(path):
-                return os.path.dirname(path)
-
-    except Exception as e:
-        print(f"Error finding MATLAB function: {e}")
-
-    return None
-
-
 def get_tessel_betas(experiment=None, sn=None, atlas=None, Hem=None, idx=None, glm=None):
     R = get_roi(experiment, sn, Hem, f'label-{idx}', atlas=atlas)
 
@@ -117,14 +96,6 @@ def get_tessel_betas(experiment=None, sn=None, atlas=None, Hem=None, idx=None, g
     return betas
 
 
-# def tessellation(atlas='Icosahedron-1002'):
-#
-#     # matlab_cmd = (f"cd('~/Documents/GitHub/sensori-motor-prediction/smp2/'); "
-#     #               f"smp2_anat('TESSELLATION:single_tessel', 'sn', 106, 'atlas', '{atlas}'); exit")
-#     #
-#     # subprocess.run(["matlab", "-nodisplay", "-nosplash", "-nodesktop", "-r", matlab_cmd])
-
-
 if __name__ == '__main__':
 
     Z_stimFinger = np.zeros((13, 3))
@@ -138,6 +109,29 @@ if __name__ == '__main__':
     Z_cue[[2, 6, 11], 2] = 1
     Z_cue[[3, 7, 12], 3] = 1
     Z_cue[[4, 8], 4] = 1
+
+    alpha = 1  # Controls covariance falloff
+    sigma_sq = 1  # Variance of cues
+
+    # Compute similarity matrix
+    S = np.exp(-alpha * np.abs(np.arange(5)[:, None] - np.arange(5)[None, :]))
+
+    # Convert to covariance matrix
+    cov_matrix = sigma_sq * S
+
+    # Transform Z_cue to incorporate correlation structure
+    Z_cue_transformed = Z_cue @ np.linalg.cholesky(cov_matrix)
+
+    M = []
+    M.append(pcm.FixedModel('null', np.eye(13)))
+    M.append(pcm.FixedModel('stimFinger', Z_stimFinger @ Z_stimFinger.T))
+    M.append(pcm.FixedModel('cue', Z_cue @ Z_cue.T))
+    M.append(pcm.FixedModel('cue_t', Z_cue_transformed @ Z_cue_transformed.T))
+    M.append(
+        pcm.ComponentModel('stimFinger+cue', np.array([Z_stimFinger @ Z_stimFinger.T, Z_cue @ Z_cue.T])))
+    M.append(pcm.ComponentModel('stimFinger+cue_t', np.array(
+        [Z_stimFinger @ Z_stimFinger.T, Z_cue_transformed @ Z_cue_transformed.T])))
+    M.append(pcm.FreeModel('ceil', 13))  # Noise ceiling model
 
     parser = argparse.ArgumentParser()
 
@@ -164,3 +158,51 @@ if __name__ == '__main__':
                     atlas=args.atlas,
                     glm=args.glm,
                 )
+    if args.what == 'save_rois_pcm':
+
+        snS = [102, 103, 104, 106, 107]
+
+        Hem = ['L', 'R']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        for H in Hem:
+            for roi in rois:
+
+                N = len(snS)
+
+                G_hat_betas = np.zeros((N, 13, 13))
+                Y = list()
+
+                for s, sn in enumerate(snS):
+                    reginfo = pd.read_csv(
+                        os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
+                                     f'subj{sn}_reginfo.tsv'), sep='\t')
+
+                    betas = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
+                                                 f'subj{sn}', f'ROI.{H}.{roi}.beta.npy'))
+                    res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
+                                               f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
+
+                    betas_prewhitened = betas / res
+
+                    cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
+                    part_vec = reginfo.run
+
+                    obs_des = {'cond_vec': cond_vec,
+                               'part_vec': part_vec}
+
+                    Y.append(pcm.dataset.Dataset(betas_prewhitened, obs_descriptors=obs_des))
+
+                    G_hat_betas[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                                                           Y[s].obs_descriptors['part_vec'],
+                                                           X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+
+                T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+                T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+                T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+
+                T_in.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_in.glm{args.glm}.{H}.{roi}.tsv'),
+                            sep='\t')
+                T_cv.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_cv.glm{args.glm}.{H}.{roi}.tsv'),
+                            sep='\t')
+                T_gr.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_gr.glm{args.glm}.{H}.{roi}.tsv'),
+                            sep='\t')

@@ -25,6 +25,7 @@ imagingDir = "imaging_data"
 rdmDir = "rdm"
 roiDir = 'ROI'
 pilotDir = 'pilot'
+pcmDir = 'pcm'
 
 print("Base directory:", baseDir)
 
