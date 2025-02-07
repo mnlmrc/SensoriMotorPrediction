@@ -241,7 +241,7 @@ if __name__ == '__main__':
                     cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
                     part_vec = reginfo.run
 
-                    idx = cond_vec.isin(gl.cues)
+                    idx = cond_vec.isin([0, 1, 2, 3, 4])
 
                     obs_des = {'cond_vec': cond_vec[idx],
                                'part_vec': part_vec[idx]}
