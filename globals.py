@@ -66,8 +66,6 @@ participants = {
              ]
 }
 
-clabels = ['0%', '25%', '50%', '75%', '100%']
-
 channels = {'mov': ['thumb', 'index', 'middle', 'ring', 'pinkie']}
 
 prestim = 1
@@ -85,7 +83,7 @@ planState = {
     'smp2': 3
 }
 
-cue = ['0%', '25%', '50%', '75%', '100%']
+cues = ['0%', '25%', '50%', '75%', '100%']
 stimFinger = ['index', 'ring']
 
 cue_code = [93, 12, 44, 21, 39]
