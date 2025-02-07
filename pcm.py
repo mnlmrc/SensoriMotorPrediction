@@ -200,7 +200,7 @@ if __name__ == '__main__':
     if args.what == 'save_rois_pcm_plan':
 
         A0 = np.eye(5) # Identity matrix
-        Z_base = np.zeros(5)
+        Z_base = np.zeros((5, 5))
         A = []
         for i in range(5):
             for j in range(5):
