@@ -133,9 +133,11 @@ def main():
                         os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}', f'ROI.{H}.{roi}.con.npy'))
 
                     for regr, regressor in enumerate(reginfo.name.unique()):
-                        dict_con['activity'].append(np.nanmean(con[reginfo.name.str.replace(" ", "").unique() == regressor]))
+                        dict_con['activity'].append(np.nanmean(con[reginfo.name.unique() == regressor]))
                         dict_con['sn'].append(sn)
                         dict_con['condition'].append(regressor)
+                        dict_con['roi'].append(roi)
+                        dict_con['Hem'].append(H)
 
         df_con = pd.DataFrame(dict_con)
         df_con.to_csv(os.path.join(gl.baseDir, args.experiment, f'ROI.con.avg.tsv'), sep='\t', index=False)
