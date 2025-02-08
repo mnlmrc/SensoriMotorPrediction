@@ -130,7 +130,7 @@ def main():
                                                        f'subj{sn}_reginfo.tsv'), sep="\t")
 
                     con = np.load(
-                        os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}', f'ROI.{Hem}.{roi}.con.npy'))
+                        os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}', f'ROI.{H}.{roi}.con.npy'))
 
                     for regr, regressor in enumerate(reginfo.name.unique()):
                         dict_con['activity'].append(np.nanmean(con[reginfo.name.str.replace(" ", "").unique() == regressor]))
