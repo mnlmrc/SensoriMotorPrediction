@@ -109,9 +109,39 @@ def main():
                 )
                 np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                      f'ROI.{H}.{roi}.con.npy'), contrasts)
+    if args.what == 'save_rois_contrasts_avg':
+        snS = [102, 103, 104, 106, 107]
+        Hem = ['L', 'R']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        dict_con = {
+            'condition': [],
+            'sn': [],
+            'activity': [],
+            'roi': [],
+            'Hem': []
+        }
+        for H in Hem:
+            for r, roi in enumerate(rois):
+                for s, sn in enumerate(snS):
+
+                    print(f'subj{sn}, {roi}')
+
+                    reginfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}',
+                                                       f'subj{sn}_reginfo.tsv'), sep="\t")
+
+                    con = np.load(
+                        os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}', f'ROI.{Hem}.{roi}.con.npy'))
+
+                    for regr, regressor in enumerate(reginfo.name.unique()):
+                        dict_con['activity'].append(np.nanmean(con[reginfo.name.str.replace(" ", "").unique() == regressor]))
+                        dict_con['sn'].append(sn)
+                        dict_con['condition'].append(regressor)
+
+        df_con = pd.DataFrame(dict_con)
+        df_con.to_csv(os.path.join(gl.baseDir, args.experiment, f'ROI.con.avg.tsv'), sep='\t', index=False)
     if args.what == 'save_rois_betas':
         Hem = ['L', 'R']
-        rois = [ 'SMA','PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
         for H in Hem:
             for roi in rois:
                 print(f'Hemisphere: {H}, region:{roi}')
