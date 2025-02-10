@@ -24,6 +24,7 @@ trainDir = "training"
 imagingDir = "imaging_data"
 rdmDir = "rdm"
 roiDir = 'ROI'
+cosDir = 'cosine'
 pilotDir = 'pilot'
 pcmDir = 'pcm'
 

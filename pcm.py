@@ -201,7 +201,7 @@ if __name__ == '__main__':
 
         A0 = np.eye(5)  # Identity matrix
         Z_base = np.zeros((5, 5))
-        A = []
+        A = [A0]
         for i in range(5):
             for j in range(5):
                 if i != j:  # Only modify off-diagonal elements

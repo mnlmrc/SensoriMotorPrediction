@@ -22,13 +22,11 @@ def calc_G_cosine(experiment=None, sn=None, Hem=None, roi=None, glm=None):
         os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}', f'ROI.{Hem}.{roi}.res.npy'))
 
     betas_prewhitened = betas / np.sqrt(res)
-
     betas_prewhitened = np.array(betas_prewhitened)
 
     condition = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
 
     Z = pcm.matrix.indicator(condition)
-
     G, Sig = pcm.est_G_crossval(betas_prewhitened, Z, reginfo.run)
 
     cos = G_to_cosine(G)
@@ -93,6 +91,27 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
     return rdm
 
 
+def calc_rdm_force(experiment=None, sn=None, Hem=None, roi=None, glm=None):
+
+    df_force = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}',
+                                     f'{experiment}_{sn}_force_single_trial.tsv'), sep='\t')
+    df_force = df_force.groupby(['cue', 'stimFinger', 'BN']).mean(numeric_only=True)
+    force = df_force[gl.channels['mov']].to_numpy()
+
+    dataset = rsa.data.Dataset(
+        betas_prewhitened,
+        channel_descriptors={
+            'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
+        obs_descriptors={'conds': reginfo.name.str.replace(" ", ""),
+                         'run': reginfo.run})
+    # remove_mean removes the mean ACROSS VOXELS for each condition
+    rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run', remove_mean=False)
+    rdm.rdm_descriptors = {'roi': [roi], 'hem': [Hem], 'index': [0]}
+    rdm.reorder(rdm_index[f'glm{glm}'])
+
+    return rdm
+
+
 def main():
     parser = argparse.ArgumentParser()
 
@@ -118,6 +137,22 @@ def main():
                 )
                 rdm.save(os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{args.sn}',
                                       f'glm{args.glm}.{H}.{roi}.hdf5'), overwrite=True, file_type='hdf5')
+
+    if args.what == 'save_rois_cosine':
+        Hem = ['L', 'R']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        for H in Hem:
+            for roi in rois:
+                print(f'Hemisphere: {H}, region:{roi}')
+                cos = calc_G_cosine(
+                    experiment=args.experiment,
+                    sn=args.sn,
+                    Hem=H,
+                    roi=roi,
+                    glm=args.glm
+                )
+                np.save(os.path.join(gl.baseDir, args.experiment, gl.cosDir, f'subj{args.sn}',
+                                     f'glm{args.glm}.{H}.{roi}.npy'), cos)
 
 
 if __name__ == '__main__':
