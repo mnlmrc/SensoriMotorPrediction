@@ -103,17 +103,24 @@ def get_tessel_betas(experiment=None, sn=None, atlas=None, Hem=None, idx=None, g
 
 if __name__ == '__main__':
 
-    Z_stimFinger = np.zeros((13, 3))
-    Z_stimFinger[0:5, 0] = 1
-    Z_stimFinger[5:9, 1] = 1
-    Z_stimFinger[9:13, 2] = 1
+    C = pcm.centering(5)
 
-    Z_cue = np.zeros((13, 5))
-    Z_cue[[0, 9], 0] = 1
-    Z_cue[[1, 5, 10], 1] = 1
-    Z_cue[[2, 6, 11], 2] = 1
-    Z_cue[[3, 7, 12], 3] = 1
-    Z_cue[[4, 8], 4] = 1
+    v_cue = C @ np.array([-2, -1, 0, 1, 2])
+    v_cert = C @ np.array([0, 1, 2, 1, 0])
+
+    G_cue = np.outer(v_cue, v_cue)
+    np.fill_diagonal(G_cue, np.diag(G_cue).max())
+
+    G_cert = np.outer(v_cert, v_cert)
+    np.fill_diagonal(G_cert, np.diag(G_cert).max())
+
+    Gs = {
+        'planning': {
+            'cue': G_cue,
+            'cert': G_cert,
+            'ind': np.eye(5)
+        }
+    }
 
     parser = argparse.ArgumentParser()
 
@@ -140,7 +147,7 @@ if __name__ == '__main__':
                     atlas=args.atlas,
                     glm=args.glm,
                 )
-    if args.what == 'save_rois_pcm_plan+exec':
+    if args.what == 'save_rois_pcm_exec':
 
         M = []
         M.append(pcm.FixedModel('null', np.eye(13)))
@@ -199,25 +206,14 @@ if __name__ == '__main__':
 
     if args.what == 'save_rois_pcm_plan':
 
-        A0 = np.eye(5)  # Identity matrix
-        Z_base = np.zeros((5, 5))
-        A = [A0]
-        for i in range(5):
-            for j in range(5):
-                if i != j:  # Only modify off-diagonal elements
-                    Z_new = Z_base.copy()
-                    Z_new[i, j] = 1  # Set one off-diagonal element to 1
-                    A.append(Z_new)
-        A = np.stack(A, axis=0)
-
-        assert A.ndim == 3
-
-        np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                             f'features.plan.npy'), A)
-
         M = []
-        M.append(pcm.FixedModel('null', np.eye(5)))
-        M.append(pcm.FeatureModel('cue', A))
+        M.append(pcm.FixedModel('ind', Gs['planning']['ind']))
+        M.append(pcm.FixedModel('cue', Gs['planning']['cue']))
+        M.append(pcm.FixedModel('cert', Gs['planning']['cert']))
+        M.append(pcm.ComponentModel('cue+cert+ind',
+                                    [Gs['planning']['cert'],
+                                        Gs['planning']['cue'],
+                                        Gs['planning']['ind']]))
         M.append(pcm.FreeModel('ceil', 5))  # Noise ceiling model
 
         snS = [102, 103, 104, 106, 107]
