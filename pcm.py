@@ -181,7 +181,7 @@ if __name__ == '__main__':
             obs_des = {'cond_vec': cond_vec,
                        'part_vec': part_vec}
 
-            Y.append(pcm.dataset.Dataset(dat[['ch_' + str(x) for x in range(emg.shape[-1])]], obs_descriptors=obs_des))
+            Y.append(pcm.dataset.Dataset(dat[['ch_' + str(x) for x in range(emg.shape[-1])]].to_numpy(), obs_descriptors=obs_des))
 
             G_hat_betas[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
                                                    Y[s].obs_descriptors['part_vec'],
