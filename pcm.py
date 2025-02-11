@@ -147,7 +147,7 @@ if __name__ == '__main__':
 
         M = make_execution_models()
 
-        snS = [102, 103, 104, 106, 107]
+        snS = [100, 101, 102, 104, 106, 107, 108, 109, 110]
 
         N = len(snS)
 
