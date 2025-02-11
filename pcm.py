@@ -1,113 +1,72 @@
 import argparse
-import os.path
+import pickle
+import warnings
 
 import PcmPy as pcm
-import scipy
 
-import pickle
-
-import warnings
 warnings.filterwarnings("ignore")
 
 import globals as gl
 import pandas as pd
 import numpy as np
 import os
-import subprocess
-import nibabel as nb
-import nitools as nt
-
-import matplotlib.pyplot as plt
-
-from betas import get_roi
 
 
-def make_Z_all(experiment='smp2', sn=None, glm=None):
-    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
-                                       f'subj{sn}_reginfo.tsv'), sep="\t")
+def make_execution_models():
+    C = pcm.centering(8)
 
-    # Extract percentage and finger information from the "name" column
-    reginfo['percentage'] = reginfo['name'].str.extract(r'(\d+%)')[0]
-    reginfo['finger'] = reginfo['name'].str.extract(r',(index|ring)')[0].fillna('nogo')
+    v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
+    v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1, ])
+    v_cert = C @ np.array([0.1875, .25, 0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
+    v_surprise = C @ -np.log2(np.array([.25, .5, .75, 1, 1, .75, .5, .25]))  # with Shannon information
 
-    # Define unique percentages and fingers for one-hot encoding
-    unique_percentages = ['0%', '25%', '50%', '75%', '100%']
-    unique_fingers = ['index', 'ring', 'nogo']
+    Ac = np.zeros((7, 8, 7))
+    Ac[0, :, 0] = v_fingerID
+    Ac[1, :, 1] = v_cue
+    Ac[2, :, 2] = v_cert
+    Ac[3, :, 3] = v_surprise
+    Ac[4, :, 0] = v_cue
+    Ac[5, :, 0] = v_cert
+    Ac[6, :, 0] = v_surprise
 
-    # Initialize the design matrix
-    Z = np.zeros((len(reginfo), len(unique_percentages) + len(unique_fingers)), dtype=int)
+    G_fingerID = np.outer(v_fingerID, v_fingerID)
+    G_cue = np.outer(v_cue, v_cue)
+    G_cert = np.outer(v_cert, v_cert)
+    G_surprise = np.outer(v_surprise, v_surprise)
 
-    # Fill in the design matrix
-    for i, row in reginfo.iterrows():
-        # Percentage columns
-        percentage_idx = unique_percentages.index(row['percentage'])
-        Z[i, percentage_idx] = 1
+    M = []
+    M.append(pcm.FixedModel('null', np.eye(8)))
+    M.append(pcm.FixedModel('stimFinger', G_fingerID))
+    M.append(pcm.FixedModel('cue', G_cue))
+    M.append(pcm.FixedModel('cert', G_cert))
+    M.append(pcm.FixedModel('surprise', G_surprise))
+    M.append(pcm.ComponentModel('stimFinger+cue+cert+surprise (component)',
+                                np.array([G_fingerID, G_cue, G_cert, G_surprise])))
+    M.append(pcm.FeatureModel('stimFinger+cue+cert+surprise (feature)', Ac))
+    M.append(pcm.FreeModel('ceil', 8))  # Noise ceiling model
 
-        # Finger columns
-        finger_idx = unique_fingers.index(row['finger']) + len(unique_percentages)
-        Z[i, finger_idx] = 1
-
-    return Z
-
-
-def make_Z_cue(experiment='smp2', sn=None, glm=None):
-    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
-                                       f'subj{sn}_reginfo.tsv'), sep="\t")
-
-    # Extract percentage and finger information from the "name" column
-    reginfo['percentage'] = reginfo['name'].str.extract(r'(\d+%)')[0]
-    reginfo['finger'] = reginfo['name'].str.extract(r',(index|ring)')[0].fillna('nogo')
-
-    # Define unique percentages and fingers for one-hot encoding
-    unique_percentages = ['0%', '25%', '50%', '75%', '100%']
-
-    # Initialize the design matrix
-    Z = np.zeros((len(reginfo), len(unique_percentages)), dtype=int)
-
-    # Fill in the design matrix
-    for i, row in reginfo.iterrows():
-        # Percentage columns
-        percentage_idx = unique_percentages.index(row['percentage'])
-        Z[i, percentage_idx] = 1
-
-    return Z
+    return M
 
 
-def FixedModel(name, Z):
-    G = np.matmul(Z, Z.T)
-    M = pcm.model.FixedModel(name, G)
+def make_planning_models():
+    C = pcm.centering(5)
 
-    return M, G
+    v_cue = C @ np.array([-2, -1, 0, 1, 2])
+    v_cert = C @ np.array([0, 1, 2, 1, 0])
+    G_cue_plan = np.outer(v_cue, v_cue)
+    G_cert_plan = np.outer(v_cert, v_cert)
 
+    M = []
+    M.append(pcm.FixedModel('null', np.eye(5)))
+    M.append(pcm.FixedModel('cue', G_cue_plan))
+    M.append(pcm.FixedModel('cert', G_cert_plan))
+    M.append(pcm.ComponentModel('cue+cert', np.array([G_cert_plan, G_cue_plan])))
+    M.append(pcm.FreeModel('ceil', 5))  # Noise ceiling model
 
-def get_tessel_betas(experiment=None, sn=None, atlas=None, Hem=None, idx=None, glm=None):
-    R = get_roi(experiment, sn, Hem, f'label-{idx}', atlas=atlas)
-
-    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
-                                       f'subj{sn}_reginfo.tsv'), sep="\t")
-
-    betas = list()
-    for n_regr in np.arange(0, reginfo.shape[0]):
-        vol = nb.load(
-            os.path.join(gl.baseDir, 'smp2', f'{gl.glmDir}{glm}', f'subj{sn}', f'beta_{n_regr + 1:04d}.nii'))
-        beta = nt.sample_image(vol, R['data'][:, 0], R['data'][:, 1], R['data'][:, 2], 0)
-        betas.append(beta)
-
-    betas = np.array(betas)
-    betas = betas[:, ~np.all(np.isnan(betas), axis=0)]
-
-    assert betas.ndim == 2
-
-    return betas
+    return M
 
 
 if __name__ == '__main__':
-
-    # planning models
-
-
-    # execution models
-
 
     parser = argparse.ArgumentParser()
 
@@ -122,37 +81,7 @@ if __name__ == '__main__':
 
     if args.what == 'save_rois_execution':
 
-        C = pcm.centering(8)
-
-        v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
-        v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1, ])
-        v_cert = C @ np.array([0.1875, .25, 0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
-        v_surprise = C @ -np.log2(np.array([.25, .5, .75, 1, 1, .75, .5, .25]))  # with Shannon information
-
-        Ac = np.zeros((7, 8, 7))
-        Ac[0, :, 0] = v_fingerID
-        Ac[1, :, 1] = v_cue
-        Ac[2, :, 2] = v_cert
-        Ac[3, :, 3] = v_surprise
-        Ac[4, :, 0] = v_cue
-        Ac[5, :, 0] = v_cert
-        Ac[6, :, 0] = v_surprise
-
-        G_fingerID = np.outer(v_fingerID, v_fingerID)
-        G_cue = np.outer(v_cue, v_cue)
-        G_cert = np.outer(v_cert, v_cert)
-        G_surprise = np.outer(v_surprise, v_surprise)
-
-        M = []
-        M.append(pcm.FixedModel('null', np.eye(8)))
-        M.append(pcm.FixedModel('stimFinger', G_fingerID))
-        M.append(pcm.FixedModel('cue', G_cue))
-        M.append(pcm.FixedModel('cert', G_cert))
-        M.append(pcm.FixedModel('surprise', G_surprise))
-        M.append(pcm.ComponentModel('stimFinger+cue+cert+surprise (component)',
-                                    np.array([G_fingerID, G_cue, G_cert, G_surprise])))
-        M.append(pcm.FeatureModel('stimFinger+cue+cert+surprise (feature)', Ac))
-        M.append(pcm.FreeModel('ceil', 8))  # Noise ceiling model
+        M = make_execution_models()
 
         snS = [102, 103, 104, 106, 107]
 
@@ -204,31 +133,84 @@ if __name__ == '__main__':
                                             f'T_gr.exec.glm{args.glm}.{H}.{roi}.pkl'))
 
                 with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                       f'theta_in.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                        pickle.dump(theta_in, f)
+                                       f'theta_in.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                    pickle.dump(theta_in, f)
 
                 with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                       f'theta_cv.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                        pickle.dump(theta_cv, f)
+                                       f'theta_cv.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                    pickle.dump(theta_cv, f)
 
                 with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                       f'theta_gr.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                        pickle.dump(theta_gr, f)
+                                       f'theta_gr.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                    pickle.dump(theta_gr, f)
+    if args.what == 'save_emg_execution':
+
+        M = make_execution_models()
+
+        snS = [102, 103, 104, 106, 107]
+
+        N = len(snS)
+
+        G_hat_betas = np.zeros((N, 8, 8))
+        Y = list()
+
+        for s, sn in enumerate(snS):
+            npz = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}',
+                                       f'{args.experiment}_{sn}_binned.npz'), allow_pickle=True)
+
+            emg = npz['data_array'][-1]
+            descr = npz['descriptor'].item()
+            timepoints = list(descr['time windows'].keys())
+
+            dat = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
+                                           f'{args.experiment}_{sn}.dat'), sep='\t')
+            dat['stimFinger'] = dat['stimFinger'].map(gl.stimFinger_mapping)
+            dat['cue'] = dat['cue'].map(gl.cue_mapping)
+
+            cov = emg.T @ emg
+
+            emg = emg / np.sqrt(np.diag(cov))
+
+            dat[['ch_' + str(x) for x in range(emg.shape[-1])]] = emg
+
+            dat = dat.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
+            cond_vec = dat['stimFinger'] + ',' + dat['cue']
+
+            obs_des = {'cond_vec': cond_vec,
+                       'part_vec': dat['BN']}
+
+            Y.append(pcm.dataset.Dataset(dat[['ch_' + str(x) for x in range(emg.shape[-1])]], obs_descriptors=obs_des))
+
+            G_hat_betas[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                                                   Y[s].obs_descriptors['part_vec'],
+                                                   X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+
+        T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+        T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+        T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+
+        T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                    f'T_in.emg.Vol.pkl'))
+        T_cv.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                    f'T_cv.emg.Vol.pkl'))
+        T_gr.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                    f'T_gr.emg.Vol.pkl'))
+
+        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                               f'theta_in.emg.Vol.pkl'), 'wb') as f:
+            pickle.dump(theta_in, f)
+
+        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                               f'theta_cv.emg.Vol.pkl'), 'wb') as f:
+            pickle.dump(theta_cv, f)
+
+        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                               f'theta_gr.emg.Vol.pkl'), 'wb') as f:
+            pickle.dump(theta_gr, f)
 
     if args.what == 'save_rois_planning':
 
-        C = pcm.centering(5)
-        v_cue = C @ np.array([-2, -1, 0, 1, 2])
-        v_cert = C @ np.array([0, 1, 2, 1, 0])
-        G_cue_plan = np.outer(v_cue, v_cue)
-        G_cert_plan = np.outer(v_cert, v_cert)
-
-        M = []
-        M.append(pcm.FixedModel('null', np.eye(5)))
-        M.append(pcm.FixedModel('cue', G_cue_plan))
-        M.append(pcm.FixedModel('cert', G_cert_plan))
-        M.append(pcm.ComponentModel('cue+cert', np.array([G_cert_plan, G_cue_plan])))
-        M.append(pcm.FreeModel('ceil', 5))  # Noise ceiling model
+        M = make_planning_models()
 
         snS = [102, 103, 104, 106, 107]
 
@@ -274,20 +256,20 @@ if __name__ == '__main__':
                 T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
                 T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                         f'T_in.plan.glm{args.glm}.{H}.{roi}.pkl'))
+                                            f'T_in.plan.glm{args.glm}.{H}.{roi}.pkl'))
                 T_cv.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                         f'T_cv.plan.glm{args.glm}.{H}.{roi}.pkl'))
+                                            f'T_cv.plan.glm{args.glm}.{H}.{roi}.pkl'))
                 T_gr.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                         f'T_gr.plan.glm{args.glm}.{H}.{roi}.pkl'))
-                            
-                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                       f'theta_in.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                        pickle.dump(theta_in, f)
+                                            f'T_gr.plan.glm{args.glm}.{H}.{roi}.pkl'))
 
                 with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                       f'theta_cv.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                        pickle.dump(theta_cv, f)
+                                       f'theta_in.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                    pickle.dump(theta_in, f)
 
                 with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                       f'theta_gr.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                        pickle.dump(theta_gr, f)
+                                       f'theta_cv.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                    pickle.dump(theta_cv, f)
+
+                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                       f'theta_gr.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                    pickle.dump(theta_gr, f)
