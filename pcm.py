@@ -189,23 +189,19 @@ if __name__ == '__main__':
         T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
         T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
-        T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                    f'T_in.emg.Vol.pkl'))
-        T_cv.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                    f'T_cv.emg.Vol.pkl'))
-        T_gr.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                    f'T_gr.emg.Vol.pkl'))
+        path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
 
-        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                               f'theta_in.emg.Vol.pkl'), 'wb') as f:
+        os.makedirs(path, exist_ok=True)
+
+        T_in.to_pickle(os.path.join(path, f'T_in.emg.Vol.pkl'))
+        T_cv.to_pickle(os.path.join(path, f'T_cv.emg.Vol.pkl'))
+        T_gr.to_pickle(os.path.join(path, f'T_gr.emg.Vol.pkl'))
+
+        with open(os.path.join(path, f'theta_in.emg.Vol.pkl'), 'wb') as f:
             pickle.dump(theta_in, f)
-
-        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                               f'theta_cv.emg.Vol.pkl'), 'wb') as f:
+        with open(os.path.join(path, f'theta_cv.emg.Vol.pkl'), 'wb') as f:
             pickle.dump(theta_cv, f)
-
-        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                               f'theta_gr.emg.Vol.pkl'), 'wb') as f:
+        with open(os.path.join(path, f'theta_gr.emg.Vol.pkl'), 'wb') as f:
             pickle.dump(theta_gr, f)
 
     if args.what == 'save_rois_planning':
