@@ -166,6 +166,7 @@ if __name__ == '__main__':
                                            f'{args.experiment}_{sn}.dat'), sep='\t')
             dat['stimFinger'] = dat['stimFinger'].map(gl.stimFinger_mapping)
             dat['cue'] = dat['cue'].map(gl.cue_mapping)
+            dat['BN'] = dat['BN'].astype(str)
 
             cov = emg.T @ emg
 
@@ -175,9 +176,10 @@ if __name__ == '__main__':
 
             dat = dat.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
             cond_vec = dat['stimFinger'] + ',' + dat['cue']
+            part_vec = dat['BN']
 
             obs_des = {'cond_vec': cond_vec,
-                       'part_vec': dat['BN']}
+                       'part_vec': part_vec}
 
             Y.append(pcm.dataset.Dataset(dat[['ch_' + str(x) for x in range(emg.shape[-1])]], obs_descriptors=obs_des))
 
