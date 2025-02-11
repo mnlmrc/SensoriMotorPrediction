@@ -82,7 +82,8 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
         channel_descriptors={
             'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
         obs_descriptors={'conds': reginfo.name.str.replace(" ", ""),
-                         'run': reginfo.run})
+                         'run': reginfo.run},
+        )
     # remove_mean removes the mean ACROSS VOXELS for each condition
     rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run', remove_mean=False)
     rdm.rdm_descriptors = {'roi': [roi], 'hem': [Hem], 'index': [0]}
@@ -91,25 +92,74 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
     return rdm
 
 
-def calc_rdm_force(experiment=None, sn=None, Hem=None, roi=None, glm=None):
+# def calc_rdm_force(experiment=None, sn=None, Hem=None, roi=None, glm=None):
+#
+#     df_force = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}',
+#                                      f'{experiment}_{sn}_force_single_trial.tsv'), sep='\t')
+#     df_force = df_force.groupby(['cue', 'stimFinger', 'BN']).mean(numeric_only=True)
+#     force = df_force[gl.channels['mov']].to_numpy()
+#
+#     dataset = rsa.data.Dataset(
+#         betas_prewhitened,
+#         channel_descriptors={
+#             'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
+#         obs_descriptors={'conds': reginfo.name.str.replace(" ", ""),
+#                          'run': reginfo.run})
+#     # remove_mean removes the mean ACROSS VOXELS for each condition
+#     rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run', remove_mean=False)
+#     rdm.rdm_descriptors = {'roi': [roi], 'hem': [Hem], 'index': [0]}
+#     rdm.reorder(rdm_index[f'glm{glm}'])
+#
+#     return rdm
 
-    df_force = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}',
-                                     f'{experiment}_{sn}_force_single_trial.tsv'), sep='\t')
-    df_force = df_force.groupby(['cue', 'stimFinger', 'BN']).mean(numeric_only=True)
-    force = df_force[gl.channels['mov']].to_numpy()
 
-    dataset = rsa.data.Dataset(
-        betas_prewhitened,
-        channel_descriptors={
-            'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
-        obs_descriptors={'conds': reginfo.name.str.replace(" ", ""),
-                         'run': reginfo.run})
-    # remove_mean removes the mean ACROSS VOXELS for each condition
-    rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run', remove_mean=False)
-    rdm.rdm_descriptors = {'roi': [roi], 'hem': [Hem], 'index': [0]}
-    rdm.reorder(rdm_index[f'glm{glm}'])
+def calc_rdm_emg(experiment=None, sn=None):
 
-    return rdm
+    npz = np.load(os.path.join(gl.baseDir, experiment, 'emg', f'subj{sn}', f'{experiment}_{sn}_binned.npz'),
+                  allow_pickle=True)
+
+    emg = npz['data_array']
+    descr = npz['descriptor'].item()
+    timepoints = list(descr['time windows'].keys())
+
+    dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}', f'{experiment}_{sn}.dat'),
+                      sep='\t')
+    dat['stimFinger'] = dat['stimFinger'].map(gl.stimFinger_mapping)
+    dat['cue'] = dat['cue'].map(gl.cue_mapping)
+
+    rdms = list()
+    for tp in range(1, emg.shape[0]):
+
+        emg_tmp = emg[tp]
+
+        cov = emg_tmp.T @ emg_tmp
+
+        emg_tmp = emg_tmp / np.sqrt(np.diag(cov))
+
+        dat_tmp = dat.copy()
+        dat_tmp[['ch_' + str(x) for x in range(emg.shape[-1])]] = emg_tmp
+
+        dat_tmp = dat_tmp.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
+        conds = dat_tmp['stimFinger'] + ',' + dat_tmp['cue']
+
+        dataset = rsa.data.Dataset(
+            dat_tmp[['ch_' + str(x) for x in range(emg.shape[-1])]].to_numpy(),
+            channel_descriptors={
+                'channel': np.array(['ch_' + str(x) for x in range(emg.shape[-1])])},
+            obs_descriptors={'conds': conds,
+                             'run': dat_tmp['BN']},
+            descriptors={'timepoint': timepoints[tp]},
+        )
+
+        rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run', remove_mean=False)
+        rdm.reorder(np.array([1, 2, 3, 0, 4, 5, 6, 7]))
+        rdms.append(rdm)
+
+    rdms = rsa.rdm.concat(rdms)
+
+    return rdms
+
+
 
 
 def main():
@@ -138,21 +188,16 @@ def main():
                 rdm.save(os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{args.sn}',
                                       f'glm{args.glm}.{H}.{roi}.hdf5'), overwrite=True, file_type='hdf5')
 
-    if args.what == 'save_rois_cosine':
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
-        for H in Hem:
-            for roi in rois:
-                print(f'Hemisphere: {H}, region:{roi}')
-                cos = calc_G_cosine(
-                    experiment=args.experiment,
-                    sn=args.sn,
-                    Hem=H,
-                    roi=roi,
-                    glm=args.glm
-                )
-                np.save(os.path.join(gl.baseDir, args.experiment, gl.cosDir, f'subj{args.sn}',
-                                     f'glm{args.glm}.{H}.{roi}.npy'), cos)
+    if args.what == 'save_rdm_emg':
+
+        rdms = calc_rdm_emg(
+            experiment=args.experiment,
+            sn=args.sn,
+        )
+        save_path = os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{args.sn}',
+                                 'emg.hdf5')
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        rdms.save(save_path, overwrite=True, file_type='hdf5')
 
 
 if __name__ == '__main__':

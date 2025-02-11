@@ -103,24 +103,11 @@ def get_tessel_betas(experiment=None, sn=None, atlas=None, Hem=None, idx=None, g
 
 if __name__ == '__main__':
 
-    C = pcm.centering(5)
+    # planning models
 
-    v_cue = C @ np.array([-2, -1, 0, 1, 2])
-    v_cert = C @ np.array([0, 1, 2, 1, 0])
 
-    G_cue = np.outer(v_cue, v_cue)
-    np.fill_diagonal(G_cue, np.diag(G_cue).max())
+    # execution models
 
-    G_cert = np.outer(v_cert, v_cert)
-    np.fill_diagonal(G_cert, np.diag(G_cert).max())
-
-    Gs = {
-        'planning': {
-            'cue': G_cue,
-            'cert': G_cert,
-            'ind': np.eye(5)
-        }
-    }
 
     parser = argparse.ArgumentParser()
 
@@ -133,29 +120,39 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if args.what == '_get_tessel_betas':
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
-        for H in Hem:
-            for idx in range(924):
-                print(f'Hemisphere: {H}, tessel:{idx + 1}')
-                betas = get_tessel_betas(
-                    experiment=args.experiment,
-                    sn=args.sn,
-                    Hem=H,
-                    idx=idx + 1,
-                    atlas=args.atlas,
-                    glm=args.glm,
-                )
-    if args.what == 'save_rois_pcm_exec':
+    if args.what == 'save_rois_execution':
+
+        C = pcm.centering(8)
+
+        v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
+        v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1, ])
+        v_cert = C @ np.array([0.1875, .25, 0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
+        v_surprise = C @ -np.log2(np.array([.25, .5, .75, 1, 1, .75, .5, .25]))  # with Shannon information
+
+        Ac = np.zeros((7, 8, 7))
+        Ac[0, :, 0] = v_fingerID
+        Ac[1, :, 1] = v_cue
+        Ac[2, :, 2] = v_cert
+        Ac[3, :, 3] = v_surprise
+        Ac[4, :, 0] = v_cue
+        Ac[5, :, 0] = v_cert
+        Ac[6, :, 0] = v_surprise
+
+        G_fingerID = np.outer(v_fingerID, v_fingerID)
+        G_cue = np.outer(v_cue, v_cue)
+        G_cert = np.outer(v_cert, v_cert)
+        G_surprise = np.outer(v_surprise, v_surprise)
 
         M = []
-        M.append(pcm.FixedModel('null', np.eye(13)))
-        M.append(pcm.FixedModel('stimFinger', Z_stimFinger @ Z_stimFinger.T))
-        M.append(pcm.FixedModel('cue', Z_cue @ Z_cue.T))
-        M.append(
-            pcm.ComponentModel('stimFinger+cue', np.array([Z_stimFinger @ Z_stimFinger.T, Z_cue @ Z_cue.T])))
-        M.append(pcm.FreeModel('ceil', 13))  # Noise ceiling model
+        M.append(pcm.FixedModel('null', np.eye(8)))
+        M.append(pcm.FixedModel('stimFinger', G_fingerID))
+        M.append(pcm.FixedModel('cue', G_cue))
+        M.append(pcm.FixedModel('cert', G_cert))
+        M.append(pcm.FixedModel('surprise', G_surprise))
+        M.append(pcm.ComponentModel('stimFinger+cue+cert+surprise (component)',
+                                    np.array([G_fingerID, G_cue, G_cert, G_surprise])))
+        M.append(pcm.FeatureModel('stimFinger+cue+cert+surprise (feature)', Ac))
+        M.append(pcm.FreeModel('ceil', 8))  # Noise ceiling model
 
         snS = [102, 103, 104, 106, 107]
 
@@ -166,7 +163,7 @@ if __name__ == '__main__':
 
                 N = len(snS)
 
-                G_hat_betas = np.zeros((N, 13, 13))
+                G_hat_betas = np.zeros((N, 8, 8))
                 Y = list()
 
                 for s, sn in enumerate(snS):
@@ -179,15 +176,17 @@ if __name__ == '__main__':
                     res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
                                                f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
 
-                    betas_prewhitened = betas / res
+                    betas_prewhitened = betas / np.sqrt(res)
 
                     cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
                     part_vec = reginfo.run
 
-                    obs_des = {'cond_vec': cond_vec,
-                               'part_vec': part_vec}
+                    idx = cond_vec.isin([5, 6, 7, 8, 9, 10, 11, 12])
 
-                    Y.append(pcm.dataset.Dataset(betas_prewhitened, obs_descriptors=obs_des))
+                    obs_des = {'cond_vec': cond_vec[idx],
+                               'part_vec': part_vec[idx]}
+
+                    Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
 
                     G_hat_betas[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
                                                            Y[s].obs_descriptors['part_vec'],
@@ -197,23 +196,38 @@ if __name__ == '__main__':
                 T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
                 T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
-                T_in.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_in.exec+plan.glm{args.glm}.{H}.{roi}.tsv'),
-                            sep='\t')
-                T_cv.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_cv.exec+plan.glm{args.glm}.{H}.{roi}.tsv'),
-                            sep='\t')
-                T_gr.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_gr.exec+plan.glm{args.glm}.{H}.{roi}.tsv'),
-                            sep='\t')
+                T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                            f'T_in.exec.glm{args.glm}.{H}.{roi}.pkl'))
+                T_cv.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                            f'T_cv.exec.glm{args.glm}.{H}.{roi}.pkl'))
+                T_gr.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                            f'T_gr.exec.glm{args.glm}.{H}.{roi}.pkl'))
 
-    if args.what == 'save_rois_pcm_plan':
+                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                       f'theta_in.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                        pickle.dump(theta_in, f)
+
+                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                       f'theta_cv.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                        pickle.dump(theta_cv, f)
+
+                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                       f'theta_gr.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
+                        pickle.dump(theta_gr, f)
+
+    if args.what == 'save_rois_planning':
+
+        C = pcm.centering(5)
+        v_cue = C @ np.array([-2, -1, 0, 1, 2])
+        v_cert = C @ np.array([0, 1, 2, 1, 0])
+        G_cue_plan = np.outer(v_cue, v_cue)
+        G_cert_plan = np.outer(v_cert, v_cert)
 
         M = []
-        M.append(pcm.FixedModel('ind', Gs['planning']['ind']))
-        M.append(pcm.FixedModel('cue', Gs['planning']['cue']))
-        M.append(pcm.FixedModel('cert', Gs['planning']['cert']))
-        M.append(pcm.ComponentModel('cue+cert+ind',
-                                    [Gs['planning']['cert'],
-                                        Gs['planning']['cue'],
-                                        Gs['planning']['ind']]))
+        M.append(pcm.FixedModel('null', np.eye(5)))
+        M.append(pcm.FixedModel('cue', G_cue_plan))
+        M.append(pcm.FixedModel('cert', G_cert_plan))
+        M.append(pcm.ComponentModel('cue+cert', np.array([G_cert_plan, G_cue_plan])))
         M.append(pcm.FreeModel('ceil', 5))  # Noise ceiling model
 
         snS = [102, 103, 104, 106, 107]
@@ -238,7 +252,7 @@ if __name__ == '__main__':
                     res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
                                                f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
 
-                    betas_prewhitened = betas / res
+                    betas_prewhitened = betas / np.sqrt(res)
 
                     cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
                     part_vec = reginfo.run
