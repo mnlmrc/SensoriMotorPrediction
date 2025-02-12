@@ -12,7 +12,7 @@ import numpy as np
 import os
 
 
-def make_execution_models():
+def make_execution_models_rois():
     C = pcm.centering(8)
 
     v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
@@ -26,8 +26,6 @@ def make_execution_models():
     Ac[2, :, 2] = v_cert
     Ac[3, :, 3] = v_surprise
     Ac[4, :, 0] = v_cue
-    Ac[5, :, 0] = v_cert
-    Ac[6, :, 0] = v_surprise
 
     G_fingerID = np.outer(v_fingerID, v_fingerID)
     G_cue = np.outer(v_cue, v_cue)
@@ -48,11 +46,37 @@ def make_execution_models():
     return M
 
 
+def make_execution_models_emg():
+    C = pcm.centering(8)
+
+    v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
+    v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1, ])
+
+    Ac = np.zeros((3, 8, 3))
+    Ac[0, :, 0] = v_fingerID
+    Ac[1, :, 1] = v_cue
+    Ac[2, :, 0] = v_cue
+
+    G_fingerID = np.outer(v_fingerID, v_fingerID)
+    G_cue = np.outer(v_cue, v_cue)
+
+    M = []
+    M.append(pcm.FixedModel('null', np.eye(8)))
+    M.append(pcm.FixedModel('stimFinger', G_fingerID))
+    M.append(pcm.FixedModel('cue', G_cue))
+    M.append(pcm.ComponentModel('stimFinger+cue (component)',
+                                np.array([G_fingerID, G_cue,])))
+    M.append(pcm.FeatureModel('stimFinger+cue (feature)', Ac))
+    M.append(pcm.FreeModel('ceil', 8))  # Noise ceiling model
+
+    return M
+
+
 def make_planning_models():
     C = pcm.centering(5)
 
     v_cue = C @ np.array([-2, -1, 0, 1, 2])
-    v_cert = C @ np.array([0, 1, 2, 1, 0])
+    v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0])
     G_cue_plan = np.outer(v_cue, v_cue)
     G_cert_plan = np.outer(v_cert, v_cert)
 
@@ -81,7 +105,7 @@ if __name__ == '__main__':
 
     if args.what == 'save_rois_execution':
 
-        M = make_execution_models()
+        M = make_execution_models_rois()
 
         snS = [102, 103, 104, 106, 107]
 
@@ -145,9 +169,9 @@ if __name__ == '__main__':
                     pickle.dump(theta_gr, f)
     if args.what == 'save_emg_execution':
 
-        M = make_execution_models()
+        M = make_execution_models_emg()
 
-        snS = [100, 101, 102, 104, 106, 107, 108, 109, 110]
+        snS = [100, 101, 102, 104, 105, 106, 107, 108, 109, 110]
 
         N = len(snS)
 
