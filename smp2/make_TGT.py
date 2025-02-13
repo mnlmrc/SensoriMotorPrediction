@@ -1,8 +1,8 @@
 import pandas as pd
 
 experiment = 'smp2'
-subj = '107'
-session = 'scanning'  # training or scanning
+subj = '108'
+session = 'training'  # training or scanning
 nblocks = 10
 
 for block in range(nblocks):

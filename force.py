@@ -68,7 +68,7 @@ def segment_mov(experiment=None, sn=None, session=None, blocks=None, prestim=gl.
     return np.array(force), descr
 
 
-def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=(.3, .5)):
+def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=(.2, .4)):
     ch_idx = [col in gl.channels['mov'] for col in gl.col_mov[experiment]]
 
     dat = pd.read_csv(os.path.join(gl.baseDir, experiment, session, f'subj{sn}', f'{experiment}_{sn}.dat'),
@@ -169,7 +169,7 @@ def main():
         force_df.to_csv(os.path.join(gl.baseDir, args.experiment, args.session, f'subj{args.sn}',
                                      f'{args.experiment}_{args.sn}_force_single_trial.tsv'), sep='\t', index=False)
     if args.what == 'avg_continuous':
-        snS = [102, 103, 104, 106, 107]
+        snS = [102, 103, 104, 105, 106, 107]
 
         force_avg = list()
         descr = {
