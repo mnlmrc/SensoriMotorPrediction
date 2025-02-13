@@ -17,10 +17,12 @@ def make_execution_models_rois():
 
     v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
     v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1, ])
-    v_cert = C @ np.array([0.1875, .25, 0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
+    #v_cert = C @ np.array([1, 2,  1, 0, 0, 1, 2, 1])
+    #v_surprise = C @ np.array([3, 2, 1, 0, 0, 1, 2, 3])
+    v_cert = C @ np.array([0.1875, .25,  0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
     v_surprise = C @ -np.log2(np.array([.25, .5, .75, 1, 1, .75, .5, .25]))  # with Shannon information
 
-    Ac = np.zeros((7, 8, 7))
+    Ac = np.zeros((5, 8, 5))
     Ac[0, :, 0] = v_fingerID
     Ac[1, :, 1] = v_cue
     Ac[2, :, 2] = v_cert
@@ -50,7 +52,7 @@ def make_execution_models_emg():
     C = pcm.centering(8)
 
     v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
-    v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1, ])
+    v_cue = C @ np.array([2, -1, 0, 1, -2, -1, 0, 1,])
 
     Ac = np.zeros((3, 8, 3))
     Ac[0, :, 0] = v_fingerID
@@ -84,7 +86,7 @@ def make_planning_models():
     M.append(pcm.FixedModel('null', np.eye(5)))
     M.append(pcm.FixedModel('cue', G_cue_plan))
     M.append(pcm.FixedModel('cert', G_cert_plan))
-    M.append(pcm.ComponentModel('cue+cert', np.array([G_cert_plan, G_cue_plan])))
+    M.append(pcm.ComponentModel('cue+cert', np.array([G_cue_plan, G_cert_plan])))
     M.append(pcm.FreeModel('ceil', 5))  # Noise ceiling model
 
     return M
@@ -106,6 +108,9 @@ if __name__ == '__main__':
     if args.what == 'save_rois_execution':
 
         M = make_execution_models_rois()
+        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                            f'M.exec.glm{args.glm}.pkl'), "wb") as f:
+            pickle.dump(M, f)
 
         snS = [102, 103, 104, 106, 107]
 
@@ -116,7 +121,7 @@ if __name__ == '__main__':
 
                 N = len(snS)
 
-                G_hat_betas = np.zeros((N, 8, 8))
+                G_obs = np.zeros((N, 8, 8))
                 Y = list()
 
                 for s, sn in enumerate(snS):
@@ -135,19 +140,23 @@ if __name__ == '__main__':
                     part_vec = reginfo.run
 
                     idx = cond_vec.isin([5, 6, 7, 8, 9, 10, 11, 12])
+                    #idx = cond_vec.isin(['25%,index', '50%,index', '75%,index', '100%,index','0%,ring', '25%,ring','50%,ring', '75%,ring'])
 
-                    obs_des = {'cond_vec': cond_vec[idx],
-                               'part_vec': part_vec[idx]}
+                    obs_des = {'cond_vec': cond_vec[idx].to_numpy(),
+                               'part_vec': part_vec[idx].to_numpy(),}
 
                     Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
 
-                    G_hat_betas[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                    G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
                                                            Y[s].obs_descriptors['part_vec'],
                                                            X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
                 T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
                 T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
                 T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+
+                np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                     f'G_obs.exec.glm{args.glm}.{H}.{roi}.npy'), G_obs)
 
                 T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                             f'T_in.exec.glm{args.glm}.{H}.{roi}.pkl'))
@@ -170,14 +179,16 @@ if __name__ == '__main__':
     if args.what == 'save_emg_execution':
 
         M = make_execution_models_emg()
+        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                            f'M.emg.pkl'), "wb") as f:
+            pickle.dump(M, f)
 
         snS = [100, 101, 102, 104, 105, 106, 107, 108, 109, 110]
 
         N = len(snS)
 
-        G_hat_betas = np.zeros((N, 8, 8))
+        G_obs = np.zeros((N, 8, 8))
         Y = list()
-
         for s, sn in enumerate(snS):
             npz = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}',
                                        f'{args.experiment}_{sn}_binned.npz'), allow_pickle=True)
@@ -207,7 +218,7 @@ if __name__ == '__main__':
 
             Y.append(pcm.dataset.Dataset(dat[['ch_' + str(x) for x in range(emg.shape[-1])]].to_numpy(), obs_descriptors=obs_des))
 
-            G_hat_betas[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+            G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
                                                    Y[s].obs_descriptors['part_vec'],
                                                    X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
@@ -218,6 +229,8 @@ if __name__ == '__main__':
         path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
 
         os.makedirs(path, exist_ok=True)
+
+        np.save(os.path.join(path, f'G_obs.emg.Vol.npy'), G_obs)
 
         T_in.to_pickle(os.path.join(path, f'T_in.emg.Vol.pkl'))
         T_cv.to_pickle(os.path.join(path, f'T_cv.emg.Vol.pkl'))
@@ -243,9 +256,8 @@ if __name__ == '__main__':
 
                 N = len(snS)
 
-                G_hat_betas = np.zeros((N, 5, 5))
+                G_obs = np.zeros((N, 5, 5))
                 Y = list()
-
                 for s, sn in enumerate(snS):
                     reginfo = pd.read_csv(
                         os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
@@ -268,7 +280,7 @@ if __name__ == '__main__':
 
                     Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
 
-                    G_hat_betas[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                    G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
                                                            Y[s].obs_descriptors['part_vec'],
                                                            X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
@@ -283,6 +295,12 @@ if __name__ == '__main__':
                                             f'T_cv.plan.glm{args.glm}.{H}.{roi}.pkl'))
                 T_gr.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                             f'T_gr.plan.glm{args.glm}.{H}.{roi}.pkl'))
+
+                path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
+
+                os.makedirs(path, exist_ok=True)
+
+                np.save(os.path.join(path, f'G_obs.plan.glm{args.glm}.{H}.{roi}.npy'), G_obs)
 
                 with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                        f'theta_in.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
