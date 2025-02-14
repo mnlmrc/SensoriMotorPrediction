@@ -169,7 +169,7 @@ def main():
         force_df.to_csv(os.path.join(gl.baseDir, args.experiment, args.session, f'subj{args.sn}',
                                      f'{args.experiment}_{args.sn}_force_single_trial.tsv'), sep='\t', index=False)
     if args.what == 'avg_continuous':
-        snS = [102, 103, 104, 105, 106, 107]
+        snS = [102, 103, 104, 105, 106, 107, 108]
 
         force_avg = list()
         descr = {
