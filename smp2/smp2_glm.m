@@ -831,11 +831,11 @@ function smp2_glm(what, varargin)
             smp2_glm('GLM:design', 'sn', sn, 'glm', glm, 'hrf_params', hrf_params, 'derivs', derivs)
             smp2_glm('GLM:estimate', 'sn', sn, 'glm', glm)
             smp2_glm('GLM:T_contrasts', 'sn', sn, 'glm', glm)
-            smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'spmT')
-            smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'beta')
-            smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'res')
-            smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'con')
-            smp2_glm('HRF:ROI_hrf_get', 'sn', sn, 'glm', glm, 'hrf_params', hrf_params)
+%             smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'spmT')
+%             smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'beta')
+%             smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'res')
+%             smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'con')
+%             smp2_glm('HRF:ROI_hrf_get', 'sn', sn, 'glm', glm, 'hrf_params', hrf_params)
             
         case 'HRF:ROI_hrf_get'                   % Extract raw and estimated time series from ROIs
             
@@ -1009,7 +1009,7 @@ function smp2_glm(what, varargin)
             
             sn = [];
             glm = [];
-            atlas = [];
+            atlas = 'ROI';
             vararginoptions(varargin, {'sn', 'glm', 'atlas'});
             
             if isfolder('/Volumes/diedrichsen_data$/data/Atlas_templates/fs_LR_32')
