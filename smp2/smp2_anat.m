@@ -217,6 +217,11 @@ function varargout = smp2_anat(what, varargin)
         
             % recon all inputs
             fs_dir = fullfile(baseDir,freesurferDir, subj_id);
+            
+            if ~exist(fs_dir,"dir")
+                mkdir(fs_dir);
+            end
+            
             anatomical_dir = fullfile(baseDir,anatomicalDir);
             anatomical_name = sprintf('%s_anatomical.nii', subj_id);
             
