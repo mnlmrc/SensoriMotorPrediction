@@ -83,10 +83,11 @@ def make_planning_models():
     G_cert_plan = np.outer(v_cert, v_cert)
 
     M = []
-    M.append(pcm.FixedModel('null', np.eye(5)))
+    M.append(pcm.FixedModel('null', np.zeros((5, 5))))
     M.append(pcm.FixedModel('cue', G_cue_plan))
     M.append(pcm.FixedModel('cert', G_cert_plan))
     M.append(pcm.ComponentModel('cue+cert', np.array([G_cue_plan, G_cert_plan])))
+    M.append(pcm.FixedModel('ind', np.eye(5)))
     M.append(pcm.FreeModel('ceil', 5))  # Noise ceiling model
 
     return M
@@ -112,7 +113,7 @@ if __name__ == '__main__':
                                             f'M.exec.glm{args.glm}.pkl'), "wb") as f:
             pickle.dump(M, f)
 
-        snS = [102, 103, 104, 106, 107]
+        snS = [102, 103, 104, 105, 106, 107]
 
         Hem = ['L', 'R']
         rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
@@ -247,7 +248,7 @@ if __name__ == '__main__':
 
         M = make_planning_models()
 
-        snS = [102, 103, 104, 106, 107]
+        snS = [102, 103, 104, 105, 106, 107]
 
         Hem = ['L', 'R']
         rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']

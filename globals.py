@@ -148,8 +148,13 @@ mask_cue[[0, 1, 7, 25, 26, 27]] = True
 mask_stimFinger_cue[[5, 6, 10, 12, 15, 16]] = True
 
 # flatmap stuff
-borders = {'L': '/Users/mnlmrc/Documents/GitHub/surfAnalysisPy/standard_mesh/fs_L/fs_LR.32k.L.border',
-           'R': '/Users/mnlmrc/Documents/GitHub/surfAnalysisPy/standard_mesh/fs_R/fs_LR.32k.R.border'}
+borderDirs = ["/Users/mnlmrc/Documents/GitHub/surfAnalysisPy/standard_mesh/",
+        "/home/ROBARTS/memanue5/Documents/GitHub/surfAnalysisPy/standard_mesh/",]
+
+borderDirs = next((Dir for Dir in borderDirs if Path(Dir).exists()), None)
+
+borders = {'L': os.path.join(borderDirs, 'fs_L', 'fs_LR.32k.L.border'),
+           'R': os.path.join(borderDirs, 'fs_L', 'fs_LR.32k.L.border')}
 
 rois = {
         'Desikan': [

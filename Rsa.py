@@ -92,27 +92,6 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
     return rdm
 
 
-# def calc_rdm_force(experiment=None, sn=None, Hem=None, roi=None, glm=None):
-#
-#     df_force = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}',
-#                                      f'{experiment}_{sn}_force_single_trial.tsv'), sep='\t')
-#     df_force = df_force.groupby(['cue', 'stimFinger', 'BN']).mean(numeric_only=True)
-#     force = df_force[gl.channels['mov']].to_numpy()
-#
-#     dataset = rsa.data.Dataset(
-#         betas_prewhitened,
-#         channel_descriptors={
-#             'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
-#         obs_descriptors={'conds': reginfo.name.str.replace(" ", ""),
-#                          'run': reginfo.run})
-#     # remove_mean removes the mean ACROSS VOXELS for each condition
-#     rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run', remove_mean=False)
-#     rdm.rdm_descriptors = {'roi': [roi], 'hem': [Hem], 'index': [0]}
-#     rdm.reorder(rdm_index[f'glm{glm}'])
-#
-#     return rdm
-
-
 def calc_rdm_emg(experiment=None, sn=None):
     npz = np.load(os.path.join(gl.baseDir, experiment, 'emg', f'subj{sn}', f'{experiment}_{sn}_binned.npz'),
                   allow_pickle=True)
@@ -181,18 +160,20 @@ def main():
                     roi=roi,
                     glm=args.glm
                 )
-                rdm.save(os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{args.sn}',
-                                      f'glm{args.glm}.{H}.{roi}.hdf5'), overwrite=True, file_type='hdf5')
+                path = os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{args.sn}',
+                                      f'glm{args.glm}.{H}.{roi}.hdf5')
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                rdm.save(path, overwrite=True, file_type='hdf5')
 
     if args.what == 'save_rdm_emg':
         rdms = calc_rdm_emg(
             experiment=args.experiment,
             sn=args.sn,
         )
-        save_path = os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{args.sn}',
+        path = os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{args.sn}',
                                  'emg.hdf5')
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        rdms.save(save_path, overwrite=True, file_type='hdf5')
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        rdms.save(path, overwrite=True, file_type='hdf5')
 
 
 if __name__ == '__main__':
