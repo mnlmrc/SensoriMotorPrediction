@@ -23,6 +23,7 @@ behavDir = "behavioural"
 trainDir = "training"
 imagingDir = "imaging_data"
 rdmDir = "rdm"
+surfDir = "surfaceWB"
 roiDir = 'ROI'
 cosDir = 'cosine'
 pilotDir = 'pilot'

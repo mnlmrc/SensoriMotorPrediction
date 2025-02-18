@@ -3,6 +3,7 @@ import pickle
 import warnings
 
 import PcmPy as pcm
+from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
@@ -11,15 +12,24 @@ import pandas as pd
 import numpy as np
 import os
 
+import sys
+
+sys.path.append('/Users/mnlmrc/Documents/GitHub')
+sys.path.append('/Users/mnlmrc/Documents/GitHub/Functional_Fusion')
+sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub')
+sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion')
+
+import Functional_Fusion.atlas_map as am
+
 
 def make_execution_models_rois():
     C = pcm.centering(8)
 
     v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
     v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1, ])
-    #v_cert = C @ np.array([1, 2,  1, 0, 0, 1, 2, 1])
-    #v_surprise = C @ np.array([3, 2, 1, 0, 0, 1, 2, 3])
-    v_cert = C @ np.array([0.1875, .25,  0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
+    # v_cert = C @ np.array([1, 2,  1, 0, 0, 1, 2, 1])
+    # v_surprise = C @ np.array([3, 2, 1, 0, 0, 1, 2, 3])
+    v_cert = C @ np.array([0.1875, .25, 0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
     v_surprise = C @ -np.log2(np.array([.25, .5, .75, 1, 1, .75, .5, .25]))  # with Shannon information
 
     Ac = np.zeros((5, 8, 5))
@@ -52,7 +62,7 @@ def make_execution_models_emg():
     C = pcm.centering(8)
 
     v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
-    v_cue = C @ np.array([2, -1, 0, 1, -2, -1, 0, 1,])
+    v_cue = C @ np.array([2, -1, 0, 1, -2, -1, 0, 1, ])
 
     Ac = np.zeros((3, 8, 3))
     Ac[0, :, 0] = v_fingerID
@@ -67,7 +77,7 @@ def make_execution_models_emg():
     M.append(pcm.FixedModel('stimFinger', G_fingerID))
     M.append(pcm.FixedModel('cue', G_cue))
     M.append(pcm.ComponentModel('stimFinger+cue (component)',
-                                np.array([G_fingerID, G_cue,])))
+                                np.array([G_fingerID, G_cue, ])))
     M.append(pcm.FeatureModel('stimFinger+cue (feature)', Ac))
     M.append(pcm.FreeModel('ceil', 8))  # Noise ceiling model
 
@@ -106,19 +116,43 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    atlas_dir = ["/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/",
+                 "/Users/mnlmrc/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/"]
+
+    baseDir = next((Dir for Dir in atlas_dir if Path(Dir).exists()), None)
+
+    ntessels = 1002
+
     if args.what == 'save_rois_execution':
 
         M = make_execution_models_rois()
         with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                            f'M.exec.glm{args.glm}.pkl'), "wb") as f:
+                               f'M.exec.glm{args.glm}.pkl'), "wb") as f:
             pickle.dump(M, f)
+
+        atlas, _ = am.get_atlas('fs32k')
+
+        data_out = np.zeros((32492, ncol))
 
         snS = [102, 103, 104, 105, 106, 107]
 
-        Hem = ['L', 'R']
+        # Hem = ['L', 'R']
         rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
-        for H in Hem:
-            for roi in rois:
+        for h in range(2):
+
+            atlas_hem = atlas.get_hemisphere(h)
+
+            white = gl.surfDir + f'/subj{args.sn}/subj{args.sn}.L.white.32k.surf.gii'  # Individual white surface
+            pial = gl.surfDir + f'/subj{args.sn}/subj{args.sn}.L.pial.32k.surf.gii'  # Invividual pial surface
+            mask = gl.glmDir + '12' + f'/subj{args.sn}/mask.nii'  # Mask in functional space
+
+            # for roi in rois:
+            for i in range(len(rois)):
+
+                subatlas = atlas_hem.get_subatlas_image(os.path.join(atlas_dir, f'Icosahedron{ntessels}.L.label.gii'),
+                                                        i)
+                amap = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)  # Atlas map
+                amap.build()
 
                 N = len(snS)
 
@@ -130,10 +164,18 @@ if __name__ == '__main__':
                         os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
                                      f'subj{sn}_reginfo.tsv'), sep='\t')
 
-                    betas = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                                 f'subj{sn}', f'ROI.{H}.{roi}.beta.npy'))
-                    res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                               f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
+
+                    # betas = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
+                    #                              f'subj{sn}', f'ROI.{H}.{roi}.beta.npy'))
+                    # res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
+                    #                            f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
+
+                    dnames = [os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
+                                           f'subj{sn}', f'beta_{i + 1:04d}.nii') for i in range(reginfo.shape[0])]
+
+                    betas = amap.extract_data_native(dnames)
+                    res = amap.extract_data_native([os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
+                                           f'subj{sn}', f'ResMS.nii')])
 
                     betas_prewhitened = betas / np.sqrt(res)
 
@@ -141,16 +183,15 @@ if __name__ == '__main__':
                     part_vec = reginfo.run
 
                     idx = cond_vec.isin([5, 6, 7, 8, 9, 10, 11, 12])
-                    #idx = cond_vec.isin(['25%,index', '50%,index', '75%,index', '100%,index','0%,ring', '25%,ring','50%,ring', '75%,ring'])
 
                     obs_des = {'cond_vec': cond_vec[idx].to_numpy(),
-                               'part_vec': part_vec[idx].to_numpy(),}
+                               'part_vec': part_vec[idx].to_numpy(), }
 
                     Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
 
                     G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                                                           Y[s].obs_descriptors['part_vec'],
-                                                           X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+                                                     Y[s].obs_descriptors['part_vec'],
+                                                     X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
                 T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
                 T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
@@ -181,7 +222,7 @@ if __name__ == '__main__':
 
         M = make_execution_models_emg()
         with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                            f'M.emg.pkl'), "wb") as f:
+                               f'M.emg.pkl'), "wb") as f:
             pickle.dump(M, f)
 
         snS = [100, 101, 102, 104, 105, 106, 107, 108, 109, 110]
@@ -217,11 +258,12 @@ if __name__ == '__main__':
             obs_des = {'cond_vec': cond_vec,
                        'part_vec': part_vec}
 
-            Y.append(pcm.dataset.Dataset(dat[['ch_' + str(x) for x in range(emg.shape[-1])]].to_numpy(), obs_descriptors=obs_des))
+            Y.append(pcm.dataset.Dataset(dat[['ch_' + str(x) for x in range(emg.shape[-1])]].to_numpy(),
+                                         obs_descriptors=obs_des))
 
             G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                                                   Y[s].obs_descriptors['part_vec'],
-                                                   X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+                                             Y[s].obs_descriptors['part_vec'],
+                                             X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
         T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
         T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
@@ -282,8 +324,8 @@ if __name__ == '__main__':
                     Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
 
                     G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                                                           Y[s].obs_descriptors['part_vec'],
-                                                           X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+                                                     Y[s].obs_descriptors['part_vec'],
+                                                     X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
                 T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
                 T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True,
