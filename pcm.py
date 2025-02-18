@@ -73,9 +73,10 @@ def make_execution_models_emg():
     G_cue = np.outer(v_cue, v_cue)
 
     M = []
-    M.append(pcm.FixedModel('null', np.eye(8)))
+    M.append(pcm.FixedModel('null', np.zeros((8, 8))))
     M.append(pcm.FixedModel('stimFinger', G_fingerID))
     M.append(pcm.FixedModel('cue', G_cue))
+    M.append(pcm.FixedModel('ind', np.eye(8)))
     M.append(pcm.ComponentModel('stimFinger+cue (component)',
                                 np.array([G_fingerID, G_cue, ])))
     M.append(pcm.FeatureModel('stimFinger+cue (feature)', Ac))
@@ -110,7 +111,7 @@ if __name__ == '__main__':
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default=None)
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--atlas', type=str, default='Icosahedron-1002')
+    parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--Hem', type=str, default=None)
     parser.add_argument('--glm', type=int, default=None)
 
@@ -119,11 +120,11 @@ if __name__ == '__main__':
     atlas_dir = ["/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/",
                  "/Users/mnlmrc/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/"]
 
-    baseDir = next((Dir for Dir in atlas_dir if Path(Dir).exists()), None)
+    atlas_dir = next((Dir for Dir in atlas_dir if Path(Dir).exists()), None)
 
     ntessels = 1002
 
-    if args.what == 'save_rois_execution':
+    if args.what == 'save_tessel_execution':
 
         M = make_execution_models_rois()
         with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
@@ -132,43 +133,37 @@ if __name__ == '__main__':
 
         atlas, _ = am.get_atlas('fs32k')
 
-        data_out = np.zeros((32492, ncol))
-
         snS = [102, 103, 104, 105, 106, 107]
 
-        # Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
-        for h in range(2):
+        for h, H in enumerate(['L', 'R']):
 
-            atlas_hem = atlas.get_hemisphere(h)
+            data_out = np.zeros((32492, 6))
 
-            white = gl.surfDir + f'/subj{args.sn}/subj{args.sn}.L.white.32k.surf.gii'  # Individual white surface
-            pial = gl.surfDir + f'/subj{args.sn}/subj{args.sn}.L.pial.32k.surf.gii'  # Invividual pial surface
-            mask = gl.glmDir + '12' + f'/subj{args.sn}/mask.nii'  # Mask in functional space
+            for i in range(ntessels):
 
-            # for roi in rois:
-            for i in range(len(rois)):
+                print(f'processing tessel #{i+1}')
 
-                subatlas = atlas_hem.get_subatlas_image(os.path.join(atlas_dir, f'Icosahedron{ntessels}.L.label.gii'),
-                                                        i)
-                amap = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)  # Atlas map
-                amap.build()
-
+                atlas_hem = atlas.get_hemisphere(h)
+                subatlas = atlas_hem.get_subatlas_image(os.path.join(atlas_dir,
+                                                                     f'Icosahedron{ntessels}.{H}.label.gii'), i+1)
                 N = len(snS)
 
                 G_obs = np.zeros((N, 8, 8))
                 Y = list()
 
                 for s, sn in enumerate(snS):
+                    white = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{sn}', f'subj{sn}.L.white.32k'
+                                                                                               f'.surf.gii')
+                    pial = os.path.join(gl.baseDir,args.experiment, gl.surfDir, f'subj{sn}', f'subj{sn}.L.pial.32k'
+                                                                                             f'.surf.gii')
+                    mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}', 'mask.nii')
+
+                    amap = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)  # Atlas map
+                    amap.build()
+
                     reginfo = pd.read_csv(
                         os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
                                      f'subj{sn}_reginfo.tsv'), sep='\t')
-
-
-                    # betas = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                    #                              f'subj{sn}', f'ROI.{H}.{roi}.beta.npy'))
-                    # res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                    #                            f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
 
                     dnames = [os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
                                            f'subj{sn}', f'beta_{i + 1:04d}.nii') for i in range(reginfo.shape[0])]
@@ -189,35 +184,45 @@ if __name__ == '__main__':
 
                     Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
 
-                    G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                                                     Y[s].obs_descriptors['part_vec'],
-                                                     X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+                    # G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                    #                                  Y[s].obs_descriptors['part_vec'],
+                    #                                  X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
-                T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+                # try:
                 T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
                 T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
-                np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                     f'G_obs.exec.glm{args.glm}.{H}.{roi}.npy'), G_obs)
+                likelihood = T_cv.likelihood
+                baseline = likelihood.loc[:, 'null'].values
+                likelihood = likelihood - baseline.reshape(-1, 1)
 
-                T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                            f'T_in.exec.glm{args.glm}.{H}.{roi}.pkl'))
-                T_cv.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                            f'T_cv.exec.glm{args.glm}.{H}.{roi}.pkl'))
-                T_gr.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                            f'T_gr.exec.glm{args.glm}.{H}.{roi}.pkl'))
+                noise_upper = (T_gr.likelihood['ceil'] - baseline).mean()
 
-                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                       f'theta_in.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                    pickle.dump(theta_in, f)
+                noise_lower_abs = likelihood.ceil.mean()
 
-                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                       f'theta_cv.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                    pickle.dump(theta_cv, f)
+                assert noise_upper > noise_lower_abs
+                print(f'noise upper: {noise_upper:.2f}, noise lower: {noise_lower_abs:.2f}')
 
-                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                       f'theta_gr.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                    pickle.dump(theta_gr, f)
+                likelihood = likelihood / noise_lower_abs
+
+                data_out[subatlas.vertex[0], 0] = likelihood['stimFinger'].mean()
+                data_out[subatlas.vertex[0], 1] = likelihood['cue'].mean()
+                data_out[subatlas.vertex[0], 2] = likelihood['cert'].mean()
+                data_out[subatlas.vertex[0], 3] = likelihood['surprise'].mean()
+                data_out[subatlas.vertex[0], 4] = likelihood['ind'].mean()
+                data_out[subatlas.vertex[0], 5] = likelihood['null'].mean()
+
+                # except:
+
+                # data_out[subatlas.vertex[0], 0] = np.nan
+                # data_out[subatlas.vertex[0], 1] = np.nan
+                # data_out[subatlas.vertex[0], 2] = np.nan
+                # data_out[subatlas.vertex[0], 3] = np.nan
+                # data_out[subatlas.vertex[0], 4] = np.nan
+                # data_out[subatlas.vertex[0], 5] = np.nan
+
+
+
     if args.what == 'save_emg_execution':
 
         M = make_execution_models_emg()
