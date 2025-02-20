@@ -50,15 +50,15 @@ def make_execution_models_rois():
     G_component = np.array([G_fingerID, G_cue, G_cert, G_surprise])
 
     M = []
-    M.append(pcm.FixedModel('null', np.zeros((8, 8)))) #0
-    M.append(pcm.FixedModel('stimFinger', G_fingerID)) #1
-    M.append(pcm.FixedModel('cue', G_cue)) #2
-    M.append(pcm.FixedModel('cert', G_cert)) #3
-    M.append(pcm.FixedModel('ind', np.eye(8))) #4
-    M.append(pcm.FixedModel('surprise', G_surprise)) #5
-    M.append(pcm.ComponentModel('stimFinger+cue+cert+surprise (component)', G_component)) #6
-    M.append(pcm.FeatureModel('stimFinger+cue+cert+surprise+stimFinger*cue (feature)', Ac)) #7
-    M.append(pcm.FreeModel('ceil', 8))  #8
+    M.append(pcm.FixedModel('null', np.zeros((8, 8))))  # 0
+    M.append(pcm.FixedModel('stimFinger', G_fingerID))  # 1
+    M.append(pcm.FixedModel('cue', G_cue))  # 2
+    M.append(pcm.FixedModel('cert', G_cert))  # 3
+    M.append(pcm.FixedModel('ind', np.eye(8)))  # 4
+    M.append(pcm.FixedModel('surprise', G_surprise))  # 5
+    M.append(pcm.ComponentModel('stimFinger+cue+cert+surprise (component)', G_component))  # 6
+    M.append(pcm.FeatureModel('stimFinger+cue+cert+surprise+stimFinger*cue (feature)', Ac))  # 7
+    M.append(pcm.FreeModel('ceil', 8))  # 8
 
     return M
 
@@ -99,14 +99,119 @@ def make_planning_models():
     G_cert_plan = np.outer(v_cert, v_cert)
 
     M = []
-    M.append(pcm.FixedModel('null', np.zeros((5, 5)))) #0
-    M.append(pcm.FixedModel('cue', G_cue_plan)) #1
-    M.append(pcm.FixedModel('cert', G_cert_plan)) #2
-    M.append(pcm.ComponentModel('cue+cert', np.array([G_cue_plan, G_cert_plan]))) #3
-    M.append(pcm.FixedModel('ind', np.eye(5))) #4
-    M.append(pcm.FreeModel('ceil', 5))  #5
+    M.append(pcm.FixedModel('null', np.zeros((5, 5))))  # 0
+    M.append(pcm.FixedModel('cue', G_cue_plan))  # 1
+    M.append(pcm.FixedModel('cert', G_cert_plan))  # 2
+    M.append(pcm.ComponentModel('cue+cert', np.array([G_cue_plan, G_cert_plan])))  # 3
+    M.append(pcm.FixedModel('ind', np.eye(5)))  # 4
+    M.append(pcm.FreeModel('ceil', 5))  # 5
 
     return M
+
+
+def make_individ_dataset(subatlas, experiment=None, glm=None, sn=None, cond=None):
+    white = os.path.join(gl.baseDir, experiment, gl.surfDir, f'subj{sn}', f'subj{sn}.L.white.32k'
+                                                                          f'.surf.gii')
+    pial = os.path.join(gl.baseDir, experiment, gl.surfDir, f'subj{sn}', f'subj{sn}.L.pial.32k'
+                                                                         f'.surf.gii')
+    mask = os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}', 'mask.nii')
+
+    amap = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)  # Atlas map
+    amap.build()
+
+    reginfo = pd.read_csv(
+        os.path.join(gl.baseDir, experiment, f'glm{glm}', f'subj{sn}',
+                     f'subj{sn}_reginfo.tsv'), sep='\t')
+
+    dnames = [os.path.join(gl.baseDir, experiment, f'glm{glm}',
+                           f'subj{sn}', f'beta_{i + 1:04d}.nii') for i in range(reginfo.shape[0])]
+
+    betas = amap.extract_data_native(dnames)
+    res = amap.extract_data_native([os.path.join(gl.baseDir, experiment, f'glm{glm}',
+                                                 f'subj{sn}', f'ResMS.nii')])
+
+    betas_prewhitened = betas / np.sqrt(res)
+
+    betas_prewhitened = np.array(betas_prewhitened)
+    betas_prewhitened = betas_prewhitened[:, ~np.all(np.isnan(betas_prewhitened), axis=0)]
+
+    cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
+    part_vec = reginfo.run
+
+    if cond == 'execution':
+        idx = cond_vec.isin([5, 6, 7, 8, 9, 10, 11, 12])
+    elif cond == 'planning':
+        idx = cond_vec.isin([0, 1, 2, 3, 4])
+    else:
+        idx = np.ones(len(cond_vec))
+
+    obs_des = {'cond_vec': cond_vec[idx].to_numpy(),
+               'part_vec': part_vec[idx].to_numpy(), }
+    Dataset = pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des)
+
+    return Dataset
+
+
+def fit_model_in_tessel(subatlas, experiment=None, glm=None, cond=None):
+
+    Y = list()
+    for s, sn in enumerate(snS):
+        Dataset = make_individ_dataset(subatlas, experiment=experiment, glm=glm, sn=sn, cond=cond)
+        Y.append(Dataset)
+
+    T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+    T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+
+    likelihood = T_cv.likelihood
+    baseline = likelihood.loc[:, 'null'].values
+    likelihood = likelihood - baseline.reshape(-1, 1)
+
+    noise_upper = (T_gr.likelihood['ceil'] - baseline).mean()
+
+    noise_lower = likelihood.ceil.mean()
+
+    assert noise_upper > noise_lower
+    print(f'noise upper: {noise_upper:.2f}, noise lower: {noise_lower:.2f}')
+
+    # likelihood = likelihood / noise_lower_abs
+
+    return likelihood, noise_upper, noise_lower, baseline, theta_cv
+
+
+def process_tessel(ntessel, H, h, atlas, atlas_dir, args, M, col_names):
+
+    """Function to process each tessel (in parallel)."""
+
+    print(f'Hemisphere: {H}, tessel #{ntessel}')
+    atlas_hem = atlas.get_hemisphere(h)
+    subatlas = atlas_hem.get_subatlas_image(os.path.join(atlas_dir,
+                                                         f'Icosahedron{args.ntessels}.{h}.label.gii'), ntessel)
+
+    # Initialize result dictionary
+    results = {
+        "vertex_idx": subatlas.vertex[0],  # Needed for indexing output arrays
+        "likelihood": None,
+        "theta_cv_component": None,
+        "theta_cv_feature": None
+    }
+
+    try:
+        likelihood, noise_upper, noise_lower, baseline, theta_cv = \
+            fit_model_in_tessel(subatlas, experiment=args.experiment, glm=args.glm,
+                                cond='execution')
+
+        # Store results
+        results["likelihood"] = {col: likelihood[col].mean() for col in col_names}
+        results["theta_cv_component"] = [theta_cv[idx_component][c].mean() for c in range(M[6].n_param)]
+        results["theta_cv_feature"] = [theta_cv[idx_feature][c].mean() for c in range(M[7].n_param)]
+
+    except:
+        # Store NaNs in case of failure
+        results["likelihood"] = {col: np.nan for col in col_names}
+        results["theta_cv_6"] = [np.nan] * M[6].n_param
+        results["theta_cv_7"] = [np.nan] * M[7].n_param
+
+    return results  # Return the results dictionary
 
 
 if __name__ == '__main__':
@@ -119,6 +224,7 @@ if __name__ == '__main__':
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--Hem', type=str, default=None)
     parser.add_argument('--glm', type=int, default=None)
+    parser.add_argument('--ntessels', type=int, default=None, choices=[42, 162, 362, 642, 1002, 1442])
 
     args = parser.parse_args()
 
@@ -126,8 +232,6 @@ if __name__ == '__main__':
                  "/Users/mnlmrc/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/"]
 
     atlas_dir = next((Dir for Dir in atlas_dir if Path(Dir).exists()), None)
-
-    ntessels = 362
 
     if args.what == 'save_tessel_execution':
 
@@ -149,68 +253,17 @@ if __name__ == '__main__':
             data_out_theta_component = np.zeros((32492, M[6].n_param))
             data_out_theta_feature = np.zeros((32492, M[7].n_param))
 
-            for i in range(ntessels):
-
-                print(f'Hemisphere: {H}, tessel #{i+1}')
-
+            for ntessel in range(args.ntessels):
+                print(f'Hemisphere: {H}, tessel #{ntessel}')
                 atlas_hem = atlas.get_hemisphere(h)
                 subatlas = atlas_hem.get_subatlas_image(os.path.join(atlas_dir,
-                                                                     f'Icosahedron{ntessels}.{H}.label.gii'), i+1)
-                N = len(snS)
-
-                Y = list()
-                for s, sn in enumerate(snS):
-                    white = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{sn}', f'subj{sn}.L.white.32k'
-                                                                                               f'.surf.gii')
-                    pial = os.path.join(gl.baseDir,args.experiment, gl.surfDir, f'subj{sn}', f'subj{sn}.L.pial.32k'
-                                                                                             f'.surf.gii')
-                    mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}', 'mask.nii')
-
-                    amap = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)  # Atlas map
-                    amap.build()
-
-                    reginfo = pd.read_csv(
-                        os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
-                                     f'subj{sn}_reginfo.tsv'), sep='\t')
-
-                    dnames = [os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                           f'subj{sn}', f'beta_{i + 1:04d}.nii') for i in range(reginfo.shape[0])]
-
-                    betas = amap.extract_data_native(dnames)
-                    res = amap.extract_data_native([os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                           f'subj{sn}', f'ResMS.nii')])
-
-                    betas_prewhitened = betas / np.sqrt(res)
-
-                    betas_prewhitened = np.array(betas_prewhitened)
-                    betas_prewhitened = betas_prewhitened[:, ~np.all(np.isnan(betas_prewhitened), axis=0)]
-
-                    cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
-                    part_vec = reginfo.run
-
-                    idx = cond_vec.isin([5, 6, 7, 8, 9, 10, 11, 12])
-
-                    obs_des = {'cond_vec': cond_vec[idx].to_numpy(),
-                               'part_vec': part_vec[idx].to_numpy(), }
-
-                    Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
+                                                                     f'Icosahedron{ntessels}.{h}.label.gii'),
+                                                        ntessel)
 
                 try:
-                    T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-                    T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-
-                    likelihood = T_cv.likelihood
-                    baseline = likelihood.loc[:, 'null'].values
-                    likelihood = likelihood - baseline.reshape(-1, 1)
-
-                    noise_upper = (T_gr.likelihood['ceil'] - baseline).mean()
-
-                    noise_lower_abs = likelihood.ceil.mean()
-
-                    assert noise_upper > noise_lower_abs
-                    print(f'noise upper: {noise_upper:.2f}, noise lower: {noise_lower_abs:.2f}')
-
-                    likelihood = likelihood / noise_lower_abs
+                    likelihood, noise_upper, noise_lower, baseline, theta_cv = \
+                        fit_model_in_tessel(subatlas, experiment=args.experiment, glm=args.glm,
+                                            cond='execution')
 
                     for c, col in enumerate(col_names):
                         data_out_T[subatlas.vertex[0], c] = likelihood[col].mean()
@@ -218,6 +271,7 @@ if __name__ == '__main__':
                         data_out_theta_component[subatlas.vertex[0], c] = theta_cv[6][c].mean()
                     for c in range(M[7].n_param):
                         data_out_theta_feature[subatlas.vertex[0], c] = theta_cv[7][c].mean()
+
                 except:
                     for c, col in enumerate(col_names):
                         data_out_T[subatlas.vertex[0], c] = np.nan
@@ -225,18 +279,18 @@ if __name__ == '__main__':
                         data_out_theta_component[subatlas.vertex[0], c] = np.nan
                     for c in range(M[7].n_param):
                         data_out_theta_feature[subatlas.vertex[0], c] = np.nan
-
-            gifti_img_T = nt.make_func_gifti(data_out_T, anatomical_struct=struct[h], column_names=col_names)
-            gifti_img_theta_component = nt.make_func_gifti(data_out_theta_component, anatomical_struct=struct[h],
-                                                           column_names=['stimFinger','cue', 'cert', 'surprise'])
-            gifti_img_theta_feature = nt.make_func_gifti(data_out_theta_feature, anatomical_struct=struct[h],
-                                                           column_names=['stimFinger', 'cue', 'cert', 'surprise', 'stimFinger*cue'])
-            nb.save(gifti_img_T, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                            f'ML.glm{args.glm}.pcm.exec.{H}.func.gii'))
-            nb.save(gifti_img_theta_component, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                              f'theta.component.glm{args.glm}.pcm.exec.{H}.func.gii'))
-            nb.save(gifti_img_theta_feature, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                              f'theta.feature.glm{args.glm}.pcm.exec.{H}.func.gii'))
+            #
+            # gifti_img_T = nt.make_func_gifti(data_out_T, anatomical_struct=struct[h], column_names=col_names)
+            # gifti_img_theta_component = nt.make_func_gifti(data_out_theta_component, anatomical_struct=struct[h],
+            #                                                column_names=['stimFinger','cue', 'cert', 'surprise'])
+            # gifti_img_theta_feature = nt.make_func_gifti(data_out_theta_feature, anatomical_struct=struct[h],
+            #                                                column_names=['stimFinger', 'cue', 'cert', 'surprise', 'stimFinger*cue'])
+            # nb.save(gifti_img_T, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+            #                                 f'ML.glm{args.glm}.pcm.exec.{H}.func.gii'))
+            # nb.save(gifti_img_theta_component, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+            #                                   f'theta.component.glm{args.glm}.pcm.exec.{H}.func.gii'))
+            # nb.save(gifti_img_theta_feature, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+            #                                   f'theta.feature.glm{args.glm}.pcm.exec.{H}.func.gii'))
 
     if args.what == 'save_emg_execution':
 
