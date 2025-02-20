@@ -111,7 +111,7 @@ def make_planning_models():
     return M
 
 
-def make_individ_dataset(subatlas=None, args=None, sn=None):
+def make_individ_dataset(subatlas=None, args=None, sn=None,):
     """Creates an individual subject dataset using extracted surface-based data."""
 
     subj_dir = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{sn}')
@@ -158,7 +158,7 @@ def make_individ_dataset(subatlas=None, args=None, sn=None):
     return Dataset
 
 
-def fit_model_in_tessel(subatlas=None, args=None):
+def fit_model_in_tessel(subatlas=None, args=None,M=None):
 
     Y = list()
     for s, sn in enumerate(args.snS):
@@ -172,9 +172,9 @@ def fit_model_in_tessel(subatlas=None, args=None):
     baseline = likelihood.loc[:, 'null'].values
     likelihood = likelihood - baseline.reshape(-1, 1)
 
-    noise_upper = (T_gr.likelihood['ceil'] - baseline).mean()
+    noise_upper = (T_gr.likelihood['ceil'] - baseline)
 
-    noise_lower = likelihood.ceil.mean()
+    noise_lower = likelihood.ceil
 
     assert noise_upper > noise_lower
     print(f'noise upper: {noise_upper:.2f}, noise lower: {noise_lower:.2f}')
@@ -184,7 +184,9 @@ def fit_model_in_tessel(subatlas=None, args=None):
     return likelihood, noise_upper, noise_lower, baseline, theta_cv
 
 
-def process_tessel(args, h, ntessel, data_out_T, data_out_theta_component, data_out_theta_feature):
+def process_tessel(args=None, h=None, ntessel=None, col_names=None, M=None):
+
+    ntessel = ntessel + 1  # skip the first tessel
 
     Hem = ['L', 'R']
 
@@ -193,27 +195,66 @@ def process_tessel(args, h, ntessel, data_out_T, data_out_theta_component, data_
     subatlas = atlas_hem.get_subatlas_image(os.path.join(gl.atlas_dir,
                                                          f'Icosahedron{args.ntessels}.{Hem[h]}.label.gii'), ntessel)
 
+    T = {
+        'likelihood': [],
+        'noise_upper': [],
+        'noise_lower': [],
+        'baseline': [],
+        'col_names': [],
+        'sn': []
+    }
+
+    theta_comp = {
+        'theta': [],
+        # 'col_names': [],
+        'sn': []
+    }
+
+    theta_feature = {
+        'theta': [],
+        # 'col_names': [],
+        'sn': []
+    }
+
     try:
         likelihood, noise_upper, noise_lower, baseline, theta_cv = \
-            fit_model_in_tessel(subatlas=subatlas, args=args)
+            fit_model_in_tessel(subatlas=subatlas, args=args, M=M)
 
         for sn in range(len(args.snS)):
             for c, col in enumerate(col_names):
-                data_out_T[sn, subatlas.vertex[0], c] = likelihood[col][sn]
+                T['likelihood'].append(likelihood[col][sn])
+                T['noise_upper'].append(noise_upper[sn])
+                T['noise_lower'].append(noise_lower[sn])
+                T['baseline'].append(baseline[sn])
+                T['col_names'].append(col)
+                T['sn'].append(sn)
             for c in range(M[6].n_param):
-                data_out_theta_component[sn, subatlas.vertex[0], c] = theta_cv[6][c, sn]
+                theta_comp['theta'].append(theta_cv[6][c, sn])
+                theta_comp['sn'].append(sn)
+                # data_out_theta_component[sn, subatlas.vertex[0], c] = theta_cv[6][c, sn]
             for c in range(M[7].n_param):
-                data_out_theta_feature[sn, subatlas.vertex[0], c] = theta_cv[7][c, sn]
+                theta_feature['theta'].append(theta_cv[7][c, sn])
+                theta_feature['sn'].append(sn)
+                # data_out_theta_feature[sn, subatlas.vertex[0], c] = theta_cv[7][c, sn]
 
-    except:
-        print(f"Error in tessel #{ntessel}")
+    except Exception as e:
+        print(f"Error in tessel #{ntessel}: {e}")
         for sn in range(len(args.snS)):
             for c, col in enumerate(col_names):
-                data_out_T[sn, subatlas.vertex[0], c] = np.nan
+                T['likelihood'].append(np.nan)
+                T['noise_upper'].append(np.nan)
+                T['noise_lower'].append(np.nan)
+                T['baseline'].append(np.nan)
+                T['col_names'].append(col)
+                T['sn'].append(sn)
             for c in range(M[6].n_param):
-                data_out_theta_component[sn, subatlas.vertex[0], c] = np.nan
+                theta_comp['theta'].append(np.nan)
+                theta_comp['sn'].append(sn)
             for c in range(M[7].n_param):
-                data_out_theta_feature[sn, subatlas.vertex[0], c] = np.nan
+                theta_feature['theta'].append(np.nan)
+                theta_feature['sn'].append(sn)
+
+    return T, theta_comp, theta_feature
 
 
 if __name__ == '__main__':
@@ -245,14 +286,21 @@ if __name__ == '__main__':
 
         for h, H in enumerate(['L', 'R']):
 
-            data_out_T = np.zeros((len(args.snS), 32492, len(M)))
-            data_out_theta_component = np.zeros((len(args.snS), 32492, M[6].n_param))
-            data_out_theta_feature = np.zeros((len(args.snS), 32492, M[7].n_param))
-
-            Parallel(n_jobs=10)(
-                delayed(process_tessel)(args, h, ntessel, data_out_T, data_out_theta_component, data_out_theta_feature)
-                for ntessel in range(args.ntessels)
+            # Parallel processing of tessels
+            results = Parallel(n_jobs=2)(
+                delayed(process_tessel)(args=args, h=h, ntessel=ntessel, col_names=col_names, M=M)
+                for ntessel in range(2)
             )
+
+            # Aggregate results from parallel processes
+            data_out_T = np.full((len(args.snS), 32492, len(M)), np.nan)
+            data_out_theta_component = np.full((len(args.snS), 32492, M[6].n_param), np.nan)
+            data_out_theta_feature = np.full((len(args.snS), 32492, M[7].n_param), np.nan)
+
+            for data_T, data_theta_comp, data_theta_feat in results:
+                data_out_T = np.nan_to_num(data_out_T) + np.nan_to_num(data_T)
+                data_out_theta_component = np.nan_to_num(data_out_theta_component) + np.nan_to_num(data_theta_comp)
+                data_out_theta_feature = np.nan_to_num(data_out_theta_feature) + np.nan_to_num(data_theta_feat)
 
             for sn in args.snS:
                 gifti_img_T = nt.make_func_gifti(data_out_T[sn], anatomical_struct=struct[h], column_names=col_names)
