@@ -161,7 +161,7 @@ def make_individ_dataset(subatlas=None, args=None, sn=None):
 def fit_model_in_tessel(subatlas=None, args=None):
 
     Y = list()
-    for s, sn in enumerate(snS):
+    for s, sn in enumerate(args.snS):
         Dataset = make_individ_dataset(subatlas=subatlas, args=args, sn=sn)
         Y.append(Dataset)
 
