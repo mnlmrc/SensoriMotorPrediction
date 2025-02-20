@@ -205,9 +205,9 @@ def process_tessel(args, h, ntessel, data_out_T, data_out_theta_component, data_
             for c in range(M[7].n_param):
                 data_out_theta_feature[sn, subatlas.vertex[0], c] = theta_cv[7][c, sn]
 
-    except Exception as e:
-        print(f"Error in tessel #{ntessel}: {e}")
-        for sn in range(len(snS)):
+    except:
+        print(f"Error in tessel #{ntessel}")
+        for sn in range(len(args.snS)):
             for c, col in enumerate(col_names):
                 data_out_T[sn, subatlas.vertex[0], c] = np.nan
             for c in range(M[6].n_param):
