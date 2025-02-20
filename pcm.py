@@ -195,8 +195,7 @@ def process_tessel(args, h, ntessel, data_out_T, data_out_theta_component, data_
 
     try:
         likelihood, noise_upper, noise_lower, baseline, theta_cv = \
-            fit_model_in_tessel(subatlas, experiment=args.experiment, glm=args.glm,
-                                cond='execution')
+            fit_model_in_tessel(subatlas=subatlas, args=args)
 
         for sn in range(len(args.snS)):
             for c, col in enumerate(col_names):
