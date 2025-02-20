@@ -152,10 +152,10 @@ mask_stimFinger_cue[[5, 6, 10, 12, 15, 16]] = True
 borderDirs = ["/Users/mnlmrc/Documents/GitHub/surfAnalysisPy/standard_mesh/",
         "/home/ROBARTS/memanue5/Documents/GitHub/surfAnalysisPy/standard_mesh/",]
 
-borderDirs = next((Dir for Dir in borderDirs if Path(Dir).exists()), None)
+borderDir = next((Dir for Dir in borderDirs if Path(Dir).exists()), None)
 
-borders = {'L': os.path.join(borderDirs, 'fs_L', 'fs_LR.32k.L.border'),
-           'R': os.path.join(borderDirs, 'fs_L', 'fs_LR.32k.L.border')}
+borders = {'L': os.path.join(borderDir, 'fs_L', 'fs_LR.32k.L.border'),
+           'R': os.path.join(borderDir, 'fs_R', 'fs_LR.32k.R.border')}
 
 rois = {
         'Desikan': [

@@ -10,7 +10,10 @@ warnings.filterwarnings("ignore")
 import globals as gl
 import pandas as pd
 import numpy as np
+import nibabel as nb
 import os
+
+import nitools as nt
 
 import sys
 
@@ -44,16 +47,18 @@ def make_execution_models_rois():
     G_cert = np.outer(v_cert, v_cert)
     G_surprise = np.outer(v_surprise, v_surprise)
 
+    G_component = np.array([G_fingerID, G_cue, G_cert, G_surprise])
+
     M = []
-    M.append(pcm.FixedModel('null', np.eye(8)))
-    M.append(pcm.FixedModel('stimFinger', G_fingerID))
-    M.append(pcm.FixedModel('cue', G_cue))
-    M.append(pcm.FixedModel('cert', G_cert))
-    M.append(pcm.FixedModel('surprise', G_surprise))
-    M.append(pcm.ComponentModel('stimFinger+cue+cert+surprise (component)',
-                                np.array([G_fingerID, G_cue, G_cert, G_surprise])))
-    M.append(pcm.FeatureModel('stimFinger+cue+cert+surprise (feature)', Ac))
-    M.append(pcm.FreeModel('ceil', 8))  # Noise ceiling model
+    M.append(pcm.FixedModel('null', np.zeros((8, 8)))) #0
+    M.append(pcm.FixedModel('stimFinger', G_fingerID)) #1
+    M.append(pcm.FixedModel('cue', G_cue)) #2
+    M.append(pcm.FixedModel('cert', G_cert)) #3
+    M.append(pcm.FixedModel('ind', np.eye(8))) #4
+    M.append(pcm.FixedModel('surprise', G_surprise)) #5
+    M.append(pcm.ComponentModel('stimFinger+cue+cert+surprise (component)', G_component)) #6
+    M.append(pcm.FeatureModel('stimFinger+cue+cert+surprise+stimFinger*cue (feature)', Ac)) #7
+    M.append(pcm.FreeModel('ceil', 8))  #8
 
     return M
 
@@ -94,12 +99,12 @@ def make_planning_models():
     G_cert_plan = np.outer(v_cert, v_cert)
 
     M = []
-    M.append(pcm.FixedModel('null', np.zeros((5, 5))))
-    M.append(pcm.FixedModel('cue', G_cue_plan))
-    M.append(pcm.FixedModel('cert', G_cert_plan))
-    M.append(pcm.ComponentModel('cue+cert', np.array([G_cue_plan, G_cert_plan])))
-    M.append(pcm.FixedModel('ind', np.eye(5)))
-    M.append(pcm.FreeModel('ceil', 5))  # Noise ceiling model
+    M.append(pcm.FixedModel('null', np.zeros((5, 5)))) #0
+    M.append(pcm.FixedModel('cue', G_cue_plan)) #1
+    M.append(pcm.FixedModel('cert', G_cert_plan)) #2
+    M.append(pcm.ComponentModel('cue+cert', np.array([G_cue_plan, G_cert_plan]))) #3
+    M.append(pcm.FixedModel('ind', np.eye(5))) #4
+    M.append(pcm.FreeModel('ceil', 5))  #5
 
     return M
 
@@ -122,7 +127,7 @@ if __name__ == '__main__':
 
     atlas_dir = next((Dir for Dir in atlas_dir if Path(Dir).exists()), None)
 
-    ntessels = 1002
+    ntessels = 362
 
     if args.what == 'save_tessel_execution':
 
@@ -130,27 +135,30 @@ if __name__ == '__main__':
         with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                f'M.exec.glm{args.glm}.pkl'), "wb") as f:
             pickle.dump(M, f)
+        col_names = [m.name for m in M]
+
+        struct = ['CortexLeft', 'CortexRight']
 
         atlas, _ = am.get_atlas('fs32k')
 
-        snS = [102, 103, 104, 105, 106, 107]
+        snS = [102, 103, 104, 105, 106, 107, 108]
 
         for h, H in enumerate(['L', 'R']):
 
-            data_out = np.zeros((32492, 6))
+            data_out_T = np.zeros((32492, len(M)))
+            data_out_theta_component = np.zeros((32492, M[6].n_param))
+            data_out_theta_feature = np.zeros((32492, M[7].n_param))
 
             for i in range(ntessels):
 
-                print(f'processing tessel #{i+1}')
+                print(f'Hemisphere: {H}, tessel #{i+1}')
 
                 atlas_hem = atlas.get_hemisphere(h)
                 subatlas = atlas_hem.get_subatlas_image(os.path.join(atlas_dir,
                                                                      f'Icosahedron{ntessels}.{H}.label.gii'), i+1)
                 N = len(snS)
 
-                G_obs = np.zeros((N, 8, 8))
                 Y = list()
-
                 for s, sn in enumerate(snS):
                     white = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{sn}', f'subj{sn}.L.white.32k'
                                                                                                f'.surf.gii')
@@ -174,6 +182,9 @@ if __name__ == '__main__':
 
                     betas_prewhitened = betas / np.sqrt(res)
 
+                    betas_prewhitened = np.array(betas_prewhitened)
+                    betas_prewhitened = betas_prewhitened[:, ~np.all(np.isnan(betas_prewhitened), axis=0)]
+
                     cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
                     part_vec = reginfo.run
 
@@ -184,44 +195,48 @@ if __name__ == '__main__':
 
                     Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
 
-                    # G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                    #                                  Y[s].obs_descriptors['part_vec'],
-                    #                                  X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+                try:
+                    T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+                    T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
-                # try:
-                T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-                T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+                    likelihood = T_cv.likelihood
+                    baseline = likelihood.loc[:, 'null'].values
+                    likelihood = likelihood - baseline.reshape(-1, 1)
 
-                likelihood = T_cv.likelihood
-                baseline = likelihood.loc[:, 'null'].values
-                likelihood = likelihood - baseline.reshape(-1, 1)
+                    noise_upper = (T_gr.likelihood['ceil'] - baseline).mean()
 
-                noise_upper = (T_gr.likelihood['ceil'] - baseline).mean()
+                    noise_lower_abs = likelihood.ceil.mean()
 
-                noise_lower_abs = likelihood.ceil.mean()
+                    assert noise_upper > noise_lower_abs
+                    print(f'noise upper: {noise_upper:.2f}, noise lower: {noise_lower_abs:.2f}')
 
-                assert noise_upper > noise_lower_abs
-                print(f'noise upper: {noise_upper:.2f}, noise lower: {noise_lower_abs:.2f}')
+                    likelihood = likelihood / noise_lower_abs
 
-                likelihood = likelihood / noise_lower_abs
+                    for c, col in enumerate(col_names):
+                        data_out_T[subatlas.vertex[0], c] = likelihood[col].mean()
+                    for c in range(M[6].n_param):
+                        data_out_theta_component[subatlas.vertex[0], c] = theta_cv[6][c].mean()
+                    for c in range(M[7].n_param):
+                        data_out_theta_feature[subatlas.vertex[0], c] = theta_cv[7][c].mean()
+                except:
+                    for c, col in enumerate(col_names):
+                        data_out_T[subatlas.vertex[0], c] = np.nan
+                    for c in range(M[6].n_param):
+                        data_out_theta_component[subatlas.vertex[0], c] = np.nan
+                    for c in range(M[7].n_param):
+                        data_out_theta_feature[subatlas.vertex[0], c] = np.nan
 
-                data_out[subatlas.vertex[0], 0] = likelihood['stimFinger'].mean()
-                data_out[subatlas.vertex[0], 1] = likelihood['cue'].mean()
-                data_out[subatlas.vertex[0], 2] = likelihood['cert'].mean()
-                data_out[subatlas.vertex[0], 3] = likelihood['surprise'].mean()
-                data_out[subatlas.vertex[0], 4] = likelihood['ind'].mean()
-                data_out[subatlas.vertex[0], 5] = likelihood['null'].mean()
-
-                # except:
-
-                # data_out[subatlas.vertex[0], 0] = np.nan
-                # data_out[subatlas.vertex[0], 1] = np.nan
-                # data_out[subatlas.vertex[0], 2] = np.nan
-                # data_out[subatlas.vertex[0], 3] = np.nan
-                # data_out[subatlas.vertex[0], 4] = np.nan
-                # data_out[subatlas.vertex[0], 5] = np.nan
-
-
+            gifti_img_T = nt.make_func_gifti(data_out_T, anatomical_struct=struct[h], column_names=col_names)
+            gifti_img_theta_component = nt.make_func_gifti(data_out_theta_component, anatomical_struct=struct[h],
+                                                           column_names=['stimFinger','cue', 'cert', 'surprise'])
+            gifti_img_theta_feature = nt.make_func_gifti(data_out_theta_feature, anatomical_struct=struct[h],
+                                                           column_names=['stimFinger', 'cue', 'cert', 'surprise', 'stimFinger*cue'])
+            nb.save(gifti_img_T, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                            f'ML.glm{args.glm}.pcm.exec.{H}.func.gii'))
+            nb.save(gifti_img_theta_component, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                              f'theta.component.glm{args.glm}.pcm.exec.{H}.func.gii'))
+            nb.save(gifti_img_theta_feature, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                              f'theta.feature.glm{args.glm}.pcm.exec.{H}.func.gii'))
 
     if args.what == 'save_emg_execution':
 
