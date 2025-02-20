@@ -847,7 +847,7 @@ function smp2_glm(what, varargin)
             post=10;
             atlas = 'ROI';
             glm = 12;
-            hrf_params = [5, 14];
+            hrf_params = [];
 
             vararginoptions(varargin,{'ROI','pre','post', 'glm', 'sn', 'atlas', 'hrf_params'});
 
@@ -860,6 +860,10 @@ function smp2_glm(what, varargin)
             % load SPM.mat
             cd(fullfile(glmDir,subj_id));
             SPM = load('SPM.mat'); SPM=SPM.SPM;
+            
+            if isempty(hrf_params)
+                hrf_params = SPM.xBF.params;
+            end
             
             TR = SPM.xY.RT;
             nScan = SPM.nscan(1);
