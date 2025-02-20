@@ -157,6 +157,11 @@ borderDir = next((Dir for Dir in borderDirs if Path(Dir).exists()), None)
 borders = {'L': os.path.join(borderDir, 'fs_L', 'fs_LR.32k.L.border'),
            'R': os.path.join(borderDir, 'fs_R', 'fs_LR.32k.R.border')}
 
+atlas_dir = ["/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/",
+             "/Users/mnlmrc/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/"]
+
+atlas_dir = next((Dir for Dir in atlas_dir if Path(Dir).exists()), None)
+
 rois = {
         'Desikan': [
             'rostralmiddlefrontal',
