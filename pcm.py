@@ -228,7 +228,7 @@ if __name__ == '__main__':
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--Hem', type=str, default=None)
     parser.add_argument('--glm', type=int, default=None)
-    parser.add_argument('--ntessels', type=int, default=None, choices=[42, 162, 362, 642, 1002, 1442])
+    parser.add_argument('--ntessels', type=int, default=362, choices=[42, 162, 362, 642, 1002, 1442])
 
     args = parser.parse_args()
 
