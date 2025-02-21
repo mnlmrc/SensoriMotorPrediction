@@ -176,8 +176,8 @@ def fit_model_in_tessel(subatlas=None, args=None,M=None):
 
     noise_lower = likelihood.ceil
 
-    assert noise_upper > noise_lower
-    print(f'noise upper: {noise_upper:.2f}, noise lower: {noise_lower:.2f}')
+    # assert noise_upper > noise_lower
+    # print(f'noise upper: {noise_upper:.2f}, noise lower: {noise_lower:.2f}')
 
     # likelihood = likelihood / noise_lower_abs
 
@@ -204,57 +204,64 @@ def process_tessel(args=None, h=None, ntessel=None, col_names=None, M=None):
         'sn': []
     }
 
-    theta_comp = {
+    theta_component = {
         'theta': [],
-        # 'col_names': [],
+        '#comp': [],
         'sn': []
     }
 
     theta_feature = {
         'theta': [],
-        # 'col_names': [],
+        '#feat': [],
         'sn': []
     }
 
-    try:
-        likelihood, noise_upper, noise_lower, baseline, theta_cv = \
-            fit_model_in_tessel(subatlas=subatlas, args=args, M=M)
+    # try:
+    likelihood, noise_upper, noise_lower, baseline, theta_cv = \
+        fit_model_in_tessel(subatlas=subatlas, args=args, M=M)
 
-        for sn in range(len(args.snS)):
-            for c, col in enumerate(col_names):
-                T['likelihood'].append(likelihood[col][sn])
-                T['noise_upper'].append(noise_upper[sn])
-                T['noise_lower'].append(noise_lower[sn])
-                T['baseline'].append(baseline[sn])
-                T['col_names'].append(col)
-                T['sn'].append(sn)
-            for c in range(M[6].n_param):
-                theta_comp['theta'].append(theta_cv[6][c, sn])
-                theta_comp['sn'].append(sn)
-                # data_out_theta_component[sn, subatlas.vertex[0], c] = theta_cv[6][c, sn]
-            for c in range(M[7].n_param):
-                theta_feature['theta'].append(theta_cv[7][c, sn])
-                theta_feature['sn'].append(sn)
-                # data_out_theta_feature[sn, subatlas.vertex[0], c] = theta_cv[7][c, sn]
+    for sn in range(len(args.snS)):
+        for c, col in enumerate(col_names):
+            T['likelihood'].append(likelihood[col][sn])
+            T['noise_upper'].append(noise_upper[sn])
+            T['noise_lower'].append(noise_lower[sn])
+            T['baseline'].append(baseline[sn])
+            T['col_names'].append(col)
+            T['sn'].append(sn)
+        for c in range(M[6].n_param):
+            theta_component['theta'].append(theta_cv[6][c, sn])
+            theta_component['sn'].append(sn)
+            theta_component['#comp'].append(c)
+            # data_out_theta_component[sn, subatlas.vertex[0], c] = theta_cv[6][c, sn]
+        for c in range(M[7].n_param):
+            theta_feature['theta'].append(theta_cv[7][c, sn])
+            theta_feature['sn'].append(sn)
+            theta_component['#feat'].append(c)
+            # data_out_theta_feature[sn, subatlas.vertex[0], c] = theta_cv[7][c, sn]
 
-    except Exception as e:
-        print(f"Error in tessel #{ntessel}: {e}")
-        for sn in range(len(args.snS)):
-            for c, col in enumerate(col_names):
-                T['likelihood'].append(np.nan)
-                T['noise_upper'].append(np.nan)
-                T['noise_lower'].append(np.nan)
-                T['baseline'].append(np.nan)
-                T['col_names'].append(col)
-                T['sn'].append(sn)
-            for c in range(M[6].n_param):
-                theta_comp['theta'].append(np.nan)
-                theta_comp['sn'].append(sn)
-            for c in range(M[7].n_param):
-                theta_feature['theta'].append(np.nan)
-                theta_feature['sn'].append(sn)
+    # except Exception as e:
+    #     print(f"Error in tessel #{ntessel}: {e}")
+    #     for sn in range(len(args.snS)):
+    #         for c, col in enumerate(col_names):
+    #             T['likelihood'].append(np.nan)
+    #             T['noise_upper'].append(np.nan)
+    #             T['noise_lower'].append(np.nan)
+    #             T['baseline'].append(np.nan)
+    #             T['col_names'].append(col)
+    #             T['sn'].append(sn)
+    #         for c in range(M[6].n_param):
+    #             theta_component['theta'].append(np.nan)
+    #             theta_component['sn'].append(sn)
+    #             theta_component['#comp'].append(c)
+    #         for c in range(M[7].n_param):
+    #             theta_feature['theta'].append(np.nan)
+    #             theta_feature['sn'].append(sn)
+    #             theta_component['#feat'].append(c)
 
-    return T, theta_comp, theta_feature
+    T = pd.DataFrame(T)
+    theta_component = pd.DataFrame(theta_component)
+    theta_feature = pd.DataFrame(theta_feature)
+    return T, theta_component, theta_feature, subatlas.vertex[0]
 
 
 if __name__ == '__main__':
@@ -293,20 +300,25 @@ if __name__ == '__main__':
             )
 
             # Aggregate results from parallel processes
-            data_out_T = np.full((len(args.snS), 32492, len(M)), np.nan)
-            data_out_theta_component = np.full((len(args.snS), 32492, M[6].n_param), np.nan)
-            data_out_theta_feature = np.full((len(args.snS), 32492, M[7].n_param), np.nan)
+            T = np.full((len(args.snS), 32492, len(M)), np.nan)
+            theta_component = np.full((len(args.snS), 32492, M[6].n_param), np.nan)
+            theta_feature = np.full((len(args.snS), 32492, M[7].n_param), np.nan)
 
-            for data_T, data_theta_comp, data_theta_feat in results:
-                data_out_T = np.nan_to_num(data_out_T) + np.nan_to_num(data_T)
-                data_out_theta_component = np.nan_to_num(data_out_theta_component) + np.nan_to_num(data_theta_comp)
-                data_out_theta_feature = np.nan_to_num(data_out_theta_feature) + np.nan_to_num(data_theta_feat)
+            for s, sn in enumerate(args.snS):
+                for Tt, tc, tf, vertex_id in results:
+                    for c, col in enumerate(col_names):
+                        T[s, vertex_id, c] = Tt[(Tt['sn'] == sn) & (Tt['col_names'] == col)]
+                    for c in range(M[6].n_param):
+                        theta_component[s, vertex_id, c] = tc[(tc['sn'] == sn) & (tc['#comp'] == c)]
+                    for c in range(M[7].n_param):
+                        theta_feature[s, vertex_id, c] = tf[(tf['sn'] == sn) & (tf['col_names'] == c)]
+
 
             for sn in args.snS:
-                gifti_img_T = nt.make_func_gifti(data_out_T[sn], anatomical_struct=struct[h], column_names=col_names)
-                gifti_img_theta_component = nt.make_func_gifti(data_out_theta_component[sn], anatomical_struct=struct[h],
+                gifti_img_T = nt.make_func_gifti(T[sn], anatomical_struct=struct[h], column_names=col_names)
+                gifti_img_theta_component = nt.make_func_gifti(theta_component[sn], anatomical_struct=struct[h],
                                                                column_names=['stimFinger','cue', 'cert', 'surprise'])
-                gifti_img_theta_feature = nt.make_func_gifti(data_out_theta_feature[sn], anatomical_struct=struct[h],
+                gifti_img_theta_feature = nt.make_func_gifti(theta_feature[sn], anatomical_struct=struct[h],
                                            column_names=['stimFinger', 'cue', 'cert', 'surprise', 'stimFinger*cue'])
                 nb.save(gifti_img_T, os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'subj{sn}'
                                                 f'ML.Icosahedron{args.ntessels}.glm{args.glm}.pcm.exec.{H}.func.gii'))
