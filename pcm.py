@@ -1,13 +1,14 @@
+import warnings
+
+warnings.filterwarnings("ignore")
+
 import argparse
 import pickle
-import warnings
 
 import PcmPy as pcm
 from pathlib import Path
 
 from joblib import Parallel, delayed, parallel_backend
-
-warnings.filterwarnings("ignore")
 
 import globals as gl
 import pandas as pd
@@ -27,13 +28,11 @@ sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion')
 import Functional_Fusion.atlas_map as am
 
 
-def make_execution_models_rois():
+def make_execution_models():
     C = pcm.centering(8)
 
     v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
-    v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1, ])
-    # v_cert = C @ np.array([1, 2,  1, 0, 0, 1, 2, 1])
-    # v_surprise = C @ np.array([3, 2, 1, 0, 0, 1, 2, 3])
+    v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1])
     v_cert = C @ np.array([0.1875, .25, 0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
     v_surprise = C @ -np.log2(np.array([.25, .5, .75, 1, 1, .75, .5, .25]))  # with Shannon information
 
@@ -104,16 +103,14 @@ def make_planning_models():
     M.append(pcm.FixedModel('null', np.zeros((5, 5))))  # 0
     M.append(pcm.FixedModel('cue', G_cue_plan))  # 1
     M.append(pcm.FixedModel('cert', G_cert_plan))  # 2
-    M.append(pcm.ComponentModel('cue+cert', np.array([G_cue_plan, G_cert_plan])))  # 3
-    M.append(pcm.FixedModel('ind', np.eye(5)))  # 4
+    M.append(pcm.FixedModel('ind', np.eye(5)))  # 3
+    M.append(pcm.ComponentModel('cue+cert', np.array([G_cue_plan, G_cert_plan])))  # 4
     M.append(pcm.FreeModel('ceil', 5))  # 5
 
     return M
 
 
-def make_individ_dataset(subatlas=None, args=None, sn=None,):
-    """Creates an individual subject dataset using extracted surface-based data."""
-
+def make_individ_dataset(subatlas=None, args=None, sn=None):
     subj_dir = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{sn}')
     white = os.path.join(subj_dir, f'subj{sn}.L.white.32k.surf.gii')
     pial = os.path.join(subj_dir, f'subj{sn}.L.pial.32k.surf.gii')
@@ -132,7 +129,8 @@ def make_individ_dataset(subatlas=None, args=None, sn=None,):
               for i in range(reginfo.shape[0])]
 
     betas = amap.extract_data_native(dnames)
-    res = amap.extract_data_native([os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}', 'ResMS.nii')])
+    res = amap.extract_data_native([os.path.join(gl.baseDir, args.experiment,
+                                                 f'glm{args.glm}', f'subj{sn}', 'ResMS.nii')])
 
     # Prewhiten betas
     betas_prewhitened = betas / np.sqrt(res)
@@ -158,8 +156,7 @@ def make_individ_dataset(subatlas=None, args=None, sn=None,):
     return Dataset
 
 
-def fit_model_in_tessel(subatlas=None, args=None,M=None):
-
+def fit_model_in_tessel(subatlas=None, args=None, M=None):
     Y = list()
     for s, sn in enumerate(args.snS):
         Dataset = make_individ_dataset(subatlas=subatlas, args=args, sn=sn)
@@ -176,19 +173,15 @@ def fit_model_in_tessel(subatlas=None, args=None,M=None):
 
     noise_lower = likelihood.ceil
 
-    # assert noise_upper > noise_lower
-    # print(f'noise upper: {noise_upper:.2f}, noise lower: {noise_lower:.2f}')
-
-    # likelihood = likelihood / noise_lower_abs
-
     return likelihood, noise_upper, noise_lower, baseline, theta_cv
 
 
-def process_tessel(args=None, h=None, ntessel=None, col_names=None, M=None):
-
+def process_tessel_execution(args=None, atlas=None, h=None, ntessel=None, M=None):
     ntessel = ntessel + 1  # skip the first tessel
 
     Hem = ['L', 'R']
+
+    col_names = [m.name for m in M]
 
     print(f'Hemisphere: {Hem[h]}, tessel #{ntessel}')
     atlas_hem = atlas.get_hemisphere(h)
@@ -259,11 +252,76 @@ def process_tessel(args=None, h=None, ntessel=None, col_names=None, M=None):
     T = pd.DataFrame(T)
     theta_component = pd.DataFrame(theta_component)
     theta_feature = pd.DataFrame(theta_feature)
+
     return T, theta_component, theta_feature, subatlas.vertex[0]
 
 
-if __name__ == '__main__':
+def process_tessel_planning(args=None, atlas=None, h=None, ntessel=None, M=None):
+    ntessel = ntessel + 1  # skip the first tessel
 
+    Hem = ['L', 'R']
+
+    col_names = [m.name for m in M]
+
+    print(f'Hemisphere: {Hem[h]}, tessel #{ntessel}')
+    atlas_hem = atlas.get_hemisphere(h)
+    subatlas = atlas_hem.get_subatlas_image(os.path.join(gl.atlas_dir,
+                                                         f'Icosahedron{args.ntessels}.{Hem[h]}.label.gii'), ntessel)
+
+    T = {
+        'likelihood': [],
+        'noise_upper': [],
+        'noise_lower': [],
+        'baseline': [],
+        'col_names': [],
+        'sn': []
+    }
+
+    theta_component = {
+        'theta': [],
+        '#comp': [],
+        'sn': []
+    }
+
+    try:
+        likelihood, noise_upper, noise_lower, baseline, theta_cv = \
+            fit_model_in_tessel(subatlas=subatlas, args=args, M=M)
+
+        for s, sn in enumerate(args.snS):
+            for c, col in enumerate(col_names):
+                T['likelihood'].append(likelihood[col][s])
+                T['noise_upper'].append(noise_upper[s])
+                T['noise_lower'].append(noise_lower[s])
+                T['baseline'].append(baseline[s])
+                T['col_names'].append(col)
+                T['sn'].append(sn)
+            for c in range(M[4].n_param):
+                theta_component['theta'].append(theta_cv[6][c, s])
+                theta_component['sn'].append(sn)
+                theta_component['#comp'].append(c)
+
+    except Exception as e:
+        print(f"Error in tessel #{ntessel}: {e}")
+        for sn in range(len(args.snS)):
+            for c, col in enumerate(col_names):
+                T['likelihood'].append(np.nan)
+                T['noise_upper'].append(np.nan)
+                T['noise_lower'].append(np.nan)
+                T['baseline'].append(np.nan)
+                T['col_names'].append(col)
+                T['sn'].append(sn)
+            for c in range(M[4].n_param):
+                theta_component['theta'].append(np.nan)
+                theta_component['sn'].append(sn)
+                theta_component['#comp'].append(c)
+
+    T = pd.DataFrame(T)
+    theta_component = pd.DataFrame(theta_component)
+
+    return T, theta_component, subatlas.vertex[0]
+
+
+def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('what', nargs='?', default=None)
@@ -280,7 +338,7 @@ if __name__ == '__main__':
 
     if args.what == 'save_tessel_execution':
 
-        M = make_execution_models_rois()
+        M = make_execution_models()
         with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                f'M.exec.glm{args.glm}.pkl'), "wb") as f:
             pickle.dump(M, f)
@@ -295,9 +353,9 @@ if __name__ == '__main__':
             # Parallel processing of tessels
             with parallel_backend("loky"):
                 results = Parallel(n_jobs=args.n_jobs)(
-                delayed(process_tessel)(args=args, h=h, ntessel=ntessel, col_names=col_names, M=M)
-                for ntessel in range(args.ntessels)
-            )
+                    delayed(process_tessel_execution)(args=args, atlas=atlas, h=h, ntessel=ntessel, M=M)
+                    for ntessel in range(args.ntessels)
+                )
 
             # Aggregate results from parallel processes
             T = np.full((len(args.snS), 32492, len(M)), np.nan)
@@ -313,19 +371,62 @@ if __name__ == '__main__':
                     for c in range(M[7].n_param):
                         theta_feature[s, vertex_id, c] = tf[(tf['sn'] == sn) & (tf['#feat'] == c)]['theta']
 
-
+            # save giftis
             for s, sn in enumerate(args.snS):
                 gifti_img_T = nt.make_func_gifti(T[s], anatomical_struct=struct[h], column_names=col_names)
                 gifti_img_theta_component = nt.make_func_gifti(theta_component[s], anatomical_struct=struct[h],
-                                                               column_names=['stimFinger','cue', 'cert', 'surprise'])
+                                                               column_names=['stimFinger', 'cue', 'cert', 'surprise'])
                 gifti_img_theta_feature = nt.make_func_gifti(theta_feature[s], anatomical_struct=struct[h],
-                                           column_names=['stimFinger', 'cue', 'cert', 'surprise', 'stimFinger*cue'])
+                                                             column_names=['stimFinger', 'cue', 'cert', 'surprise',
+                                                                           'stimFinger*cue'])
                 nb.save(gifti_img_T, os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'subj{sn}',
-                                                f'ML.Icosahedron{args.ntessels}.glm{args.glm}.pcm.exec.{H}.func.gii'))
-                nb.save(gifti_img_theta_component, os.path.join(gl.baseDir, args.experiment,gl.wbDir, f'subj{sn}',
-                                  f'theta.Icosahedron{args.ntessels}.component.glm{args.glm}.pcm.exec.{H}.func.gii'))
+                                                  f'ML.Icosahedron{args.ntessels}.glm{args.glm}.pcm.exec.{H}.func.gii'))
+                nb.save(gifti_img_theta_component, os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'subj{sn}',
+                                                                f'theta.Icosahedron{args.ntessels}.component.glm{args.glm}.pcm.exec.{H}.func.gii'))
                 nb.save(gifti_img_theta_feature, os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'subj{sn}',
-                                  f'theta.Icosahedron{args.ntessels}.feature.glm{args.glm}.pcm.exec.{H}.func.gii'))
+                                                              f'theta.Icosahedron{args.ntessels}.feature.glm{args.glm}.pcm.exec.{H}.func.gii'))
+
+    if args.what == 'save_tessel_planning':
+
+        M = make_planning_models()
+        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                               f'M.exec.glm{args.glm}.pkl'), "wb") as f:
+            pickle.dump(M, f)
+        col_names = [m.name for m in M]
+
+        struct = ['CortexLeft', 'CortexRight']
+
+        atlas, _ = am.get_atlas('fs32k')
+
+        for h, H in enumerate(['L', 'R']):
+
+            # Parallel processing of tessels
+            with parallel_backend("loky"):
+                results = Parallel(n_jobs=args.n_jobs)(
+                    delayed(process_tessel_planning)(args=args, atlas=atlas, h=h, ntessel=ntessel, M=M)
+                    for ntessel in range(args.ntessels)
+                )
+
+            # Aggregate results from parallel processes
+            T = np.full((len(args.snS), 32492, len(M)), np.nan)
+            theta_component = np.full((len(args.snS), 32492, M[6].n_param), np.nan)
+
+            for s, sn in enumerate(args.snS):
+                for Tt, tc, vertex_id in results:
+                    for c, col in enumerate(col_names):
+                        T[s, vertex_id, c] = Tt[(Tt['sn'] == sn) & (Tt['col_names'] == col)]['likelihood']
+                    for c in range(M[6].n_param):
+                        theta_component[s, vertex_id, c] = tc[(tc['sn'] == sn) & (tc['#comp'] == c)]['theta']
+
+            # save giftis
+            for s, sn in enumerate(args.snS):
+                gifti_img_T = nt.make_func_gifti(T[s], anatomical_struct=struct[h], column_names=col_names)
+                gifti_img_theta_component = nt.make_func_gifti(theta_component[s], anatomical_struct=struct[h],
+                                                               column_names=['cue', 'cert'])
+                nb.save(gifti_img_T, os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'subj{sn}',
+                                                  f'ML.Icosahedron{args.ntessels}.glm{args.glm}.pcm.plan.{H}.func.gii'))
+                nb.save(gifti_img_theta_component, os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'subj{sn}',
+                                                                f'theta.Icosahedron{args.ntessels}.component.glm{args.glm}.pcm.plan.{H}.func.gii'))
 
     if args.what == 'save_emg_execution':
 
@@ -465,3 +566,7 @@ if __name__ == '__main__':
                 with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                        f'theta_gr.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
                     pickle.dump(theta_gr, f)
+
+
+if __name__ == '__main__':
+    main()
