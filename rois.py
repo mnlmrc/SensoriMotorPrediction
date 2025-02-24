@@ -53,5 +53,5 @@ if __name__ == '__main__':
             amap = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)
             amap.build()
 
-            mask = amap.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
+            mask_out = amap.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
                                                    f'{args.atlas}.{H}.{label}.nii'))
