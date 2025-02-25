@@ -110,10 +110,10 @@ def make_planning_models():
     return M
 
 
-def make_individ_dataset(subatlas=None, args=None, sn=None):
+def make_individ_dataset(subatlas=None, args=None, sn=None, Hem=None):
     subj_dir = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{sn}')
-    white = os.path.join(subj_dir, f'subj{sn}.L.white.32k.surf.gii')
-    pial = os.path.join(subj_dir, f'subj{sn}.L.pial.32k.surf.gii')
+    white = os.path.join(subj_dir, f'subj{sn}.{Hem}.white.32k.surf.gii')
+    pial = os.path.join(subj_dir, f'subj{sn}.{Hem}.pial.32k.surf.gii')
     mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}', 'mask.nii')
 
     # Build atlas mapping
@@ -156,12 +156,15 @@ def make_individ_dataset(subatlas=None, args=None, sn=None):
     return Dataset
 
 
-def fit_model_in_tessel(subatlas=None, args=None, M=None):
+def fit_model_in_tessel(subatlas=None, args=None, M=None, Hem=None):
     Y = list()
+    n_voxels = list()
     for s, sn in enumerate(args.snS):
-        Dataset = make_individ_dataset(subatlas=subatlas, args=args, sn=sn)
+        Dataset = make_individ_dataset(subatlas=subatlas, args=args, sn=sn, Hem=Hem)
+        n_voxels.append(Dataset.n_channel)
         Y.append(Dataset)
 
+    # if Y > 0:
     T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
     T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
@@ -173,11 +176,11 @@ def fit_model_in_tessel(subatlas=None, args=None, M=None):
 
     noise_lower = likelihood.ceil
 
-    return likelihood, noise_upper, noise_lower, baseline, theta_cv
+    return likelihood, noise_upper, noise_lower, baseline, theta_cv, n_voxels
 
 
-def process_tessel_execution(args=None, atlas=None, h=None, ntessel=None, M=None):
-    ntessel = ntessel + 1  # skip the first tessel
+def process_1tessel_execution(args=None, atlas=None, h=None, ntessel=None, M=None):
+    # ntessel = ntessel + 1  # skip the first tessel
 
     Hem = ['L', 'R']
 
@@ -193,6 +196,7 @@ def process_tessel_execution(args=None, atlas=None, h=None, ntessel=None, M=None
         'noise_upper': [],
         'noise_lower': [],
         'baseline': [],
+        'n_voxels': [],
         'col_names': [],
         'sn': []
     }
@@ -210,8 +214,8 @@ def process_tessel_execution(args=None, atlas=None, h=None, ntessel=None, M=None
     }
 
     try:
-        likelihood, noise_upper, noise_lower, baseline, theta_cv = \
-            fit_model_in_tessel(subatlas=subatlas, args=args, M=M)
+        likelihood, noise_upper, noise_lower, baseline, theta_cv, n_voxels = \
+            fit_model_in_tessel(subatlas=subatlas, args=args, M=M, Hem=Hem[h])
 
         for s, sn in enumerate(args.snS):
             for c, col in enumerate(col_names):
@@ -219,6 +223,7 @@ def process_tessel_execution(args=None, atlas=None, h=None, ntessel=None, M=None
                 T['noise_upper'].append(noise_upper[s])
                 T['noise_lower'].append(noise_lower[s])
                 T['baseline'].append(baseline[s])
+                T['n_voxels'].append(n_voxels[s])
                 T['col_names'].append(col)
                 T['sn'].append(sn)
             for c in range(M[6].n_param):
@@ -232,12 +237,13 @@ def process_tessel_execution(args=None, atlas=None, h=None, ntessel=None, M=None
 
     except Exception as e:
         print(f"Error in tessel #{ntessel}: {e}")
-        for sn in range(len(args.snS)):
+        for s, sn in enumerate(args.snS):
             for c, col in enumerate(col_names):
                 T['likelihood'].append(np.nan)
                 T['noise_upper'].append(np.nan)
                 T['noise_lower'].append(np.nan)
                 T['baseline'].append(np.nan)
+                T['n_voxels'].append(np.nan)
                 T['col_names'].append(col)
                 T['sn'].append(sn)
             for c in range(M[6].n_param):
@@ -331,7 +337,7 @@ def main():
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--Hem', type=str, default=None)
     parser.add_argument('--glm', type=int, default=None)
-    parser.add_argument('--n_jobs', type=int, default=10)
+    parser.add_argument('--n_jobs', type=int, default=12)
     parser.add_argument('--ntessels', type=int, default=362, choices=[42, 162, 362, 642, 1002, 1442])
 
     args = parser.parse_args()
@@ -351,29 +357,46 @@ def main():
         for h, H in enumerate(['L', 'R']):
 
             # Parallel processing of tessels
-            with parallel_backend("loky"):
+            with parallel_backend("loky"):  # use threading for debug in PyCharm
                 results = Parallel(n_jobs=args.n_jobs)(
-                    delayed(process_tessel_execution)(args=args, atlas=atlas, h=h, ntessel=ntessel, M=M)
-                    for ntessel in range(args.ntessels)
+                    delayed(process_1tessel_execution)(args=args, atlas=atlas, h=h, ntessel=ntessel, M=M)
+                    for ntessel in range(args.ntessels) #np.arange(340, 364, 1)
                 )
 
+            # # Serial rpocessing of tessels
+            # results = []
+            # for ntessel in range(args.ntessels):
+            #     results.append(process_1tessel_execution(args=args, atlas=atlas, h=h, ntessel=ntessel, M=M))
+
             # Aggregate results from parallel processes
-            T = np.full((len(args.snS), 32492, len(M)), np.nan)
+            T = np.full((len(args.snS), 32492, len(M)+4), np.nan)
             theta_component = np.full((len(args.snS), 32492, M[6].n_param), np.nan)
             theta_feature = np.full((len(args.snS), 32492, M[7].n_param), np.nan)
 
             for s, sn in enumerate(args.snS):
                 for Tt, tc, tf, vertex_id in results:
                     for c, col in enumerate(col_names):
-                        T[s, vertex_id, c] = Tt[(Tt['sn'] == sn) & (Tt['col_names'] == col)]['likelihood']
+                        LL = Tt[(Tt['sn'] == sn) & (Tt['col_names'] == col)]['likelihood']
+                        T[s, vertex_id, c] = LL
+                    T[s, vertex_id, -4] = Tt[(Tt['sn'] == sn)]['noise_upper'].unique()
+                    T[s, vertex_id, -3] = Tt[(Tt['sn'] == sn)]['noise_lower'].unique()
+                    T[s, vertex_id, -2] = Tt[(Tt['sn'] == sn)]['baseline'].unique()
+                    T[s, vertex_id, -1] = Tt[(Tt['sn'] == sn)]['n_voxels'].unique()
                     for c in range(M[6].n_param):
-                        theta_component[s, vertex_id, c] = tc[(tc['sn'] == sn) & (tc['#comp'] == c)]['theta']
+                        theta = tc[(tc['sn'] == sn) & (tc['#comp'] == c)]['theta']
+                        theta_component[s, vertex_id, c] = theta
                     for c in range(M[7].n_param):
-                        theta_feature[s, vertex_id, c] = tf[(tf['sn'] == sn) & (tf['#feat'] == c)]['theta']
+                        # try:
+                        theta = tf[(tf['sn'] == sn) & (tf['#feat'] == c)]['theta']
+                        theta_feature[s, vertex_id, c] = theta
+                        # except Exception as e:
+                        #     theta = tf[(tf['sn'] == sn) & (tf['#feat'] == c)]['theta'].to_numpy()
+                        #     print(f'theta_feature: {vertex_id} in subject {sn} and param {c} skipped due to error: {e}, theta: {theta}')
 
             # save giftis
             for s, sn in enumerate(args.snS):
-                gifti_img_T = nt.make_func_gifti(T[s], anatomical_struct=struct[h], column_names=col_names)
+                gifti_img_T = nt.make_func_gifti(T[s], anatomical_struct=struct[h],
+                                                 column_names=col_names+['noise_upper', 'noise_lower', 'baseline', 'n_voxels'])
                 gifti_img_theta_component = nt.make_func_gifti(theta_component[s], anatomical_struct=struct[h],
                                                                column_names=['stimFinger', 'cue', 'cert', 'surprise'])
                 gifti_img_theta_feature = nt.make_func_gifti(theta_feature[s], anatomical_struct=struct[h],
@@ -404,8 +427,12 @@ def main():
             with parallel_backend("loky"):
                 results = Parallel(n_jobs=args.n_jobs)(
                     delayed(process_tessel_planning)(args=args, atlas=atlas, h=h, ntessel=ntessel, M=M)
-                    for ntessel in range(args.ntessels)
+                    for ntessel in range(args.ntessels) #np.arange(340, 364, 1) #
                 )
+
+            # Serial rpocessing of tessels
+            for ntessel in range(args.ntessels):
+                results = process_tessel_planning(args=args, atlas=atlas, h=h, ntessel=ntessel, M=M)
 
             # Aggregate results from parallel processes
             T = np.full((len(args.snS), 32492, len(M)), np.nan)
