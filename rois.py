@@ -55,3 +55,5 @@ if __name__ == '__main__':
 
             mask_out = amap.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
                                                    f'{args.atlas}.{H}.{label}.nii'))
+
+            pass
