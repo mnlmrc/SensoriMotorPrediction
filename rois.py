@@ -11,6 +11,77 @@ sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion')
 
 import Functional_Fusion.atlas_map as am
 
+import numpy as np
+
+
+def exclude_overlapping_voxels(amap, exclude='all', exclude_thres=0.9):
+    """
+    Ensures that ROIs do not share voxels by excluding overlapping voxels based on their weights.
+
+    Parameters:
+        amap (list): A list of AtlasMapSurf objects, each containing:
+                     - 'vox_list': (N, M) np.array of voxel indices (M = number of dimensions, e.g., 3 for [x, y, z])
+                     - 'vox_weight': (N, M) np.array of weights corresponding to vox_list
+        exclude (str or list of tuple): If 'all', compare all ROI pairs. Otherwise, provide a list of (i, j) tuples.
+        exclude_thres (float): Threshold to determine which ROI retains a voxel.
+
+    Returns:
+        list: Updated amap with overlapping voxels removed.
+    """
+
+    # Initialize exclusion masks
+    for roi in amap:
+        roi.excl_mask = np.zeros(roi.vox_list.shape, dtype=bool).flatten()
+
+    # Create list of ROI pairs to compare
+    if exclude == 'all':
+        exclude_pairs = [(i, j) for i in range(len(amap)) for j in range(i, len(amap))]
+    else:
+        exclude_pairs = exclude  # User-provided list of pairs
+
+    # Process each pair of ROIs
+    for j, k in exclude_pairs:
+        vox_j, weight_j = amap[j].vox_list, amap[j].vox_weight
+        vox_k, weight_k = amap[k].vox_list, amap[k].vox_weight
+
+        # # Find common voxel indices
+        # common_voxels, idx_j, idx_k = np.intersect1d(vox_j, vox_k, return_indices=True)
+
+        EQ = vox_j.flatten()[:, np.newaxis] == vox_k.flatten()[np.newaxis, :]
+        # EQ = np.all(vox_j[:, np.newaxis, :] == vox_k[np.newaxis, :, :], axis=2)
+
+        idx_j, idx_k = np.where(EQ)
+
+        for idx_j_v, idx_k_v in zip(idx_j, idx_k):
+            wj, wk = weight_j.flatten()[idx_j_v], weight_k.flatten()[idx_k_v]
+            total_weight = wj + wk
+
+            if total_weight == 0:
+                amap[j].excl_mask[idx_j_v] = True
+                amap[k].excl_mask[idx_k_v] = True
+            else:
+                frac_j = wj / total_weight
+                frac_k = wk / total_weight
+
+                if frac_j > exclude_thres:  # Keep voxel in j, exclude from k
+                    amap[k].excl_mask[idx_k_v] = True
+                elif frac_k > exclude_thres:  # Keep voxel in k, exclude from j
+                    amap[j].excl_mask[idx_j_v] = True
+                else:  # Exclude from both
+                    amap[j].excl_mask[idx_j_v] = True
+                    amap[k].excl_mask[idx_k_v] = True
+
+        # Apply exclusion mask to each ROI
+    for roi in amap:
+        mask = ~roi.excl_mask  # Keep only unexcluded voxels
+        roi.vox_list = roi.vox_list.flatten()[mask]  # Reshape vox_list to keep valid entries
+        roi.vox_weight = roi.vox_weight.flatten()[mask]
+        roi.num_excl = np.sum(roi.excl_mask)  # Count excluded voxels
+        del roi.excl_mask  # Remove temporary mask
+
+    return amap
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
@@ -38,6 +109,7 @@ if __name__ == '__main__':
             for ele in g_atlas.labeltable.labels
         }
 
+        amap = list()
         for nlabel, label in enumerate(labels.values()):
 
             print(f'ROI: {label}')
@@ -50,10 +122,21 @@ if __name__ == '__main__':
             white = os.path.join(subj_dir, f'subj{args.sn}.L.white.32k.surf.gii')
             pial = os.path.join(subj_dir, f'subj{args.sn}.L.pial.32k.surf.gii')
             mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}', 'mask.nii')
-            amap = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)
-            amap.build()
+            amap_tmp = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)
+            amap_tmp.build()
 
-            mask_out = amap.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
-                                                   f'{args.atlas}.{H}.{label}.nii'))
+            # add roi name
+            amap_tmp.name = label
 
-            pass
+            # add number of voxels
+            amap_tmp.n_voxels = len(np.unique(amap_tmp.vox_list))
+
+            amap.append(amap_tmp)
+
+        print('excluding voxels...')
+        amap = exclude_overlapping_voxels(amap, exclude=[(1, 2), (2, 1)])
+        for amap_tmp in amap:
+
+            mask_out = amap_tmp.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
+                                               f'{args.atlas}.{H}.{amap_tmp.name}.nii'))
+
