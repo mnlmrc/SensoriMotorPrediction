@@ -5,6 +5,7 @@ import nitools as nt
 import nibabel as nb
 
 import argparse
+import time
 
 sys.path.append('/Users/mnlmrc/Documents/GitHub/Functional_Fusion')
 sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion')
@@ -82,13 +83,12 @@ def exclude_overlapping_voxels(amap, exclude='all', exclude_thres=0.9):
     return amap
 
 
-if __name__ == '__main__':
-
+def main():
     parser = argparse.ArgumentParser()
 
-    # parser.add_argument('what', nargs='?', default=None)
+    parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default='smp2')
-    parser.add_argument('--sn', type=int, default=108)
+    parser.add_argument('--sn', type=int, default=None)
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--glm', type=int, default=12)
 
@@ -96,47 +96,54 @@ if __name__ == '__main__':
 
     atlas, _ = am.get_atlas('fs32k')
 
-    Hem = ['L', 'R']
+    if args.what=='make_rois':
 
-    struct = ['CortexLeft', 'CortexRight']
+        Hem = ['L', 'R']
 
-    for h, H in enumerate(Hem):
+        for h, H in enumerate(Hem):
 
-        g_atlas = nb.load(os.path.join(gl.atlas_dir, f'{args.atlas}.32k.{Hem[h]}.label.gii'))
+            g_atlas = nb.load(os.path.join(gl.atlas_dir, f'{args.atlas}.32k.{Hem[h]}.label.gii'))
 
-        labels = {
-            ele.key: getattr(ele, 'label', '')
-            for ele in g_atlas.labeltable.labels
-        }
+            labels = {
+                ele.key: getattr(ele, 'label', '')
+                for ele in g_atlas.labeltable.labels
+            }
 
-        amap = list()
-        for nlabel, label in enumerate(labels.values()):
+            amap = list()
+            for nlabel, label in enumerate(labels.values()):
+                print(f'making ROI: {label}, {H}')
 
-            print(f'ROI: {label}')
-
-            atlas_hem = atlas.get_hemisphere(h)
-            subatlas = atlas_hem.get_subatlas_image(os.path.join(gl.atlas_dir,
+                atlas_hem = atlas.get_hemisphere(h)
+                subatlas = atlas_hem.get_subatlas_image(os.path.join(gl.atlas_dir,
                                                                      f'{args.atlas}.32k.{H}.label.gii'), nlabel)
 
-            subj_dir = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{args.sn}')
-            white = os.path.join(subj_dir, f'subj{args.sn}.L.white.32k.surf.gii')
-            pial = os.path.join(subj_dir, f'subj{args.sn}.L.pial.32k.surf.gii')
-            mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}', 'mask.nii')
-            amap_tmp = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)
-            amap_tmp.build()
+                subj_dir = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{args.sn}')
+                white = os.path.join(subj_dir, f'subj{args.sn}.L.white.32k.surf.gii')
+                pial = os.path.join(subj_dir, f'subj{args.sn}.L.pial.32k.surf.gii')
+                mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}', 'mask.nii')
+                amap_tmp = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)
+                amap_tmp.build()
 
-            # add roi name
-            amap_tmp.name = label
+                # add roi name
+                amap_tmp.name = label
 
-            # add number of voxels
-            amap_tmp.n_voxels = len(np.unique(amap_tmp.vox_list))
+                # add number of voxels
+                amap_tmp.n_voxels = len(np.unique(amap_tmp.vox_list))
 
-            amap.append(amap_tmp)
+                amap.append(amap_tmp)
 
-        print('excluding voxels...')
-        amap = exclude_overlapping_voxels(amap, exclude=[(1, 2), (2, 1)])
-        for amap_tmp in amap:
+            print('excluding voxels...')
+            amap = exclude_overlapping_voxels(amap, exclude=[(1, 2), (2, 1)])
+            for amap_tmp in amap:
+                print(f'saving ROI {amap_tmp.name}, {H}')
+                mask_out = amap_tmp.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
+                                                               f'{args.atlas}.{H}.{amap_tmp.name}.nii'))
 
-            mask_out = amap_tmp.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
-                                               f'{args.atlas}.{H}.{amap_tmp.name}.nii'))
+
+if __name__ == '__main__':
+    start = time.time()
+    main()
+    finish = time.time()
+
+    print(f'Execution time:{finish-start} s')
 
