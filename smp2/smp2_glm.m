@@ -685,7 +685,7 @@ function smp2_glm(what, varargin)
                     cname_idx = length(SPM.xCon);
                 end
                 SPM = spm_contrasts(SPM,1:length(SPM.xCon));
-                save('SPM.mat', 'SPM','-v7.3');
+                save('SPM.mat', 'SPM','-v7');
                 % SPM = rmfield(SPM,'xVi'); % 'xVi' take up a lot of space and slows down code!
                 % save(fullfile(glm_dir, 'SPM_light.mat'), 'SPM')
     
@@ -847,9 +847,8 @@ function smp2_glm(what, varargin)
             post=10;
             atlas = 'ROI';
             glm = 12;
-            hrf_params = [];
 
-            vararginoptions(varargin,{'ROI','pre','post', 'glm', 'sn', 'atlas', 'hrf_params'});
+            vararginoptions(varargin,{'ROI','pre','post', 'glm', 'sn', 'atlas'});
 
             glmDir = fullfile(baseDir, [glmEstDir num2str(glm)]);
             T=[];
@@ -861,28 +860,12 @@ function smp2_glm(what, varargin)
             cd(fullfile(glmDir,subj_id));
             SPM = load('SPM.mat'); SPM=SPM.SPM;
             
-            if isempty(hrf_params)
-                hrf_params = SPM.xBF.params;
-            end
+%             if isempty(hrf_params)
+%                 hrf_params = SPM.xBF.params;
+%             end
             
             TR = SPM.xY.RT;
             nScan = SPM.nscan(1);
-
-            % % make (dummy) regressors
-            % hrf = spm_hrf(1, hrf_params);
-            % events = dload(fullfile(baseDir,behavDir,subj_id ,sprintf('glm%d_events.tsv', glm)));
-            % eventtype = unique(events.eventtype);
-            % regr = zeros(2760, length(eventtype));
-            % 
-            % for e = 1:length(eventtype)
-            % 
-            %     onset = events.Onset(strcmp(eventtype(e), events.eventtype));
-            %     block = events.BN(strcmp(eventtype(e), events.eventtype));
-            %     onset = round(onset) + (block - 1) * 276;
-            % 
-            %     regr(onset, e) = 1;
-            %     regrC(:, e) = conv(regr(:, e), hrf);             
-            % end
             
             % load ROI definition (R)
             R = load(fullfile(baseDir, regDir,subj_id,[subj_id '_' atlas '_region.mat'])); R=R.R;
