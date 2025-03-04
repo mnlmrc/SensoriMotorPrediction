@@ -1,4 +1,5 @@
 import argparse
+import time
 
 import pandas as pd
 import numpy as np
@@ -86,11 +87,12 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('what', nargs='?', default=None)
-    parser.add_argument('--experiment', type=str, default=None)
+    parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--Hem', type=str, default=None)
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108])
+    # parser.add_argument('--Hem', type=str, default=None)
     parser.add_argument('--roi', type=str, default=None)
-    parser.add_argument('--glm', type=int, default=None)
+    parser.add_argument('--glm', type=int, default=12)
 
     args = parser.parse_args()
 
@@ -110,7 +112,6 @@ def main():
                 np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                      f'ROI.{H}.{roi}.con.npy'), contrasts)
     if args.what == 'save_rois_contrasts_avg':
-        snS = [102, 103, 104, 106, 107]
         Hem = ['L', 'R']
         rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
         dict_con = {
@@ -122,7 +123,7 @@ def main():
         }
         for H in Hem:
             for r, roi in enumerate(rois):
-                for s, sn in enumerate(snS):
+                for s, sn in enumerate(args.snS):
 
                     print(f'subj{sn}, {roi}')
 
@@ -177,5 +178,8 @@ def main():
 
 
 if __name__ == "__main__":
+    start = time.time()
     main()
+    finish = time.time()
 
+    print(f'Execution time: {finish - start} seconds')

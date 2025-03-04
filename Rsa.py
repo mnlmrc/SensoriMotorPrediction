@@ -141,9 +141,9 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('what', nargs='?', default=None)
-    parser.add_argument('--experiment', type=str, default=None)
+    parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--glm', type=int, default=None)
+    parser.add_argument('--glm', type=int, default=12)
 
     args = parser.parse_args()
 
