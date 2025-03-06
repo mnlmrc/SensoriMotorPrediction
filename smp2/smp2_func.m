@@ -223,10 +223,10 @@ function varargout = smp2_func(what, varargin)
             % looks for motion correction logs into imaging_data, needs to
             % be run after realigned images are moved there from
             % imaging_data_raw
-            
             run_list = {}; % Initialize as an empty cell array
             for run = runs
-                run_list{end+1} = ['rp_', subj_id, '_run_', run, '.txt'];
+                run_list{end+1} = fullfile(baseDir, imagingRawDir,...
+                    subj_id, sprintf('rp_%s_run_%02d.txt', subj_id, run)) ;
             end
 
             smpj_plot_mov_corr(run_list)
