@@ -14,7 +14,7 @@ from nitools import spm
 
 import time
 
-from cifti import get_ciftis
+from Cifti import get_ciftis
 
 
 def main():

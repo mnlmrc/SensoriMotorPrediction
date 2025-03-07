@@ -86,9 +86,9 @@ def exclude_overlapping_voxels(amap, exclude='all', exclude_thres=0.9):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('what', nargs='?', default=None)
+    parser.add_argument('what', nargs='?', default='make_rois')
     parser.add_argument('--experiment', type=str, default='smp2')
-    parser.add_argument('--sn', type=int, default=None)
+    parser.add_argument('--sn', type=int, default=102)
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--glm', type=int, default=12)
 
@@ -118,8 +118,8 @@ def main():
                                                                      f'{args.atlas}.32k.{H}.label.gii'), nlabel)
 
                 subj_dir = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{args.sn}')
-                white = os.path.join(subj_dir, f'subj{args.sn}.L.white.32k.surf.gii')
-                pial = os.path.join(subj_dir, f'subj{args.sn}.L.pial.32k.surf.gii')
+                white = os.path.join(subj_dir, f'subj{args.sn}.{H}.white.32k.surf.gii')
+                pial = os.path.join(subj_dir, f'subj{args.sn}.{H}.pial.32k.surf.gii')
                 mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}', 'mask.nii')
                 amap_tmp = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)
                 amap_tmp.build()
