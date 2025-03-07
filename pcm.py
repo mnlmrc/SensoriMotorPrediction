@@ -22,11 +22,6 @@ import nitools as nt
 
 import sys
 
-sys.path.append('/Users/mnlmrc/Documents/GitHub')
-sys.path.append('/Users/mnlmrc/Documents/GitHub/Functional_Fusion')
-sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub')
-sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion')
-
 import Functional_Fusion.atlas_map as am
 
 

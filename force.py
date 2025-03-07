@@ -129,8 +129,9 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('what', nargs='?', default=None)
-    parser.add_argument('--experiment', type=str, default=None)
+    parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110])
     parser.add_argument('--session', type=str, default='behavioural')
 
     args = parser.parse_args()
@@ -169,7 +170,6 @@ def main():
         force_df.to_csv(os.path.join(gl.baseDir, args.experiment, args.session, f'subj{args.sn}',
                                      f'{args.experiment}_{args.sn}_force_single_trial.tsv'), sep='\t', index=False)
     if args.what == 'avg_continuous':
-        snS = [102, 103, 104, 105, 106, 107, 108]
 
         force_avg = list()
         descr = {
@@ -180,10 +180,14 @@ def main():
             'finger': []
         }
 
-        for sn in snS:
+        pinfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'participants.tsv'), sep='\t')
+
+        for sn in args.snS:
+            runs = pinfo[pinfo['sn'] == sn].FuncRuns.reset_index(drop=True)[0].split('.')
             dat = pd.read_csv(
                 os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}', f'{args.experiment}_{sn}.dat'),
                 sep='\t')
+            dat = dat[dat['BN'].astype(str).isin(runs)]
             npz = np.load(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
                                        f'{args.experiment}_{sn}_force_segmented.npz'))
             force = npz['data_array']
