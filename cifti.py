@@ -33,31 +33,31 @@ def get_ciftis(mask=(None, None), SPM=None, TR=1000, extra=None):
     data = {name: [] for name in ["vox", "raw", "beta", "y_filt", "y_hat", "y_adj", "residuals"]}
     struct = ['cortex_left', 'cortex_right']
     for m, s in zip(mask, struct):
+        if m is not None:
+            # load mask
+            mask_img = nb.load(m)
+            coords = nt.get_mask_coords(mask_img)
 
-        # load mask
-        mask_img = nb.load(m)
-        coords = nt.get_mask_coords(mask_img)
+            # get raw data
+            raw_tmp = nt.sample_images(SPM.rawdata_files, coords)
+            data['raw'].append(raw_tmp)
 
-        # get raw data
-        raw_tmp = nt.sample_images(SPM.rawdata_files, coords)
-        data['raw'].append(raw_tmp)
+            # rerun glm
+            beta_tmp, info, y_filt_tmp, y_hat_tmp, y_adj_tmp, residuals_tmp = SPM.rerun_glm(raw_tmp)
+            data['beta'].append(beta_tmp)
+            data['y_filt'].append(y_filt_tmp)
+            data['y_hat'].append(y_hat_tmp)
+            data['y_adj'].append(y_adj_tmp)
+            data['residuals'].append(residuals_tmp)
 
-        # rerun glm
-        beta_tmp, _, y_filt_tmp, y_hat_tmp, y_adj_tmp, residuals_tmp = SPM.rerun_glm(raw_tmp)
-        data['beta'].append(beta_tmp)
-        data['y_filt'].append(y_filt_tmp)
-        data['y_hat'].append(y_hat_tmp)
-        data['y_adj'].append(y_adj_tmp)
-        data['residuals'].append(residuals_tmp)
+            data['vox'].append(cifti2.BrainModelAxis(
+                name=s,
+                voxel=nt.coords_to_voxelidxs(coords, mask_img).T,
+                affine=mask_img.affine,
+                volume_shape=mask_img.shape)
+            )
 
-        data['vox'].append(cifti2.BrainModelAxis(
-            name=s,
-            voxel=nt.coords_to_voxelidxs(coords, mask_img).T,
-            affine=mask_img.affine,
-            volume_shape=mask_img.shape)
-        )
-
-    raw  = np.hstack(data['raw'])
+    raw = np.hstack(data['raw'])
     beta = np.hstack(data['beta'])
     y_filt = np.hstack(data['y_filt'])
     y_hat = np.hstack(data['y_hat'])
@@ -75,4 +75,8 @@ def get_ciftis(mask=(None, None), SPM=None, TR=1000, extra=None):
     img_adj = Cifti2Image(dataobj=y_adj, header=header, extra=extra)
     img_res = Cifti2Image(dataobj=residuals, header=header, extra=extra)
 
-    return img_raw, img_filt, img_hat, img_adj, img_res
+    scalar = cifti2.ScalarAxis(name=info.reg_name)
+    header = cifti2.Cifti2Header.from_axes((scalar, vox))
+    img_beta = Cifti2Image(dataobj=beta, header=header, extra=extra)
+
+    return img_raw, img_beta, img_filt, img_hat, img_adj, img_res

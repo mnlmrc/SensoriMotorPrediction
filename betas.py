@@ -172,6 +172,8 @@ def main():
                 )
                 np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                      f'ROI.{H}.{roi}.res.npy'), res)
+    if args.what == 'save_rois_ciftis':
+        pass
     else:
         pass
         # parser.print_help()
