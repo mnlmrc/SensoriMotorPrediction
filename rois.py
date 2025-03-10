@@ -88,7 +88,7 @@ def main():
 
     parser.add_argument('what', nargs='?', default='make_rois')
     parser.add_argument('--experiment', type=str, default='smp2')
-    parser.add_argument('--sn', type=int, default=102)
+    parser.add_argument('--sn', type=int, default=None)
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--glm', type=int, default=12)
 
@@ -133,11 +133,23 @@ def main():
                 amap.append(amap_tmp)
 
             print('excluding voxels...')
-            amap = exclude_overlapping_voxels(amap, exclude=[(1, 2), (2, 1)])
+            amap = exclude_overlapping_voxels(amap, exclude=[(1, 2), (1, 6), (1, 7),
+                                                             (2, 3), (2, 4), (2, 5), (2, 7),
+                                                             (3, 4), (3, 5),
+                                                             (7, 8)])
+
+            roiMasks = []
             for amap_tmp in amap:
                 print(f'saving ROI {amap_tmp.name}, {H}')
                 mask_out = amap_tmp.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
                                                                f'{args.atlas}.{H}.{amap_tmp.name}.nii'))
+                if len(amap_tmp.name) > 0:
+                    roiMasks.append(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
+                                                               f'{args.atlas}.{H}.{amap_tmp.name}.nii'))
+
+            am.parcel_combine(roiMasks,os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
+                                                                   f'{args.atlas}.{H}.nii') )
+
 
 
 if __name__ == '__main__':

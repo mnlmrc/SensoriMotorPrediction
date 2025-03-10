@@ -6,6 +6,9 @@ import numpy as np
 import os
 import scipy
 
+from nitools import spm
+import Functional_Fusion.atlas_map as am
+
 import globals as gl
 
 import nibabel as nb
@@ -90,7 +93,7 @@ def main():
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
     parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108])
-    # parser.add_argument('--Hem', type=str, default=None)
+    parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--roi', type=str, default=None)
     parser.add_argument('--glm', type=int, default=12)
 
@@ -172,8 +175,48 @@ def main():
                 )
                 np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                      f'ROI.{H}.{roi}.res.npy'), res)
-    if args.what == 'save_rois_ciftis':
-        pass
+    if args.what == 'save_beta_cifti':
+        SPM = spm.SpmGlm(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}'))  #
+        SPM.get_info_from_spm_mat()
+
+        # mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}', 'mask.nii')
+        # atlas = am.AtlasVolumetric('ROI', mask)
+
+        maskL = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'{args.atlas}.L.nii')
+        L = am.AtlasVolumetric('L', maskL, structure='CortexLeft')
+
+        maskR = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'{args.atlas}.R.nii')
+        R = am.AtlasVolumetric('R', maskR, structure='CortexRight')
+
+        betaL, residualL, info = SPM.get_betas(maskL)
+        betaR, residualR, _ = SPM.get_betas(maskR)
+
+        row_axis = nb.cifti2.ScalarAxis(info['reg_name'])
+
+        ciftiL = L.data_to_cifti(betaL, row_axis)
+        ciftiR = R.data_to_cifti(betaR, row_axis)
+
+        save_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+        # nb.save(ciftiL, save_path + '/' + 'beta.L.dscalar.nii')
+        # nb.save(ciftiR, save_path + '/' + 'beta.R.dscalar.nii')
+
+        bmL = L.get_brain_model_axis()
+        bmR = R.get_brain_model_axis()
+
+        brain_axis = bmL + bmR
+        uniquex, index, count, = np.unique(brain_axis.voxel, axis=0, return_counts=True, return_index=True)
+        brain_axis = brain_axis[index[count == 1]]
+
+        beta = np.hstack((betaL, betaR))
+        beta = beta[:, index[count == 1]]
+        header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
+
+        cifti = nb.Cifti2Image(
+            dataobj=beta,  # Stack them along the rows (adjust as needed)
+            header=header,  # Use one of the headers (may need to modify)
+        )
+
+        nb.save(ciftiL, save_path + '/' + 'beta.dscalar.nii')
     else:
         pass
         # parser.print_help()
