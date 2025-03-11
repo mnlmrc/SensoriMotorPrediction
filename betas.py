@@ -85,19 +85,7 @@ def get_roi_contrasts(experiment=None, sn=None, Hem=None, roi=None, glm=None):
     return contrasts
 
 
-def main():
-
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('what', nargs='?', default=None)
-    parser.add_argument('--experiment', type=str, default='smp2')
-    parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108])
-    parser.add_argument('--atlas', type=str, default='ROI')
-    parser.add_argument('--roi', type=str, default=None)
-    parser.add_argument('--glm', type=int, default=12)
-
-    args = parser.parse_args()
+def main(args=None):
 
     if args.what == 'save_rois_contrasts':
         Hem = ['L', 'R']
@@ -175,56 +163,100 @@ def main():
                 )
                 np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                      f'ROI.{H}.{roi}.res.npy'), res)
-    if args.what == 'save_beta_cifti':
+    if args.what == 'save_betas_cifti':
         SPM = spm.SpmGlm(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}'))  #
         SPM.get_info_from_spm_mat()
 
-        # mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}', 'mask.nii')
-        # atlas = am.AtlasVolumetric('ROI', mask)
+        for i, (s, H) in enumerate(zip(struct, Hem)):
+            mask = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'Hem.{H}.nii')
+            coords = nt.get_mask_coords(mask)
+            atlas = am.AtlasVolumetric(H, mask, structure=s)
 
-        maskL = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'{args.atlas}.L.nii')
-        L = am.AtlasVolumetric('L', maskL, structure='CortexLeft')
+            if i == 0:
+                brain_axis = atlas.get_brain_model_axis()
+                coords = nt.get_mask_coords(mask)
+            else:
+                brain_axis += brain_axis
+                coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
 
-        maskR = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'{args.atlas}.R.nii')
-        R = am.AtlasVolumetric('R', maskR, structure='CortexRight')
+        betas, _, info = SPM.get_betas(coords)
 
-        betaL, residualL, info = SPM.get_betas(maskL)
-        betaR, residualR, _ = SPM.get_betas(maskR)
-
-        row_axis = nb.cifti2.ScalarAxis(info['reg_name'])
-
-        ciftiL = L.data_to_cifti(betaL, row_axis)
-        ciftiR = R.data_to_cifti(betaR, row_axis)
+        row_axis = nb.cifti2.ScalarAxis(1, 1, betas.shape[0])
 
         save_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
-        # nb.save(ciftiL, save_path + '/' + 'beta.L.dscalar.nii')
-        # nb.save(ciftiR, save_path + '/' + 'beta.R.dscalar.nii')
 
-        bmL = L.get_brain_model_axis()
-        bmR = R.get_brain_model_axis()
-
-        brain_axis = bmL + bmR
-        uniquex, index, count, = np.unique(brain_axis.voxel, axis=0, return_counts=True, return_index=True)
-        brain_axis = brain_axis[index[count == 1]]
-
-        beta = np.hstack((betaL, betaR))
-        beta = beta[:, index[count == 1]]
         header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
-
         cifti = nb.Cifti2Image(
-            dataobj=beta,  # Stack them along the rows (adjust as needed)
+            dataobj=betas,  # Stack them along the rows (adjust as needed)
             header=header,  # Use one of the headers (may need to modify)
         )
 
-        nb.save(ciftiL, save_path + '/' + 'beta.dscalar.nii')
-    else:
-        pass
-        # parser.print_help()
+        nb.save(cifti, save_path + '/' + 'beta.dscalar.nii')
+    if args.what == 'save_residuals_cifti':
+        SPM = spm.SpmGlm(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}'))  #
+        SPM.get_info_from_spm_mat()
 
+        for i, (s, H) in enumerate(zip(struct, Hem)):
+            mask = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'Hem.{H}.nii')
+            coords = nt.get_mask_coords(mask)
+            atlas = am.AtlasVolumetric(H, mask, structure=s)
+
+            if i == 0:
+                brain_axis = atlas.get_brain_model_axis()
+                coords = nt.get_mask_coords(mask)
+            else:
+                brain_axis += brain_axis
+                coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
+
+        res, _, info = SPM.get_residuals(coords)
+
+        row_axis = nb.cifti2.SeriesAxis(1, 1, res.shape[0], 'second')
+
+        save_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+
+        header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
+        cifti = nb.Cifti2Image(
+            dataobj=res,  # Stack them along the rows (adjust as needed)
+            header=header,  # Use one of the headers (may need to modify)
+        )
+
+        nb.save(cifti, save_path + '/' + 'residual.dtseries.nii')
+    if args.what == 'save_betas_cifti_all':
+        for sn in args.snS:
+            args = argparse.Namespace(
+                what='save_betas_cifti',
+                experiment=args.experiment,
+                sn=sn,
+                glm=args.glm
+            )
+            main(args)
+    if args.what == 'save_residuals_cifti_all':
+        for sn in args.snS:
+            print(f'Processing subj{sn}...')
+            arg = argparse.Namespace(
+                what='save_residuals_cifti',
+                experiment=args.experiment,
+                sn=sn,
+                glm=args.glm
+            )
+            main(arg)
 
 if __name__ == "__main__":
     start = time.time()
-    main()
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('what', nargs='?', default=None)
+    parser.add_argument('--experiment', type=str, default='smp2')
+    parser.add_argument('--sn', type=int, default=None)
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108])
+    parser.add_argument('--atlas', type=str, default='ROI')
+    parser.add_argument('--roi', type=str, default=None)
+    parser.add_argument('--glm', type=int, default=12)
+
+    args = parser.parse_args()
+
+    main(args)
     finish = time.time()
 
     print(f'Execution time: {finish - start} seconds')

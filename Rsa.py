@@ -69,9 +69,6 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
     reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
                                        f'subj{sn}_reginfo.tsv'), sep="\t")
 
-    # betas = np.load(
-    #     os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
-    #                  f'ROI.{Hem}.{roi}.beta.npy'))
     beta_img = nt.volume_from_cifti(nb.load(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
                       f'beta.dscalar.nii')), struct_names = ['CortexLeft', 'CortexRight'])
     mask = nb.load(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}', f'ROI.{Hem}.{roi}.nii'))
@@ -81,8 +78,6 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
 
     res_img = nb.load(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}', 'ResMS.nii'))
     res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
-    # res = np.load(
-    #     os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}', f'ROI.{Hem}.{roi}.res.npy'))
 
     betas_prewhitened = betas / np.sqrt(res)
 

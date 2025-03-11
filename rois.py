@@ -7,9 +7,6 @@ import nibabel as nb
 import argparse
 import time
 
-sys.path.append('/Users/mnlmrc/Documents/GitHub/Functional_Fusion')
-sys.path.append('/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion')
-
 import Functional_Fusion.atlas_map as am
 
 import numpy as np
@@ -100,6 +97,7 @@ def main():
 
         Hem = ['L', 'R']
 
+        roiMasks = []
         for h, H in enumerate(Hem):
 
             g_atlas = nb.load(os.path.join(gl.atlas_dir, f'{args.atlas}.32k.{Hem[h]}.label.gii'))
@@ -133,12 +131,10 @@ def main():
                 amap.append(amap_tmp)
 
             print('excluding voxels...')
-            amap = exclude_overlapping_voxels(amap, exclude=[(1, 2), (1, 6), (1, 7),
+            amap = am.exclude_overlapping_voxels(amap, exclude=[(1, 2), (1, 6), (1, 7),
                                                              (2, 3), (2, 4), (2, 5), (2, 7),
                                                              (3, 4), (3, 5),
                                                              (7, 8)])
-
-            roiMasks = []
             for amap_tmp in amap:
                 print(f'saving ROI {amap_tmp.name}, {H}')
                 mask_out = amap_tmp.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
@@ -147,8 +143,40 @@ def main():
                     roiMasks.append(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
                                                                f'{args.atlas}.{H}.{amap_tmp.name}.nii'))
 
-            am.parcel_combine(roiMasks,os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
-                                                                   f'{args.atlas}.{H}.nii') )
+        am.parcel_combine(roiMasks,os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
+                                                               f'{args.atlas}.nii'))
+
+    if args.what=='make_hemispheres':
+
+        Hem = ['L', 'R']
+
+        amap = []
+        for h, H in enumerate(Hem):
+            atlas_hem = atlas.get_hemisphere(h)
+
+            subj_dir = os.path.join(gl.baseDir, args.experiment, gl.surfDir, f'subj{args.sn}')
+            white = os.path.join(subj_dir, f'subj{args.sn}.{H}.white.32k.surf.gii')
+            pial = os.path.join(subj_dir, f'subj{args.sn}.{H}.pial.32k.surf.gii')
+            mask = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}', 'mask.nii')
+            amap_tmp = am.AtlasMapSurf(atlas_hem.vertex[0], white, pial, mask)
+
+            print(f'building hemisphere: {H}')
+            amap_tmp.build()
+
+            # add hem name
+            amap_tmp.name = H
+
+            # add number of voxels
+            amap_tmp.n_voxels = len(np.unique(amap_tmp.vox_list))
+
+            amap.append(amap_tmp)
+
+        amap = am.exclude_overlapping_voxels(amap, exclude=[(0, 1)])
+        for amap_tmp in amap:
+            print(f'saving hemisphere {amap_tmp.name}')
+            mask_out = amap_tmp.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
+                                                           f'Hem.{H}.nii'))
+
 
 
 
