@@ -53,34 +53,42 @@ def main(args):
         header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
 
         # save y_raw
+        print(f'subj {args.sn} - saving y_raw')
         cifti = nb.Cifti2Image(
-            dataobj=y_raw,  # Stack them along the rows (adjust as needed)
-            header=header,  # Use one of the headers (may need to modify)
+            dataobj=y_raw,
+            header=header,
         )
         nb.save(cifti, save_path + '/' + 'y_raw.dtseries.nii')
 
         # save y_filt
+        print(f'subj {args.sn} - saving y_filt')
         cifti = nb.Cifti2Image(
-            dataobj=y_filt,  # Stack them along the rows (adjust as needed)
-            header=header,  # Use one of the headers (may need to modify)
+            dataobj=y_filt,
+            header=header,
         )
         nb.save(cifti, save_path + '/' + 'y_filt.dtseries.nii')
 
         # save y_hat
+        print(f'subj {args.sn} - saving y_hat')
         cifti = nb.Cifti2Image(
-            dataobj=y_hat,  # Stack them along the rows (adjust as needed)
-            header=header,  # Use one of the headers (may need to modify)
+            dataobj=y_hat,
+            header=header,
         )
         nb.save(cifti, save_path + '/' + 'y_hat.dtseries.nii')
 
         # save y_adj
+        print(f'subj {args.sn} - saving y_adj')
         cifti = nb.Cifti2Image(
             dataobj=y_adj,  # Stack them along the rows (adjust as needed)
             header=header,  # Use one of the headers (may need to modify)
         )
         nb.save(cifti, save_path + '/' + 'y_adj.dtseries.nii')
 
-    if args.what == 'save_betas_cifti_all':
+    if args.what == 'save_timeseries_parcels':
+
+        y_hat = nb.load(gl.baseDir, f'{gl.glmDir}{args.glm}')
+
+    if args.what == 'save_timeseries_cifti_all':
         for sn in args.snS:
             args = argparse.Namespace(
                 what='save_timeseries_cifti',

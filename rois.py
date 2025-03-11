@@ -172,7 +172,7 @@ def main():
             amap.append(amap_tmp)
 
         amap = am.exclude_overlapping_voxels(amap, exclude=[(0, 1)])
-        for amap_tmp in amap:
+        for amap_tmp, H in zip(amap, Hem):
             print(f'saving hemisphere {amap_tmp.name}')
             mask_out = amap_tmp.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
                                                            f'Hem.{H}.nii'))
