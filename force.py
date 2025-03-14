@@ -84,8 +84,8 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=(.2,
         'pinkie': [],
         'stimFinger': [],
         'cue': [],
-        'GoNogo': [],
-        'RT': []
+        # 'GoNogo': [],
+        # 'RT': []
     }
     for bl in blocks:
 
@@ -115,9 +115,9 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=(.2,
             force_dict['ring'].append(force_tmp[3])
             force_dict['pinkie'].append(force_tmp[4])
             force_dict['stimFinger'].append(dat_tmp.iloc[ons]['stimFinger'])
-            force_dict['RT'].append(dat_tmp.iloc[ons]['RT'])
+            # force_dict['RT'].append(dat_tmp.iloc[ons]['RT'])
             force_dict['cue'].append(dat_tmp.iloc[ons]['cue'])
-            force_dict['GoNogo'].append(dat_tmp.iloc[ons]['GoNogo'])
+            # force_dict['GoNogo'].append(dat_tmp.iloc[ons]['GoNogo'])
             force_dict['BN'].append(dat_tmp.iloc[ons]['BN'])
             force_dict['TN'].append(dat_tmp.iloc[ons]['TN'])
 
@@ -125,7 +125,7 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=(.2,
 
     return force_df
 
-def main():
+def main(args):
 
     pinfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'participants.tsv'), sep='\t')
 
@@ -212,7 +212,15 @@ def main():
 
         np.savez(os.path.join(gl.baseDir, args.experiment, f'force.segmented.avg.npz'),
                  data_array=np.stack(force_avg, axis=0), descriptor=descr, allow_pickle=True)
-
+    if args.what == 'single_trial_all':
+        for sn in args.snS:
+            args = argparse.Namespace(
+                what='single_trial',
+                experiment=args.experiment,
+                sn=sn,
+                session=args.session,
+            )
+            main(args)
 
 if __name__ == '__main__':
 
@@ -223,7 +231,7 @@ if __name__ == '__main__':
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112])
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112], type=int)
     parser.add_argument('--session', type=str, default='behavioural')
 
     args = parser.parse_args()

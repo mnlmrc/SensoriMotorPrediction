@@ -72,6 +72,7 @@ channels = {'mov': ['thumb', 'index', 'middle', 'ring', 'pinkie']}
 
 prestim = 1
 poststim = 1
+
 fsample_mov = 500
 # TR = 1
 # N = {

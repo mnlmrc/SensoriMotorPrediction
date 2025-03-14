@@ -24,6 +24,14 @@ import sys
 
 import Functional_Fusion.atlas_map as am
 
+def find_model(path, name):
+    f = open(path, 'rb')
+    M = pickle.load(f)
+    for m in M:
+        if m.name == name:
+            return m, M.index(m)
+    if m == M[-1]:
+        raise Exception(f'Model name not found')
 
 def make_execution_models():
     C = pcm.centering(8)
@@ -497,6 +505,63 @@ def main(args):
         with open(os.path.join(path, f'theta_gr.emg.Vol.pkl'), 'wb') as f:
             pickle.dump(theta_gr, f)
 
+    if args.what == 'save_force_execution':
+
+        M = make_execution_models()
+        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                               f'M.force.pkl'), "wb") as f:
+            pickle.dump(M, f)
+
+        N = len(args.snS)
+
+        G_obs = np.zeros((N, 8, 8))
+        Y = list()
+        for s, sn in enumerate(args.snS):
+            force = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
+                                             f'{args.experiment}_{sn}_force_single_trial.tsv'), sep='\t')
+            # force = force[force['GoNogo'] == 'go']  # select only go trial
+            force['cue'] = force['cue'].map(gl.cue_mapping)
+            force['stimFinger'] = force['stimFinger'].map(gl.stimFinger_mapping)
+            force = force.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
+            cond_vec = force['cue'] + ',' + force['stimFinger']
+            part_vec = force['BN']
+
+            force = force[['thumb', 'index', 'middle', 'ring', 'pinkie']].to_numpy()
+
+            cov = force.T @ force
+
+            force = force / np.sqrt(np.diag(cov)) # prewhitening using variance of each channel
+
+            obs_des = {'cond_vec': cond_vec.map(gl.regressor_mapping),
+                       'part_vec': part_vec}
+
+            Y.append(pcm.dataset.Dataset(force, obs_descriptors=obs_des))
+
+            G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                                             Y[s].obs_descriptors['part_vec'],
+                                             X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+
+        T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+        T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+        T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+
+        path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
+
+        os.makedirs(path, exist_ok=True)
+
+        np.save(os.path.join(path, f'G_obs.force.npy'), G_obs)
+
+        T_in.to_pickle(os.path.join(path, f'T_in.force.pkl'))
+        T_cv.to_pickle(os.path.join(path, f'T_cv.force.pkl'))
+        T_gr.to_pickle(os.path.join(path, f'T_gr.force.pkl'))
+
+        with open(os.path.join(path, f'theta_in.force.pkl'), 'wb') as f:
+            pickle.dump(theta_in, f)
+        with open(os.path.join(path, f'theta_cv.force.pkl'), 'wb') as f:
+            pickle.dump(theta_cv, f)
+        with open(os.path.join(path, f'theta_gr.force.pkl'), 'wb') as f:
+            pickle.dump(theta_gr, f)
+
     if args.what == 'save_rois_planning':
 
         M = make_planning_models()
@@ -647,7 +712,7 @@ if __name__ == '__main__':
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', type=int, default=[102, 103, 104, 105, 106, 107, 108])
+    parser.add_argument('--snS', nargs='+', type=int, default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112])
     parser.add_argument('--atlas', type=str, default='ROI')
     # parser.add_argument('--Hem', type=str, default=None)
     parser.add_argument('--glm', type=int, default=12)

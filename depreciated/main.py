@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 import globals as gl
 import pandas as pd
 from force import Force
-from pcm import FixedModel
+from Pcm import FixedModel
 from myplot import make_colors, make_tAx
 # import tkinter as tk
 import seaborn as sns
