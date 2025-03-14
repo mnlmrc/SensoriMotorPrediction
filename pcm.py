@@ -324,20 +324,7 @@ def process_tessel_planning(args=None, atlas=None, h=None, ntessel=None, M=None)
     return T, theta_component, subatlas.vertex[0]
 
 
-def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('what', nargs='?', default=None)
-    parser.add_argument('--experiment', type=str, default='smp2')
-    parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', type=int, default=[102, 103, 104, 105, 106, 107, 108])
-    parser.add_argument('--atlas', type=str, default='ROI')
-    # parser.add_argument('--Hem', type=str, default=None)
-    parser.add_argument('--glm', type=int, default=12)
-    parser.add_argument('--n_jobs', type=int, default=12)
-    parser.add_argument('--ntessels', type=int, default=362, choices=[42, 162, 362, 642, 1002, 1442])
-
-    args = parser.parse_args()
+def main(args):
 
     if args.what == 'save_tessel_execution':
 
@@ -360,11 +347,6 @@ def main():
                     for ntessel in range(args.ntessels) #np.arange(340, 364, 1)
                 )
 
-            # # Serial rpocessing of tessels
-            # results = []
-            # for ntessel in range(args.ntessels):
-            #     results.append(process_1tessel_execution(args=args, atlas=atlas, h=h, ntessel=ntessel, M=M))
-
             # Aggregate results from parallel processes
             T = np.full((len(args.snS), 32492, len(M)+4), np.nan)
             theta_component = np.full((len(args.snS), 32492, M[4].n_param), np.nan)
@@ -383,12 +365,8 @@ def main():
                         theta = tc[(tc['sn'] == sn) & (tc['#comp'] == c)]['theta']
                         theta_component[s, vertex_id, c] = theta
                     for c in range(M[5].n_param):
-                        # try:
                         theta = tf[(tf['sn'] == sn) & (tf['#feat'] == c)]['theta']
                         theta_feature[s, vertex_id, c] = theta
-                        # except Exception as e:
-                        #     theta = tf[(tf['sn'] == sn) & (tf['#feat'] == c)]['theta'].to_numpy()
-                        #     print(f'theta_feature: {vertex_id} in subject {sn} and param {c} skipped due to error: {e}, theta: {theta}')
 
             # save giftis
             for s, sn in enumerate(args.snS):
@@ -663,6 +641,21 @@ def main():
 
 if __name__ == '__main__':
     start = time.time()
-    main()
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('what', nargs='?', default=None)
+    parser.add_argument('--experiment', type=str, default='smp2')
+    parser.add_argument('--sn', type=int, default=None)
+    parser.add_argument('--snS', nargs='+', type=int, default=[102, 103, 104, 105, 106, 107, 108])
+    parser.add_argument('--atlas', type=str, default='ROI')
+    # parser.add_argument('--Hem', type=str, default=None)
+    parser.add_argument('--glm', type=int, default=12)
+    parser.add_argument('--n_jobs', type=int, default=12)
+    parser.add_argument('--ntessels', type=int, default=362, choices=[42, 162, 362, 642, 1002, 1442])
+
+    args = parser.parse_args()
+
+    main(args)
     finish = time.time()
-    print(f'Execution time: {finish - start} seconds')
+    print(f'Elapsed time: {finish - start} seconds')

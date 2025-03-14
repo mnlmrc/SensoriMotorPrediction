@@ -80,24 +80,12 @@ def exclude_overlapping_voxels(amap, exclude='all', exclude_thres=0.9):
     return amap
 
 
-def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('what', nargs='?', default='make_rois')
-    parser.add_argument('--experiment', type=str, default='smp2')
-    parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--atlas', type=str, default='ROI')
-    parser.add_argument('--glm', type=int, default=12)
-
-    args = parser.parse_args()
+def main(args):
 
     atlas, _ = am.get_atlas('fs32k')
+    Hem = ['L', 'R']
 
     if args.what=='make_rois':
-
-        Hem = ['L', 'R']
-
-        roiMasks = []
         for h, H in enumerate(Hem):
 
             g_atlas = nb.load(os.path.join(gl.atlas_dir, f'{args.atlas}.32k.{Hem[h]}.label.gii'))
@@ -135,6 +123,8 @@ def main():
                                                              (2, 3), (2, 4), (2, 5), (2, 7),
                                                              (3, 4), (3, 5),
                                                              (7, 8)])
+
+            roiMasks = []
             for amap_tmp in amap:
                 print(f'saving ROI {amap_tmp.name}, {H}')
                 mask_out = amap_tmp.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
@@ -143,13 +133,10 @@ def main():
                     roiMasks.append(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
                                                                f'{args.atlas}.{H}.{amap_tmp.name}.nii'))
 
-        am.parcel_combine(roiMasks,os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
-                                                               f'{args.atlas}.nii'))
+            am.parcel_combine(roiMasks,os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
+                                                                   f'{args.atlas}.nii'))
 
     if args.what=='make_hemispheres':
-
-        Hem = ['L', 'R']
-
         amap = []
         for h, H in enumerate(Hem):
             atlas_hem = atlas.get_hemisphere(h)
@@ -177,12 +164,45 @@ def main():
             mask_out = amap_tmp.save_as_image(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
                                                            f'Hem.{H}.nii'))
 
+    if args.what == 'make_rois_all':
+        for sn in args.snS:
+            args = argparse.Namespace(
+                what='make_rois',
+                experiment=args.experiment,
+                sn=sn,
+                glm=args.glm,
+                atlas=args.atlas,
 
+            )
+            main(args)
+    if args.what == 'make_hemispheres_all':
+        for sn in args.snS:
+            args = argparse.Namespace(
+                what='make_hemispheres',
+                experiment=args.experiment,
+                sn=sn,
+                glm=args.glm,
+                atlas=args.atlas,
+
+            )
+            main(args)
 
 
 if __name__ == '__main__':
     start = time.time()
-    main()
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('what', nargs='?', default=None)
+    parser.add_argument('--experiment', type=str, default='smp2')
+    parser.add_argument('--sn', type=int, default=None)
+    parser.add_argument('--atlas', type=str, default='ROI')
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108])
+    parser.add_argument('--glm', type=int, default=12)
+
+    args = parser.parse_args()
+
+    main(args)
     finish = time.time()
 
     print(f'Execution time:{finish-start} s')
