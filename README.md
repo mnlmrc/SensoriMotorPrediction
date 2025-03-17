@@ -9,10 +9,16 @@ Dataframe toolbox (https://github.com/jdiedrichsen/dataframe)
 
 # **fMRI data**
 
-The raw fMRI data are stored following the Brain Imaging Data Structure (BIDS). 
+The raw fMRI data are stored following the Brain Imaging Data Structure (BIDS). Participants information are stored in the participants.tsv file. 
 
 ## Preprocessing
 ### Structural images
+
+- Unzip T1w images
+
+```
+smp2_anat('BIDS:move_unzip_raw_anat', 'sn', sn)
+```
 
 First-level GLM: ...
 
