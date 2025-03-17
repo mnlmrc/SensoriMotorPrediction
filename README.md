@@ -7,7 +7,7 @@ SPM12 (https://www.fil.ion.ucl.ac.uk/spm)
 Dataframe toolbox (https://github.com/jdiedrichsen/dataframe)
 ...
 
-**fMRI data**
+# **fMRI data**
 
 The fMRI data are stored following the Brain Imaging Data Structure (BIDS). 
 
