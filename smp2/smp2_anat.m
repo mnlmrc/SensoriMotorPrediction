@@ -217,7 +217,7 @@ function varargout = smp2_anat(what, varargin)
         
             % recon all inputs
             fs_dir = fullfile(baseDir,freesurferDir, subj_id);
-            
+       
             if ~exist(fs_dir,"dir")
                 mkdir(fs_dir);
             end
@@ -236,6 +236,12 @@ function varargout = smp2_anat(what, varargin)
             res  = 32;          % resolution of the atlas. options are: 32, 164
 
             fsDir = fullfile(baseDir, 'surfaceFreesurfer', subj_id);
+            
+            outDir = fullfile(baseDir,wbDir, subj_id);
+       
+            if ~exist(outDir,"dir")
+                mkdir(outDir);
+            end
 
             % dircheck(outDir);
             surf_resliceFS2WB(subj_id, fsDir, fullfile(baseDir, wbDir), 'resolution', sprintf('%dk', res))

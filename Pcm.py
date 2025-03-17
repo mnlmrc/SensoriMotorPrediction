@@ -41,12 +41,11 @@ def make_execution_models():
     # v_cert = C @ np.array([0.1875, .25, 0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
     # v_surprise = C @ -np.log2(np.array([.25, .5, .75, 1, 1, .75, .5, .25]))  # with Shannon information
 
-    Ac = np.zeros((3, 8, 2))
+    Ac = np.zeros((3, 8, 3))
     Ac[0, :, 0] = v_fingerID
     Ac[1, :, 1] = v_cue
-    # Ac[2, :, 2] = v_cert
-    # Ac[3, :, 3] = v_surprise
-    Ac[2, :, 0] = v_cue
+    Ac[2, :, 2] = v_cue
+    Ac[0, :, 2] = v_fingerID
 
     G_fingerID = np.outer(v_fingerID, v_fingerID)
     G_cue = np.outer(v_cue, v_cue)
@@ -519,7 +518,7 @@ def main(args):
         for s, sn in enumerate(args.snS):
             force = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
                                              f'{args.experiment}_{sn}_force_single_trial.tsv'), sep='\t')
-            # force = force[force['GoNogo'] == 'go']  # select only go trial
+            force = force[force['GoNogo'] == 'go'] if 'GoNogo' in force else force # select only go trial
             force['cue'] = force['cue'].map(gl.cue_mapping)
             force['stimFinger'] = force['stimFinger'].map(gl.stimFinger_mapping)
             force = force.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
