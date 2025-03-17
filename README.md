@@ -14,11 +14,7 @@ The raw fMRI data are stored following the Brain Imaging Data Structure (BIDS). 
 ## Preprocessing
 ### Structural images
 
-- Unzip T1w images
-
-```
-smp2_anat('BIDS:move_unzip_raw_anat', 'sn', sn)
-```
+- Unzip T1w images: ` smp2_anat('BIDS:move_unzip_raw_anat', 'sn', sn) `
 
 First-level GLM: ...
 
