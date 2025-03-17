@@ -9,10 +9,13 @@ Dataframe toolbox (https://github.com/jdiedrichsen/dataframe)
 
 # **fMRI data**
 
-The fMRI data are stored following the Brain Imaging Data Structure (BIDS). 
+The raw fMRI data are stored following the Brain Imaging Data Structure (BIDS). 
 
-Preprocessing: ...
+## Preprocessing
+### Structural images
 
 First-level GLM: ...
 
-ROI definition
+ROI definition: ...
+
+Time
