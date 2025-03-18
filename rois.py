@@ -134,7 +134,7 @@ def main(args):
                                                                f'{args.atlas}.{H}.{amap_tmp.name}.nii'))
 
             am.parcel_combine(roiMasks,os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}',
-                                                                   f'{args.atlas}.nii'))
+                                                                   f'{args.atlas}.{H}.nii'))
 
     if args.what=='make_hemispheres':
         amap = []
@@ -197,7 +197,7 @@ if __name__ == '__main__':
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
     parser.add_argument('--atlas', type=str, default='ROI')
-    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108])
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 111, 112])
     parser.add_argument('--glm', type=int, default=12)
 
     args = parser.parse_args()

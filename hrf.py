@@ -87,7 +87,7 @@ def main(args):
 
     if args.what == 'save_timeseries_parcel':
 
-        ydata = ['y_hat', 'y_adj', 'y_filt']
+        ydata = ['y_raw','y_hat', 'y_adj', 'y_filt']
 
         for y in ydata:
             for i, (s, H) in enumerate(zip(struct, Hem)):
@@ -208,7 +208,7 @@ if __name__ == '__main__':
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112])
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 111, 112])
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--glm', type=int, default=12)
     parser.add_argument('--GoNogo', type=str, default=None)
