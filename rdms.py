@@ -66,11 +66,12 @@ def G_to_cosine(G):
 
 
 def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
-    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
-                                       f'subj{sn}_reginfo.tsv'), sep="\t")
+    # reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
+    #                                    f'subj{sn}_reginfo.tsv'), sep="\t")
 
-    beta_img = nt.volume_from_cifti(nb.load(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
-                      f'beta.dscalar.nii')), struct_names = ['CortexLeft', 'CortexRight'])
+    cifti_img = nb.load(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
+                      f'beta.dscalar.nii'))
+    beta_img = nt.volume_from_cifti(cifti_img, struct_names = ['CortexLeft', 'CortexRight'])
     mask = nb.load(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}', f'ROI.{Hem}.{roi}.nii'))
     coords = nt.get_mask_coords(mask)
 
@@ -84,16 +85,19 @@ def calc_rdm_roi(experiment=None, sn=None, Hem=None, roi=None, glm=None):
     betas_prewhitened = np.array(betas_prewhitened)
     betas_prewhitened = betas_prewhitened[:, ~np.all(np.isnan(betas_prewhitened), axis=0)]
 
+    reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
+    conds = [r[0] for r in reginfo]
+    run = [r[1] for r in reginfo]
     dataset = rsa.data.Dataset(
         betas_prewhitened,
         channel_descriptors={
             'channel': np.array(['vox_' + str(x) for x in range(betas_prewhitened.shape[-1])])},
-        obs_descriptors={'conds': reginfo.name.str.replace(" ", ""),
-                         'run': reginfo.run},
+        obs_descriptors={'conds': conds,
+                         'run': run},
+        descriptors={'ROI': roi, 'Hem': Hem, 'sn': sn}
     )
     # remove_mean removes the mean ACROSS VOXELS for each condition
     rdm = rsa.rdm.calc_rdm(dataset, method='crossnobis', descriptor='conds', cv_descriptor='run', remove_mean=False)
-    rdm.rdm_descriptors = {'roi': [roi], 'hem': [Hem], 'index': [0]}
     rdm.reorder(rdm_index[f'glm{glm}'])
 
     return rdm
@@ -144,22 +148,15 @@ def calc_rdm_emg(experiment=None, sn=None):
     return rdms
 
 
-def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('what', nargs='?', default=None)
-    parser.add_argument('--experiment', type=str, default='smp2')
-    parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--glm', type=int, default=12)
-
-    args = parser.parse_args()
+def main(args):
 
     if args.what == 'save_rois_rdms':
         Hem = ['L', 'R']
         rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        rdms = []
         for H in Hem:
             for roi in rois:
-                print(f'Hemisphere: {H}, region:{roi}')
+                print(f'Participant {sn}, Hemisphere: {H}, region:{roi}')
                 rdm = calc_rdm_roi(
                     experiment=args.experiment,
                     sn=args.sn,
@@ -167,10 +164,34 @@ def main():
                     roi=roi,
                     glm=args.glm
                 )
-                path = os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{args.sn}',
-                                      f'glm{args.glm}.{H}.{roi}.hdf5')
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                rdm.save(path, overwrite=True, file_type='hdf5')
+                rdms.append(rdm)
+        path = os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{args.sn}',
+                              f'glm{args.glm}.ROI.hdf5')
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        for rdm in rdms:
+            rdm.descriptors['noise'] = None # kill noise to allow concatenation
+        rdms = rsa.rdm.concat(rdms)
+        rdms.save(path, overwrite=True, file_type='hdf5')
+
+    if args.what == 'save_rois_rdms_all':
+        for sn in args.snS:
+            args = argparse.Namespace(
+                what='save_rois_rdms',
+                experiment=args.experiment,
+                sn=sn,
+                glm=args.glm
+            )
+            main(args)
+
+    if args.what == 'save_rois_rdms_avg':
+        rdms = []
+        for sn in args.snS:
+            rdms_subj = rsa.rdm.load_rdm(
+                os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'subj{sn}', f'glm{args.glm}.ROI.hdf5'))
+            rdms.append(rdms_subj)
+        rdms = rsa.rdm.concat(rdms)
+        rdms.save(os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'glm{args.glm}.ROI.hdf5'),
+                  overwrite=True, file_type='hdf5')
 
     if args.what == 'save_rdm_emg':
         rdms = calc_rdm_emg(
@@ -184,8 +205,18 @@ def main():
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('what', nargs='?', default=None)
+    parser.add_argument('--experiment', type=str, default='smp2')
+    parser.add_argument('--sn', type=int, default=None)
+    parser.add_argument('--glm', type=int, default=12)
+    parser.add_argument('--snS', type=int, default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112])
+
+    args = parser.parse_args()
+
     rdm_index = {
         'glm12': [0, 4, 7, 10, 2, 5, 8, 11, 3, 1, 6, 9, 12],
     }
 
-    main()
+    main(args)

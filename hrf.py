@@ -128,12 +128,14 @@ def main(args):
         dat = dat[dat['GoNogo'] == args.GoNogo]
         pinfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'participants.tsv'), sep='\t')
         runs = pinfo[pinfo['sn'] == args.sn].FuncRuns.reset_index(drop=True)[0].split('.')
-        for i, BN in enumerate(dat['BN'].unique()):
+        i = 0
+        for BN in dat['BN'].unique():
             if str(BN) in runs:
                 if i == 0:
                     at = (dat[dat['BN']==BN].startTRReal).tolist()
                 else:
                     at.extend((dat[dat['BN']==BN].startTRReal + int(nVols * i)).tolist())
+                i =+ 1
             else:
                 print(f'excluding block {BN}')
 
@@ -195,9 +197,44 @@ def main(args):
                 sn=sn,
                 glm=args.glm,
                 GoNogo=args.GoNogo,
+                atlas=args.atlas
 
             )
             main(args)
+
+    if args.what == 'save_timeseries_cut_avg':
+        dataGo, dataNogo = [], []
+        for sn in args.snS:
+            print(f'Processing participant {sn}')
+            y_adj_go = nb.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
+                                            f'{args.atlas}.y_adj.go.cut.ptseries.nii'))
+            y_adj_nogo = nb.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
+                                            f'{args.atlas}.y_adj.nogo.cut.ptseries.nii'))
+
+            dataGo.append(y_adj_go.dataobj)
+            dataNogo.append(y_adj_nogo.dataobj)
+
+            parcel_axis_tmp = y_adj_go.header.get_axis(1)
+            parcel_axis_tmp.affine = None # remove affine to allow concatenation
+
+            if args.snS.index(sn) == 0:
+                parcel_axis = parcel_axis_tmp
+                row_axis = y_adj_go.header.get_axis(0)
+            else:
+                parcel_axis += parcel_axis_tmp
+
+        dataGo = np.hstack(dataGo)
+        dataNogo = np.hstack(dataNogo)
+
+        header = nb.Cifti2Header.from_axes((row_axis, parcel_axis))
+        cifti_parcel_go = nb.Cifti2Image(dataGo, header=header)
+        nb.save(cifti_parcel_go, os.path.join(gl.baseDir, args.experiment,
+                                           f'{gl.glmDir}{args.glm}',
+                                           f'{args.atlas}.y_adj.go.cut.ptseries.nii'))
+        cifti_parcel_nogo = nb.Cifti2Image(dataNogo, header=header)
+        nb.save(cifti_parcel_nogo, os.path.join(gl.baseDir, args.experiment,
+                                           f'{gl.glmDir}{args.glm}',
+                                           f'{args.atlas}.y_adj.nogo.cut.ptseries.nii'))
 
 
 if __name__ == '__main__':
@@ -208,7 +245,7 @@ if __name__ == '__main__':
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 111, 112])
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112], type=int)
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--glm', type=int, default=12)
     parser.add_argument('--GoNogo', type=str, default=None)

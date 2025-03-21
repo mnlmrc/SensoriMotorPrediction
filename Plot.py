@@ -7,19 +7,20 @@ import surfAnalysisPy as surf
 import os
 import globals as gl
 
-def plot_flatmap_cortical_activation(img):
-    fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(5, 6))
+def plot_flatmap_cortical_activation(img, vmin=-20, vmax=20, xlim=None, ylim=None, figsize=(5, 6)):
 
-    vmin, vmax = -20, 20
+    if xlim is None:
+        xlim = {
+            'L': [-80, 120],
+            'R': [-120, 80],
+        }
+    if ylim is None:
+        ylim = {
+            'L': [-50, 150],
+            'R': [-60, 140]
+        }
 
-    xlim = {
-        'L': [-80, 120],
-        'R': [-120, 80],
-    }
-    ylim = {
-        'L': [-50, 150],
-        'R': [-60, 140]
-    }
+    fig, axs = plt.subplots(nrows=2, ncols=2, figsize=figsize)
 
     cifti_img = nb.load(img)
     column_names = cifti_img.header.get_axis(0).name

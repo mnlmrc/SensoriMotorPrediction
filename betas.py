@@ -86,10 +86,10 @@ def get_roi_contrasts(experiment=None, sn=None, Hem=None, roi=None, glm=None):
 
 
 def main(args=None):
-
+    Hem = ['L', 'R']
+    rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+    struct = ['CortexLeft', 'CortexRight']
     if args.what == 'save_rois_contrasts':
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
         for H in Hem:
             for roi in rois:
                 print(f'Hemisphere: {H}, region:{roi}')
@@ -103,8 +103,6 @@ def main(args=None):
                 np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                      f'ROI.{H}.{roi}.con.npy'), contrasts)
     if args.what == 'save_rois_contrasts_avg':
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
         dict_con = {
             'condition': [],
             'sn': [],
@@ -134,8 +132,6 @@ def main(args=None):
         df_con = pd.DataFrame(dict_con)
         df_con.to_csv(os.path.join(gl.baseDir, args.experiment, f'ROI.con.avg.tsv'), sep='\t', index=False)
     if args.what == 'save_rois_betas':
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
         for H in Hem:
             for roi in rois:
                 print(f'Hemisphere: {H}, region:{roi}')
@@ -149,8 +145,6 @@ def main(args=None):
                 np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                      f'ROI.{H}.{roi}.beta.npy'), betas)
     if args.what == 'save_rois_ResMS':
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
         for H in Hem:
             for roi in rois:
                 print(f'Hemisphere: {H}, region:{roi}')
@@ -169,19 +163,20 @@ def main(args=None):
 
         for i, (s, H) in enumerate(zip(struct, Hem)):
             mask = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'Hem.{H}.nii')
-            coords = nt.get_mask_coords(mask)
             atlas = am.AtlasVolumetric(H, mask, structure=s)
 
             if i == 0:
                 brain_axis = atlas.get_brain_model_axis()
                 coords = nt.get_mask_coords(mask)
             else:
-                brain_axis += brain_axis
+                brain_axis += atlas.get_brain_model_axis()
                 coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
 
         betas, _, info = SPM.get_betas(coords)
 
-        row_axis = nb.cifti2.ScalarAxis(1, 1, betas.shape[0])
+        reg_name = np.array([n.split('*')[0] for n in info['reg_name']])
+
+        row_axis = nb.cifti2.ScalarAxis(reg_name.astype(str) + '.' + info['run_number'].astype(str))
 
         save_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
 
@@ -198,14 +193,13 @@ def main(args=None):
 
         for i, (s, H) in enumerate(zip(struct, Hem)):
             mask = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'Hem.{H}.nii')
-            coords = nt.get_mask_coords(mask)
             atlas = am.AtlasVolumetric(H, mask, structure=s)
 
             if i == 0:
                 brain_axis = atlas.get_brain_model_axis()
                 coords = nt.get_mask_coords(mask)
             else:
-                brain_axis += brain_axis
+                brain_axis += atlas.get_brain_model_axis()
                 coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
 
         res, _, info = SPM.get_residuals(coords)
@@ -249,7 +243,7 @@ if __name__ == "__main__":
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108])
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112])
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--roi', type=str, default=None)
     parser.add_argument('--glm', type=int, default=12)

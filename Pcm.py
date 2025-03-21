@@ -84,12 +84,12 @@ def make_execution_models_emg():
 
     M = []
     M.append(pcm.FixedModel('null', np.zeros((8, 8))))
-    M.append(pcm.FixedModel('stimFinger', G_fingerID))
+    M.append(pcm.FixedModel('finger', G_fingerID))
     M.append(pcm.FixedModel('cue', G_cue))
-    M.append(pcm.FixedModel('ind', np.eye(8)))
-    M.append(pcm.ComponentModel('stimFinger+cue (component)',
+    M.append(pcm.FixedModel('indipendent', np.eye(8)))
+    M.append(pcm.ComponentModel('finger+cue (component)',
                                 np.array([G_fingerID, G_cue, ])))
-    M.append(pcm.FeatureModel('stimFinger+cue (feature)', Ac))
+    M.append(pcm.FeatureModel('finger+cue (feature)', Ac))
     M.append(pcm.FreeModel('ceil', 8))  # Noise ceiling model
 
     return M
@@ -106,9 +106,9 @@ def make_planning_models():
     M = []
     M.append(pcm.FixedModel('null', np.zeros((5, 5))))  # 0
     M.append(pcm.FixedModel('cue', G_cue_plan))  # 1
-    M.append(pcm.FixedModel('cert', G_cert_plan))  # 2
-    M.append(pcm.FixedModel('eye', np.eye(5)))  # 3
-    M.append(pcm.ComponentModel('cue+cert', np.array([G_cue_plan, G_cert_plan])))  # 4
+    M.append(pcm.FixedModel('certainty', G_cert_plan))  # 2
+    M.append(pcm.FixedModel('independent', np.eye(5)))  # 3
+    M.append(pcm.ComponentModel('cue+certainty', np.array([G_cue_plan, G_cert_plan])))  # 4
     M.append(pcm.FreeModel('ceil', 5))  # 5
 
     return M
@@ -153,8 +153,8 @@ def make_individ_dataset(subatlas=None, args=None, sn=None, Hem=None):
     idx = cond_vec.isin(cond_map[args.what])
 
     # Create dataset
-    obs_des = {'cond_vec': cond_vec[idx].to_numpy(),
-               'part_vec': part_vec[idx].to_numpy()}
+    obs_des = {'cond_vec': cond_vec[idx],
+               'part_vec': part_vec[idx]}
     Dataset = pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des)
 
     return Dataset
@@ -564,6 +564,9 @@ def main(args):
     if args.what == 'save_rois_planning':
 
         M = make_planning_models()
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                              f'M.plan.glm{args.glm}.pkl'), "wb")
+        pickle.dump(M, f)
 
         Hem = ['L', 'R']
         rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
@@ -575,21 +578,26 @@ def main(args):
                 G_obs = np.zeros((N, 5, 5))
                 Y = list()
                 for s, sn in enumerate(args.snS):
-                    reginfo = pd.read_csv(
-                        os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
-                                     f'subj{sn}_reginfo.tsv'), sep='\t')
+                    glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}')
+                    cifti_img = nb.load(os.path.join(glm_path, f'beta.dscalar.nii'))
+                    beta_img = nt.volume_from_cifti(cifti_img, struct_names=['CortexLeft', 'CortexRight'])
 
-                    betas = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                                 f'subj{sn}', f'ROI.{H}.{roi}.beta.npy'))
-                    res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                               f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
+                    mask = nb.load(os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{sn}', f'ROI.{H}.{roi}.nii'))
+                    coords = nt.get_mask_coords(mask)
+
+                    betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
+
+                    res_img = nb.load(os.path.join(glm_path, 'ResMS.nii'))
+                    res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
 
                     betas_prewhitened = betas / np.sqrt(res)
+                    betas_prewhitened = betas_prewhitened[:, np.all(~np.isnan(betas_prewhitened), axis=0)]
 
-                    cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
-                    part_vec = reginfo.run
+                    reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
+                    cond_vec = np.array([gl.regressor_mapping[r[0]] for r in reginfo])
+                    part_vec = np.array([int(r[1]) for r in reginfo])
 
-                    idx = cond_vec.isin([0, 1, 2, 3, 4])
+                    idx = np.isin(cond_vec, [0, 1, 2, 3, 4])
 
                     obs_des = {'cond_vec': cond_vec[idx],
                                'part_vec': part_vec[idx]}
@@ -601,8 +609,7 @@ def main(args):
                                                      X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
                 T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-                T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True,
-                                                              fixed_effect='block')
+                T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
                 T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
                 T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
@@ -618,24 +625,24 @@ def main(args):
 
                 np.save(os.path.join(path, f'G_obs.plan.glm{args.glm}.{H}.{roi}.npy'), G_obs)
 
-                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                       f'theta_in.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                    pickle.dump(theta_in, f)
+                f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                      f'theta_in.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb')
+                pickle.dump(theta_in, f)
 
-                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                       f'theta_cv.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                    pickle.dump(theta_cv, f)
+                f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                       f'theta_cv.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb')
+                pickle.dump(theta_cv, f)
 
-                with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                       f'theta_gr.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
-                    pickle.dump(theta_gr, f)
+                f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                       f'theta_gr.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb')
+                pickle.dump(theta_gr, f)
 
     if args.what == 'save_rois_execution':
 
         M = make_execution_models()
-        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                               f'M.exec.glm{args.glm}.pkl'), "wb") as f:
-            pickle.dump(M, f)
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                               f'M.exec.glm{args.glm}.pkl'), "wb")
+        pickle.dump(M, f)
 
         Hem = ['L', 'R']
         rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
@@ -647,21 +654,27 @@ def main(args):
                 G_obs = np.zeros((N, 8, 8))
                 Y = list()
                 for s, sn in enumerate(args.snS):
-                    reginfo = pd.read_csv(
-                        os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{sn}',
-                                     f'subj{sn}_reginfo.tsv'), sep='\t')
+                    glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}')
+                    cifti_img = nb.load(os.path.join(glm_path, f'beta.dscalar.nii'))
+                    beta_img = nt.volume_from_cifti(cifti_img, struct_names=['CortexLeft', 'CortexRight'])
 
-                    betas = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                                 f'subj{sn}', f'ROI.{H}.{roi}.beta.npy'))
-                    res = np.load(os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}',
-                                               f'subj{sn}', f'ROI.{H}.{roi}.res.npy'))
+                    mask = nb.load(
+                        os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{sn}', f'ROI.{H}.{roi}.nii'))
+                    coords = nt.get_mask_coords(mask)
+
+                    betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
+
+                    res_img = nb.load(os.path.join(glm_path, 'ResMS.nii'))
+                    res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
 
                     betas_prewhitened = betas / np.sqrt(res)
+                    betas_prewhitened = betas_prewhitened[:, np.all(~np.isnan(betas_prewhitened), axis=0)]
 
-                    cond_vec = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
-                    part_vec = reginfo.run
+                    reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
+                    cond_vec = np.array([gl.regressor_mapping[r[0]] for r in reginfo])
+                    part_vec = np.array([int(r[1]) for r in reginfo])
 
-                    idx = cond_vec.isin([5, 6, 7, 8, 9, 10, 11, 12])
+                    idx = np.isin(cond_vec, [5, 6, 7, 8, 9, 10, 11, 12])
 
                     obs_des = {'cond_vec': cond_vec[idx],
                                'part_vec': part_vec[idx]}
