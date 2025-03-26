@@ -24,197 +24,47 @@ def hp_filter(data, n_ord=None, cutoff=None, fsample=None):
     return filtered_data
 
 
-def apply_map_dictionary():
+def corr_xval(X, Y, cond_vec, part_vec):
 
-    pass
+    cond_vec = cond_vec - cond_vec.min()
+    n_cond = len(np.unique(cond_vec))
 
+    part = np.unique(part_vec)
+    n_part = len(part)
 
+    on_diag, off_diag = [], []
+    for i in range(n_part):
+        for j in range(i, n_part):
+            indx_i = part_vec == part[i]
+            cond_i = cond_vec[indx_i]
+            Xi = X[indx_i][np.argsort(cond_i)]
+            Yi = Y[indx_i][np.argsort(cond_i)]
 
-# def calc_avg_timec(experiment, session, participant_id):
-#     blocks = get_block_mov(experiment, session, participant_id)
-#     path = get_path_mov(experiment, session, participant_id)
-#
-#     dat = load_dat(experiment, session, participant_id)
-#     dat = dat[dat.stimFinger != 99999]
-#     dat = dat[(dat.BN.isin(blocks) | dat.BN.isin(np.array(list(map(int, blocks)))))]
-#
-#     sn = int(''.join([c for c in participant_id if c.isdigit()]))
-#
-#     npz = np.load(os.path.join(path, f'{experiment}_{sn}.npz'))
-#     force = npz['data_array']
-#
-#     force_avg = np.zeros((len(dat.cue.unique()), len(dat.stimFinger.unique()), force.shape[-2], force.shape[-1]))
-#     for c, cue in enumerate(dat.cue.unique()):
-#         for sf, stimF in enumerate(dat.stimFinger.unique()):
-#             force_avg[c, sf] = force[(dat.cue == cue) & (dat.stimFinger == stimF)].mean(axis=0, keepdims=True)
-#
-#     return force_avg
+            indx_j = part_vec == part[j]
+            cond_j = cond_vec[indx_j]
+            Xj = X[indx_j][np.argsort(cond_j)]
+            Yj = Y[indx_j][np.argsort(cond_j)]
 
+            Rii_xy = np.corrcoef(Xi, Yi)
+            Rij_xy = np.corrcoef(Xi, Yj)
+            Rij_xx = np.corrcoef(Xi, Xj)
+            Rij_yy = np.corrcoef(Yi, Yj)
 
-# force = calc_avg_timec('smp2', 'pilot', 'subj100')
+            # compute pearson
+            if i==j:
+                on_diag.append(Rii_xy)
+            else:
+                R = Rij_xy.copy()
+                R[:n_cond, :n_cond] = Rij_xx[:n_cond, n_cond:]
+                R[n_cond:, n_cond:] = Rij_yy[:n_cond, n_cond:]
+                off_diag.append(R)
 
-# def detect_response_latency(data, threshold=None, fsample=None):
-#     return np.where(data > threshold)[0][0] / fsample
-#
-#
-# def sort_by_condition(Y, Z):
-#     meas = Y.measurements
-#
-#     n_cond = Z.shape[1]
-#
-#     Sorted = list()
-#     for cond in range(n_cond):
-#         Sorted.append(meas[Z[:, cond]])
-#
-#     return Sorted
+    return np.array(on_diag).mean(axis=0), np.array(off_diag).mean(axis=0)
 
+    return np.array(R).mean(axis=0)
+            # Xi_zm = Xi - Xi.mean(axis=1, keepdims=True)
+            # Yi_zm = Yi - Yi.mean(axis=1, keepdims=True)
+            # numerator = np.sum(Xi_zm * Yi_zm, axis=1)
+            # denominator = np.linalg.norm(Xi_zm, axis=1) * np.linalg.norm(Yi_zm, axis=1)
+            # r = numerator / denominator
 
-# def bin_traces(Y, wins, fsample=None, offset=None):
-#     wins = [(int((offset + win[0]) * fsample), int((offset + win[1]) * fsample)) for win in wins]
-#     bins = np.array([Y[..., win[0]:win[1]].mean(axis=-1) for win in wins]).transpose((1, 2, 0))
-#
-#     return bins
-#
-#
-# import numpy as np
-
-
-# def av_within_participant(Y, Z, cond_name=None):
-#     n_cond = Z.shape[1]
-#     if Y.ndim == 3:
-#         N, n_channels, n_timepoints = Y.shape
-#         M = np.zeros((n_cond, n_channels, n_timepoints))
-#         SD = np.zeros((n_cond, n_channels, n_timepoints))
-#     elif Y.ndim == 2:
-#         N, n_channels = Y.shape
-#         M = np.zeros((n_cond, n_channels))
-#         SD = np.zeros((n_cond, n_channels))
-#     else:
-#         M = None
-#         SD = None
-#
-#     for cond in range(n_cond):
-#         M[cond, ...] = Y[Z[:, cond]].mean(axis=0)
-#         SD[cond, ...] = Y[Z[:, cond]].std(axis=0)
-#
-#     if cond_name is None:
-#         return M, SD
-#     else:
-#         return M, SD, cond_name
-
-
-# def av_across_participants(channels, data):
-#     ch_dict = {ch: [] for ch in channels}
-#     N = len(data)
-#
-#     for p_data in data:
-#         Z = indicator(p_data.obs_descriptors['cond_vec']).astype(bool)
-#         M, _ = av_within_participant(p_data.measurements, Z)
-#
-#         for ch in channels:
-#             if ch in p_data.channel_descriptors['channels']:
-#                 ch_index = p_data.channel_descriptors['channels'].index(ch)
-#                 ch_dict[ch].append(M[:, ch_index])
-#
-#     av, sd, sem = {}, {}, {}
-#     for ch in channels:
-#         ch_data = np.array(ch_dict[ch])
-#         ch_dict[ch] = ch_data
-#
-#         if ch_data.ndim == 3:
-#             av[ch] = np.mean(ch_data, axis=0)
-#             sd[ch] = np.std(ch_data, axis=0)
-#             sem[ch] = (sd[ch] / np.sqrt(N))
-#         else:
-#             av[ch] = np.mean(ch_data, axis=0)
-#             sd[ch] = np.std(ch_data, axis=0)
-#             sem[ch] = (sd[ch] / np.sqrt(N))
-#
-#     return av, sd, sem, ch_dict
-
-
-# def split_column_df(df, new_cols, old_col):
-#     # Split the 'Combined' column into two new columns
-#     df[new_cols] = df[old_col].str.split(',', expand=True)
-#     del df[old_col]
-#     return df
-#
-#
-# def remap_chordID(df):
-#     remapped_dataframes = {}
-#     mapping_dict = {93: 0, 12: 25, 44: 50, 21: 75, 39: 100}
-#
-#     # Read the txt file into a dataframe
-#     try:
-#         # df = load_dat(experiment, participant_id)
-#         # Remap the 'chordID' column
-#         df['cues'] = df['chordID'].map(mapping_dict)
-#         remapped_dataframes = df
-#     except Exception as e:
-#         print(f"An error occurred")
-#
-#     return remapped_dataframes
-#
-#
-# def f_str_latex(txt):
-#     parts = txt.split('_')
-#     if len(parts) == 2:
-#         return f"${parts[0]}_{{{parts[1]}}}$"
-#     else:
-#         return txt
-#
-#
-# def sort_cues(cue_list):
-#     # Convert to integers (or floats) by removing the '%' sign and sorting
-#     sorted_cues = sorted([int(cue.strip('%')) for cue in cue_list])
-#
-#     # Convert back to string with '%' sign
-#     sorted_cues = [f"{cue}%" for cue in sorted_cues]
-#
-#     return sorted_cues
-#
-#
-# def moving_average(signal, window_size, axis=-1):
-#     """
-#     Calculate the moving average of a signal along a specified axis and pad the result to maintain the same length.
-#
-#     Parameters:
-#     signal (array-like): The input signal.
-#     window_size (int): The size of the moving window.
-#     axis (int): The axis along which to calculate the moving average.
-#
-#     Returns:
-#     array: The moving average of the signal with the same length as the original along the specified axis.
-#     """
-#     signal = np.asarray(signal)
-#
-#     # Calculate the cumulative sum along the specified axis
-#     cumsum = np.cumsum(np.insert(signal, 0, 0, axis=axis), axis=axis)
-#
-#     # Compute the moving average using slicing
-#     ma = (cumsum.take(indices=range(window_size, cumsum.shape[axis]), axis=axis) -
-#           cumsum.take(indices=range(cumsum.shape[axis] - window_size), axis=axis)) / window_size
-#
-#     # # Determine the padding width
-#     # pad_width = [(0, 0)] * signal.ndim
-#     # pad_size = (window_size - 1) // 2
-#     # if window_size % 2 == 0:
-#     #     pad_width[axis] = (pad_size, pad_size + 1)
-#     # else:
-#     #     pad_width[axis] = (pad_size, pad_size)
-#     #
-#     # # Pad the result to maintain the same shape as the original signal
-#     # ma_padded = np.pad(ma, pad_width, mode='constant', constant_values=np.nan)
-#
-#     return ma
-
-# def sort_key(val):
-#     num_match = re.match(r'(\d+)%', val)
-#     if num_match:
-#         return (0, int(num_match.group(1)))
-#     return (1, val.lower())
-
-
-# def pad_dict_values(d):
-#     max_length = max(len(v) for v in d.values())
-#     return {k: v + [None] * (max_length - len(v)) for k, v in d.items()}

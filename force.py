@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import globals as gl
 import time
+from util import corr_xval
 
 def load_mov(filename):
     try:
@@ -68,7 +69,7 @@ def segment_mov(experiment=None, sn=None, session=None, blocks=None, prestim=gl.
     return np.array(force), descr
 
 
-def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=(.2, .4)):
+def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1.5, 0), (.2, .4), ]):
     ch_idx = [col in gl.channels['mov'] for col in gl.col_mov[experiment]]
 
     dat = pd.read_csv(os.path.join(gl.baseDir, experiment, session, f'subj{sn}', f'{experiment}_{sn}.dat'),
@@ -77,16 +78,17 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=(.2,
     force_dict = {
         'BN': [],
         'TN': [],
-        'thumb': [],
-        'index': [],
-        'middle': [],
-        'ring': [],
-        'pinkie': [],
         'stimFinger': [],
         'cue': [],
-        # 'GoNogo': [],
-        # 'RT': []
     }
+    fingers = ['thumb', 'index', 'middle', 'ring', 'pinkie']
+    for i in range(len(win)):
+        for f in fingers:
+            force_dict[f'{f}{i}'] = []
+
+    if 'GoNogo' in dat:
+        force_dict['GoNogo'] = []
+
     for bl in blocks:
 
         dat_tmp = dat[dat['BN'] == int(bl)]
@@ -105,21 +107,19 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=(.2,
         assert(len(stimOnset) == len(dat_tmp))
 
         for ons, onset in enumerate(stimOnset):
+            for i, w in enumerate(win):
+                start = onset + int(w[0] * gl.fsample_mov)
+                end = onset + int(w[1] * gl.fsample_mov)
+                force_tmp = mov[start:end, ch_idx].mean(axis=0)
 
-            force_tmp = mov[onset + int(win[0] * gl.fsample_mov):
-                                           onset + int(win[1] * gl.fsample_mov), ch_idx].mean(axis=0)
+                for j, f in enumerate(fingers):
+                    force_dict[f'{f}{i}'].append(force_tmp[j])
 
-            force_dict['thumb'].append(force_tmp[0])
-            force_dict['index'].append(force_tmp[1])
-            force_dict['middle'].append(force_tmp[2])
-            force_dict['ring'].append(force_tmp[3])
-            force_dict['pinkie'].append(force_tmp[4])
             force_dict['stimFinger'].append(dat_tmp.iloc[ons]['stimFinger'])
-            # force_dict['RT'].append(dat_tmp.iloc[ons]['RT'])
             force_dict['cue'].append(dat_tmp.iloc[ons]['cue'])
-            # force_dict['GoNogo'].append(dat_tmp.iloc[ons]['GoNogo'])
             force_dict['BN'].append(dat_tmp.iloc[ons]['BN'])
             force_dict['TN'].append(dat_tmp.iloc[ons]['TN'])
+            force_dict['GoNogo'].append(dat_tmp.iloc[ons]['GoNogo'])
 
     force_df = pd.DataFrame(force_dict)
 
@@ -221,6 +221,31 @@ def main(args):
                 session=args.session,
             )
             main(args)
+    if args.what == 'corr_xval':
+        within_block, between_block = [], []
+        for sn in args.snS:
+            behav_path = os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}')
+            force = pd.read_csv(os.path.join(behav_path, f'{args.experiment}_{sn}_force_single_trial.tsv'), sep='\t')
+            force = force[force['GoNogo'] == 'go']
+            force = force.groupby(['BN', 'cue', 'stimFinger', ]).mean(numeric_only=True).reset_index()
+            force['cue'] = force['cue'].map(gl.cue_mapping)
+            force['stimFinger'] = force['stimFinger'].map(gl.stimFinger_mapping)
+            force['cue,stimFinger'] = force['cue'] + ',' + force['stimFinger']
+            force['cond_vec'] = force['cue,stimFinger'].map(gl.regressor_mapping)
+            X = force[['thumb0', 'index0', 'middle0', 'ring0', 'pinkie0']].to_numpy()
+            Y = force[['thumb1', 'index1', 'middle1', 'ring1', 'pinkie1']].to_numpy()
+            part_vec = force['BN'].to_numpy()
+            cond_vec = force['cond_vec'].to_numpy()
+
+            wb, bb = corr_xval(X, Y, cond_vec, part_vec)
+            within_block.append(wb)
+            between_block.append(bb)
+
+        within_block = np.array(within_block)
+        between_block = np.array(between_block)
+
+        np.save(os.path.join(gl.baseDir, args.experiment, gl.behavDir, 'corr_xval.plan_vs_exec.within_block.npy'), within_block)
+        np.save(os.path.join(gl.baseDir, args.experiment, gl.behavDir, 'corr_xval.plan_vs_exec.between_block.npy'), between_block)
 
 if __name__ == '__main__':
 

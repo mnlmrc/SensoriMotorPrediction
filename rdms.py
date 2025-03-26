@@ -11,29 +11,27 @@ import nitools as nt
 import rsatoolbox as rsa
 
 import PcmPy as pcm
+from rsatoolbox.inference import noise_ceiling
 
 
-def calc_G_cosine(experiment=None, sn=None, Hem=None, roi=None, glm=None):
-    reginfo = pd.read_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
-                                       f'subj{sn}_reginfo.tsv'), sep="\t")
+def D_to_rdm(D, descriptors=None, rdm_descriptors=None, pattern_descriptors=None, dissimilarity_measure=None):
 
-    betas = np.load(
-        os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}',
-                     f'ROI.{Hem}.{roi}.beta.npy'))
-    res = np.load(
-        os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}', f'ROI.{Hem}.{roi}.res.npy'))
+    if D.ndim == 2:
+        idx = np.triu_indices(G)
+        dissimilarities = G[idx]
+    if D.ndim == 3:
+        triu_rows, triu_cols = np.triu_indices(D.shape[-1], k=1)
+        dissimilarities = D[:, triu_rows, triu_cols]
+    rdm_dict = {
+        'dissimilarities': dissimilarities,
+        'descriptors': descriptors,
+        'rdm_descriptors': rdm_descriptors,
+        'pattern_descriptors': pattern_descriptors,
+        'dissimilarity_measure': dissimilarity_measure,
+    }
+    rdm = rsa.rdm.rdms_from_dict(rdm_dict)
 
-    betas_prewhitened = betas / np.sqrt(res)
-    betas_prewhitened = np.array(betas_prewhitened)
-
-    condition = reginfo.name.str.replace(" ", "").map(gl.regressor_mapping)
-
-    Z = pcm.matrix.indicator(condition)
-    G, Sig = pcm.est_G_crossval(betas_prewhitened, Z, reginfo.run)
-
-    cos = G_to_cosine(G)
-
-    return cos
+    return rdm
 
 
 def G_to_cosine(G):
@@ -149,10 +147,9 @@ def calc_rdm_emg(experiment=None, sn=None):
 
 
 def main(args):
-
+    Hem = ['L', 'R']
+    rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
     if args.what == 'save_rois_rdms':
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
         rdms = []
         for H in Hem:
             for roi in rois:
@@ -203,6 +200,72 @@ def main(args):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         rdms.save(path, overwrite=True, file_type='hdf5')
 
+    if args.what == 'xval_corr':
+
+        G_force = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'G_obs.force.plan.npy'))
+        D_force = np.zeros_like(G_force)
+        for g in range(G_force.shape[0]):
+            D_force[g] = pcm.G_to_dist(G_force[g])
+        rdm_descriptors= {'sn': args.snS}
+        pattern_descriptors= {'conds': list(gl.regressor_mapping.keys())[:5]}
+        dissimilarity_measure='Crossnobis'
+        rdms_force = D_to_rdm(D_force,
+                             rdm_descriptors=rdm_descriptors,
+                             pattern_descriptors=pattern_descriptors,
+                             dissimilarity_measure=dissimilarity_measure)
+        rdms_rois = rsa.rdm.load_rdm(os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'glm{args.glm}.{args.atlas}.hdf5',))
+        rdms_rois = rdms_rois.subsample_pattern('conds', ['0%', '25%', '50%', '75%', '100%'])
+
+        xval_corr_dict = {
+            'Hem': [],
+            'roi': [],
+            'sn': [],
+            'corr': [],
+            'cosine': [],
+            'noise_ceiling_corr': [],
+            'noise_ceiling_cosine': []
+        }
+        for H in Hem:
+            for roi in rois:
+                for sn in args.snS:
+                    print(f'Hem:{H}, roi:{roi}, sn:{sn}')
+                    sn_b = [i for i in args.snS if i != sn]
+
+                    rdm_roi_a = rdms_rois.subsample('Hem', H).subsample('ROI', roi).subsample('sn', sn)
+                    rdm_roi_b = rdms_rois.subsample('Hem', H).subsample('ROI', roi).subsample('sn', sn_b)
+
+                    rdm_force_a = rdms_force.subsample('sn', sn)
+                    rdm_force_b = rdms_force.subsample('sn', sn_b)
+
+                    noise_ceiling_roi_corr = rsa.rdm.compare(rdm_roi_a, rdm_roi_b, method='corr')
+                    noise_ceiling_force_corr = rsa.rdm.compare(rdm_force_a, rdm_force_b, method='corr')
+                    noise_ceiling_roi_corr = np.maximum(0, noise_ceiling_roi_corr)
+                    noise_ceiling_force_corr = np.maximum(0, noise_ceiling_force_corr)
+                    noise_ceiling_corr = np.sqrt(noise_ceiling_roi_corr * noise_ceiling_force_corr)
+                    corr = rsa.rdm.compare(rdm_roi_a, rdm_force_b, method='corr')
+
+                    noise_ceiling_cosine = rsa.rdm.compare(rdm_roi_a, rdm_roi_b, method='cosine')
+                    cosine = rsa.rdm.compare(rdm_roi_a, rdm_force_b, method='cosine')
+
+                    xval_corr_dict['Hem'].append(H)
+                    xval_corr_dict['roi'].append(roi)
+                    xval_corr_dict['sn'].append(sn)
+                    xval_corr_dict['corr'].append(corr.mean())
+                    xval_corr_dict['cosine'].append(cosine.mean())
+                    xval_corr_dict['noise_ceiling_cosine'].append(noise_ceiling_cosine.mean())
+                    xval_corr_dict['noise_ceiling_corr'].append(noise_ceiling_corr.mean())
+
+        xval_corr_df = pd.DataFrame(xval_corr_dict)
+        xval_corr_df.to_csv(os.path.join(gl.baseDir, args.experiment, gl.rdmDir,
+                                         f'{args.atlas}.glm{args.glm}.xval_corr.tsv'), sep='\t', index=False)
+
+
+
+
+
+
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -211,6 +274,7 @@ if __name__ == '__main__':
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
     parser.add_argument('--glm', type=int, default=12)
+    parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--snS', type=int, default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112])
 
     args = parser.parse_args()

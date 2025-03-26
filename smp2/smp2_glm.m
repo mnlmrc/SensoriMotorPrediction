@@ -1,4 +1,4 @@
-function smp2_glm(what, varargin)
+function varargout = smp2_glm(what, varargin)
 
     % Template function for preprocessing of the fMRI data.
     % Rename this function to <experiment_name>_imana.m 
@@ -230,6 +230,79 @@ function smp2_glm(what, varargin)
                        
             varargout{1}= events;
             
+        case 'GLM:make_glm13'
+
+            sn = [];
+            vararginoptions(varargin,{'sn'})
+
+            subj_id = pinfo.subj_id{pinfo.sn==sn};
+
+            D = dload(fullfile(baseDir, behavDir, subj_id, ['smp2_' subj_id(5:end) '.dat']));
+
+            go = strcmp(D.GoNogo, "go");
+
+            %% planning 0%
+            plan0.BN = D.BN(D.cue==93 & ~go);
+            plan0.TN = D.TN(D.cue==93 & ~go);
+            plan0.cue = D.cue(D.cue==93 & ~go);
+            plan0.stimFinger = D.stimFinger(D.cue==93 & ~go);
+            plan0.Onset = D.startTimeReal(D.cue==93 & ~go) + D.baselineWait(D.cue==93 & ~go);
+            plan0.Duration = zeros(length(plan0.BN), 1);
+            plan0.eventtype = repmat({'0%'}, [length(plan0.BN), 1]);
+
+            %% planning 25%
+            plan25.BN = D.BN(D.cue==12 & ~go);
+            plan25.TN = D.TN(D.cue==12 & ~go);
+            plan25.cue = D.cue(D.cue==12 & ~go);
+            plan25.stimFinger = D.stimFinger(D.cue==12 & ~go);
+            plan25.Onset = D.startTimeReal(D.cue==12 & ~go) + D.baselineWait(D.cue==12 & ~go);
+            plan25.Duration = zeros(length(plan25.BN), 1);
+            plan25.eventtype = repmat({'25%'}, [length(plan25.BN), 1]);
+
+            %% planning 50% 
+            plan50.BN = D.BN(D.cue==44 & ~go);
+            plan50.TN = D.TN(D.cue==44 & ~go);
+            plan50.cue = D.cue(D.cue==44 & ~go);
+            plan50.stimFinger = D.stimFinger(D.cue==44 & ~go);
+            plan50.Onset = D.startTimeReal(D.cue==44 & ~go) + D.baselineWait(D.cue==44 & ~go);
+            plan50.Duration = zeros(length(plan50.BN), 1);
+            plan50.eventtype = repmat({'50%'}, [length(plan50.BN), 1]);
+
+            %% planning 75% 
+            plan75.BN = D.BN(D.cue==21 & ~go);
+            plan75.TN = D.TN(D.cue==21 & ~go);
+            plan75.cue = D.cue(D.cue==21 & ~go);
+            plan75.stimFinger = D.stimFinger(D.cue==21 & ~go);
+            plan75.Onset = D.startTimeReal(D.cue==21 & ~go) + D.baselineWait(D.cue==21 & ~go);
+            plan75.Duration = zeros(length(plan75.BN), 1);
+            plan75.eventtype = repmat({'75%'}, [length(plan75.BN), 1]);
+
+            %% planning 100% 
+            plan100.BN = D.BN(D.cue==39 & ~go);
+            plan100.TN = D.TN(D.cue==39 & ~go);
+            plan100.cue = D.cue( D.cue==39 & ~go);
+            plan100.stimFinger = D.stimFinger(D.cue==39 & ~go);
+            plan100.Onset = D.startTimeReal( D.cue==39 & ~go) + D.baselineWait( D.cue==39 & ~go);
+            plan100.Duration = zeros(length(plan100.BN), 1);
+            plan100.eventtype = repmat({'100%'}, [length(plan100.BN), 1]);
+            
+            %% make table
+            
+            plan0 = struct2table(plan0);
+            plan25 = struct2table(plan25);
+            plan50 = struct2table(plan50);
+            plan75 = struct2table(plan75);
+            plan100 = struct2table(plan100);
+
+            events = [plan0; plan25; plan50; plan75; plan100];
+            
+            %% convert to secs
+            events.Onset = events.Onset ./ 1000;
+            events.Duration = events.Duration ./ 1000;                 
+                       
+            varargout{1}= events;
+            
+            
         case 'GLM:make_event'
 
             sn = [];
@@ -251,7 +324,7 @@ function smp2_glm(what, varargin)
             
             operation  = sprintf('GLM:make_glm%d', glm);
             
-            events = smp2_imana(operation, 'sn', sn);
+            events = smp2_glm(operation, 'sn', sn);
             events = events(ismember(events.BN, runs), :);
             
             %% export
@@ -701,123 +774,15 @@ function smp2_glm(what, varargin)
 
             cd(currentDir)
 
-        case 'GLM:calc_PSC'
-
-
-            sn             = [];    % subjects list
-            glm            = [];    % glm number
-
-            vararginoptions(varargin, {'sn', 'glm'})
-
-            if isempty(sn)
-                error('GLM:T_contrast -> ''sn'' must be passed to this function.')
-            end
-
-            if isempty(glm)
-                error('GLM:T_contrast -> ''glm'' must be passed to this function.')
-            end
-
-            subj_id = pinfo.subj_id{pinfo.sn==sn};            
-            glm_dir = fullfile(baseDir, sprintf('glm%d', glm), subj_id); 
-
-            % load the SPM.mat file
-            SPM = load(fullfile(glm_dir, 'SPM.mat')); SPM=SPM.SPM;
-
-%             psc = readtable(fullfile(baseDir, sprintf('glm%d', glm), 'psc.txt'));
-%             contr = {SPM.xCon.name};
-% 
-%             intercept = {};
-%             for k = 1:SPM.nscan
-%                 intercept{end+1} = fullfile(glm_dir, sprintf('beta_%d.nii', 220+k));  
-%             end
-%             
-%             for c = 1:size(psc, 1)
-% 
-%                 p = [psc.condition(c) '-'];
-%                 nRegr = SPM.xCon(find(strcmp({SPM.xCon.name}, p))).c > 0;
-% 
-%                 P = fullfile(glm_dir, ['con_' p '.nii']);
-%                 P = [P, intercept];
-% 
-%                 imean = sprintf('(i1 ./ %f)', nRegr);
-%                 cmean = '((i2 + i3 + i4 + i5 + i6 + i7 + i8 + i9 + i10 + i11) ./ 10)';
-% 
-%                 formula = sprintf('100 .* (%s - %s) ./ %s', imean, cmean, cmean);
-% 
-%                 A = [];
-%                 A.input = P;
-%                 A.output = ['psc_' p];
-%                 A.outdir = {glm_dir};
-%                 A.expression = formula;
-%                 A.var = struct('name', {}, 'value', {});
-%                 A.options.dmtx = 0;
-%                 A.options.mask = 0;
-%                 A.options.interp = 1;
-%                 A.options.dtype = 4;               
-%     
-%                 matlabbatch{1}.spm.util.imcalc=A;
-%                 spm_jobman('run', matlabbatch);
-%             end
-            X=(SPM.xX.X(:,SPM.xX.iC)); % Design matrix - raw
-
-            P={};
-            numB=length(SPM.xX.iB);     % Partitions - runs
-            for p=SPM.xX.iB
-                P{end+1,1}=fullfile(baseDir, glmEstDir,subj_id, ...
-                    sprintf('beta_%4.4d.nii',p));  % get the intercepts and use them to calculate the baseline (mean images)
-            end
-            
-            t_con_name = extractfield(SPM.xCon, 'name');
-            t_con_name = t_con_name(endsWith(t_con_name, '-'));
-
-            % Create string with formula
-            con_div_intercepts = '';
-            for r=1:numB
-                if r == numB
-                    con_div_intercepts = sprintf('i%d./((%si%d)/%d)', ...
-                        r+1, con_div_intercepts, r, numB);
-                else
-                    con_div_intercepts = sprintf('%si%d+', ...
-                        con_div_intercepts, r);
-                end
-            end
-
-            maxX = max(X);
-            for con=1:length(t_con_name)  % all contrasts
-                idx = find(strcmp({SPM.xCon.name}, t_con_name(1)));
-                c = SPM.xCon(idx).c(SPM.xX.iC);
-                h = min(maxX(c>0));
-
-                P{numB+1,1}=fullfile(baseDir, glmEstDir, subj_id, ...
-                    sprintf('con_%s.nii', t_con_name{con}));
-                outname=fullfile(baseDir, glmEstDir, subj_id, ...
-                    sprintf('psc_%s.nii', t_con_name{con}));
-
-                formula=sprintf('100.*%f.*%s', h, con_div_intercepts);
-                    
-                A = [];
-                A.input = P;
-                A.output = outname;
-                A.outdir = {glm_dir};
-                A.expression = formula;
-                A.var = struct('name', {}, 'value', {});
-                A.options.dmtx = 0;
-                A.options.mask = 0;
-                A.options.interp = 1;
-                A.options.dtype = 4;               
-
-                matlabbatch{1}.spm.util.imcalc=A;
-                spm_jobman('run', matlabbatch);
-
-            end
-
-        case 'GLM:all'
+        case 'GLM:within_participant'
 
             sn = [];
             glm = [];
-            hrf_params = [6 12 1 1 6 0 32]; % best 6 14
+%             hrf_params = [6 12 1 1 6 0 32]; % best 6 14
             derivs = [0, 0];
-            vararginoptions(varargin,{'sn', 'glm', 'hrf_params', 'derivs'})
+            vararginoptions(varargin,{'sn', 'glm', 'derivs'})
+            
+            hrf_params = str2double(strsplit(pinfo.hrf_params{pinfo.sn==sn}, '.'));
             
             spm_get_defaults('cmdline', true);  % Suppress GUI prompts, no request for overwirte
                 
@@ -835,80 +800,18 @@ function smp2_glm(what, varargin)
             smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'beta')
             smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'res')
             smp2_glm('SURF:vol2surf', 'sn', sn, 'glm', glm, 'type', 'con')
-%             smp2_glm('HRF:ROI_hrf_get', 'sn', sn, 'glm', glm, 'hrf_params', hrf_params)
             
-        case 'HRF:ROI_hrf_get'                   % Extract raw and estimated time series from ROIs
-            
-            currentDir = pwd;
-            
+        
+       case 'GLM:across_participants'
+           
             sn = [];
-            ROI = 'all';
-            pre=10;
-            post=10;
-            atlas = 'ROI';
-            glm = 12;
-
-            vararginoptions(varargin,{'ROI','pre','post', 'glm', 'sn', 'atlas'});
-
-            glmDir = fullfile(baseDir, [glmEstDir num2str(glm)]);
-            T=[];
-
-            subj_id = pinfo.subj_id{pinfo.sn==sn};
-            fprintf('%s\n',subj_id);
-
-            % load SPM.mat
-            cd(fullfile(glmDir,subj_id));
-            SPM = load('SPM.mat'); SPM=SPM.SPM;
+            glm = [];
+            derivs = [0, 0];
+            vararginoptions(varargin,{'sn', 'glm', 'derivs'})
             
-%             if isempty(hrf_params)
-%                 hrf_params = SPM.xBF.params;
-%             end
-            
-            TR = SPM.xY.RT;
-            nScan = SPM.nscan(1);
-            
-            % load ROI definition (R)
-            R = load(fullfile(baseDir, regDir,subj_id,[subj_id '_' atlas '_region.mat'])); R=R.R;
-            
-            % extract time series data
-            [y_raw, y_adj, y_hat, y_res,B] = region_getts(SPM,R);
-            
-%             D = spmj_get_ons_struct(SPM);
-            Dd = dload(fullfile(baseDir, behavDir, subj_id, sprintf('smp2_%d.dat', sn)));
-            
-            D = [];
-            D.ons = (Dd.startTimeReal / 1000) / TR;
-            D.ons = D.ons + (Dd.BN - 1) * nScan;
-            D.block = Dd.BN;
-            D.GoNogo = Dd.GoNogo;     
-            D.cue = Dd.cue;
-            D.stimFinger = Dd.stimFinger;
-            
-            for r=1:size(y_raw,2)
-                for i=1:size(D.block,1)
-                    D.y_adj(i,:)=cut(y_adj(:,r),pre,round(D.ons(i)),post,'padding','nan')';
-                    D.y_hat(i,:)=cut(y_hat(:,r),pre,round(D.ons(i)),post,'padding','nan')';
-                    D.y_res(i,:)=cut(y_res(:,r),pre,round(D.ons(i)),post,'padding','nan')';
-                    D.y_raw(i,:)=cut(y_raw(:,r),pre,round(D.ons(i)),post,'padding','nan')';
-%                     D.regr(i, :, :)=cut(regrC,pre,round(D.ons(i)),post,'padding','nan')';
-                end
-                
-                % Add the event and region information to tje structure. 
-                len = size(D.ons,1);                
-                D.SN        = ones(len,1)*sn;
-                D.region    = ones(len,1)*r;
-                D.name      = repmat({R{r}.name},len,1);
-                D.hem       = repmat({R{r}.hem},len,1);
-%                 D.type      = D.event; 
-                T           = addstruct(T,D);
+            for s=sn
+               smp2_glm('GLM:within_participant', 'sn', s, 'glm', glm)
             end
-            
-            save(fullfile(baseDir,regDir, subj_id, sprintf('hrf_glm%d.mat', glm)),'T'); 
-            varargout{1} = T;
-            varargout{2} = y_adj;
-            
-            cd(currentDir)
-
         
        case 'SURF:vol2surf'
             
@@ -991,60 +894,5 @@ function smp2_glm(what, varargin)
             save(GR, fullfile(baseDir, wbDir, subj_id, [glmEstDir '.' type '.R.func.gii']))
             
             cd(currentDir)
-            
-        case 'ROI:define'
-            
-            sn = [];
-            glm = [];
-            atlas = 'ROI';
-            vararginoptions(varargin, {'sn', 'glm', 'atlas'});
-            
-            if isfolder('/Volumes/diedrichsen_data$/data/Atlas_templates/fs_LR_32')
-                atlasDir = '/Volumes/diedrichsen_data$/data/Atlas_templates/fs_LR_32';
-            elseif isfolder('/cifs/diedrichsen/data/Atlas_templates/fs_LR_32')
-                atlasDir = '/cifs/diedrichsen/data/Atlas_templates/fs_LR_32';
-            end
-            atlasH = {sprintf('%s.32k.L.label.gii', atlas), sprintf('%s.32k.R.label.gii', atlas)};
-            atlas_gii = {gifti(fullfile(atlasDir, atlasH{1})), gifti(fullfile(atlasDir, atlasH{1}))};
-
-            subj_id = pinfo.subj_id{pinfo.sn==sn};
-
-            Hem = {'L', 'R'};
-            R = {};
-            r = 1;
-            for h = 1:length(Hem)
-                for reg = 1:length(atlas_gii{h}.labels.name)
-
-                    R{r}.white = fullfile(baseDir, wbDir, subj_id, [subj_id '.' Hem{h} '.white.32k.surf.gii']);
-                    R{r}.pial = fullfile(baseDir, wbDir, subj_id, [subj_id '.' Hem{h} '.pial.32k.surf.gii']);
-                    R{r}.image = fullfile(baseDir, [glmEstDir num2str(glm)], subj_id, 'mask.nii');
-%                     R{r}.image = fullfile(baseDir, anatomicalDir, subj_id, 'rmask_gray.nii');
-                    R{r}.linedef = [5 0 1];
-                    key = atlas_gii{h}.labels.key(reg);
-                    R{r}.location = find(atlas_gii{h}.cdata==key);
-                    R{r}.hem = Hem{h};
-                    R{r}.name = atlas_gii{h}.labels.name{reg};
-                    R{r}.type = 'surf_nodes_wb';
-
-                    r = r+1;
-                end
-            end
-
-            R = region_calcregions(R, 'exclude', [2 3; 2 4; 2 5; 4 5; 8 9; 2 8;...
-                11 12; 11 13; 11 14; 13 14; 17 18; 11 17], 'exclude_thres', .8);
-            
-            output_path = fullfile(baseDir, regDir, subj_id);
-            if ~exist(output_path, 'dir')
-                mkdir(output_path)
-            end
-            
-            Vol = fullfile(baseDir, [glmEstDir num2str(glm)], subj_id, 'mask.nii');
-            for r = 1:length(R)
-                img = region_saveasimg(R{r}, Vol, 'name',fullfile(baseDir, regDir, subj_id, sprintf('%s.%s.%s.nii', atlas, R{r}.hem, R{r}.name)));
-            end       
-            
-            save(fullfile(output_path, sprintf('%s_%s_region.mat',subj_id, atlas)), 'R');
-        
-    end
 
 end
