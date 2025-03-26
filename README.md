@@ -2,10 +2,7 @@ This repository contains Python and MATLAB code related to the SensoriMotorPredi
 
 Toolbox dependencies to use the code:
 
-MATLAB R2020a (version used for fMRI data preprocessing)
-SPM12 (https://www.fil.ion.ucl.ac.uk/spm)
-Dataframe toolbox (https://github.com/jdiedrichsen/dataframe)
-...
+MATLAB R2020a (version used for fMRI data preprocessing), SPM12 (https://www.fil.ion.ucl.ac.uk/spm), Dataframe toolbox (https://github.com/jdiedrichsen/dataframe), ...
 
 # **fMRI data**
 
