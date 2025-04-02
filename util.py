@@ -1,6 +1,7 @@
 # from PcmPy import indicator
 
 import numpy as np
+import scipy
 from scipy.signal import firwin, filtfilt
 
 import globals as gl
@@ -61,10 +62,106 @@ def corr_xval(X, Y, cond_vec, part_vec):
 
     return np.array(on_diag).mean(axis=0), np.array(off_diag).mean(axis=0)
 
-    return np.array(R).mean(axis=0)
-            # Xi_zm = Xi - Xi.mean(axis=1, keepdims=True)
-            # Yi_zm = Yi - Yi.mean(axis=1, keepdims=True)
-            # numerator = np.sum(Xi_zm * Yi_zm, axis=1)
-            # denominator = np.linalg.norm(Xi_zm, axis=1) * np.linalg.norm(Yi_zm, axis=1)
-            # r = numerator / denominator
+
+def load_matlab_hrf(path):
+    mat_contents = scipy.io.loadmat(path)
+    mat_struct = mat_contents['T'][0, 0]  # Assuming 1x1 struct
+    T = {field: mat_struct[field] for field in mat_struct.dtype.names}
+
+    T['GoNogo'] = T['GoNogo'].flatten()
+    T['cue'] = T['cue'].flatten()
+    T['block'] = T['block'].flatten()
+    T['ons'] = T['ons'].flatten()
+    T['stimFinger'] = T['stimFinger'].flatten()
+    T['SN'] = T['SN'].flatten()
+    T['region'] = T['region'].flatten()
+    T['name'] = T['name'].flatten()
+    T['hem'] = T['hem'].flatten()
+
+    return T
+
+
+def concat_hrf(Ts):
+    """
+    Concatenate a list of T dicts
+
+    Args:
+        Ts:
+
+    Returns:
+
+    """
+
+    for t, T in enumerate(Ts):
+        if isinstance(T, str):
+            Tt = load_matlab_hrf(T)
+        if isinstance(T, dict):
+            Tt = T
+        if t == 0:
+            T_out = Tt
+        else:
+            for k, key in enumerate(list(Tt.keys())):
+                T_out[key] = np.concatenate((T_out[key], Tt[key]), axis=0)
+
+    return T_out
+
+
+def group_by_dict_fields(data_dict, by, fields_to_average):
+    """
+    Groups data by one or more fields and computes the nanmean for specified fields.
+
+    Parameters:
+        data_dict (dict): Dictionary containing the data.
+        by (list of str): Fields to group by. These will be preserved in the output.
+        fields_to_average (list of str): Fields to average within each group.
+
+    Returns:
+        list of dicts: One dict per group. Each dict contains the 'by' fields and the averaged fields.
+    """
+    # Convert each group field to flat list of hashable items
+    group_columns = []
+    for field in by:
+        col = data_dict[field]
+        if isinstance(col[0], np.ndarray):  # if nested arrays, flatten
+            group_columns.append([x.item() if x.size == 1 else tuple(x.flat) for x in col])
+        else:
+            group_columns.append([x.item() if isinstance(x, np.generic) else x for x in col])
+
+    group_keys = list(zip(*group_columns))
+    unique_keys = sorted(set(group_keys))
+
+    result = []
+    for key in unique_keys:
+        mask = np.ones(len(group_keys), dtype=bool)
+        for i, field in enumerate(by):
+            col = group_columns[i]
+            mask &= np.array(col) == key[i]
+
+        group_dict = {field: key[i] for i, field in enumerate(by)}
+        for field in fields_to_average:
+            group_dict[field] = np.nanmean(data_dict[field][mask], axis=0)
+
+        result.append(group_dict)
+
+    T_out = {}
+    for t, T in enumerate(result):
+        for key in T.keys():
+            val = np.atleast_1d(T[key])  # or np.atleast_2d if all values are meant to be rows
+            if t == 0:
+                if key in fields_to_average:
+                    T_out[key] = val[None, :]
+                else:
+                    T_out[key] = val
+            else:
+                if key in fields_to_average:
+                    T_out[key] = np.concatenate((T_out[key], val[None, :]), axis=0)
+                else:
+                    T_out[key] = np.concatenate((T_out[key], val), axis=0)
+
+    return T_out
+
+
+
+
+
 

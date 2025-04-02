@@ -10,29 +10,74 @@ import pickle
 import argparse
 
 import nitools as nt
+from matplotlib import pyplot as plt
 from nitools import spm
 
 import time
 import Functional_Fusion.atlas_map as am
 import Functional_Fusion.dataset as ds
 
+sn=104
+experiment='smp2'
+glm=12
 
-def update_hrf_params(SPM, P, mask_img):
-    if isinstance(mask_img, str):
-        mask_img = nb.load(mask_img)
-    if isinstance(mask_img, nb.Nifti1Image):
-        coords = nt.get_mask_coords(mask_img)
+# default [6, 16, 1, 1, 6, 0, 32]
+mask_img = os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj104', f'ROI.L.S1.nii')
+SPM = spm.SpmGlm(os.path.join(gl.baseDir, experiment, f'glm12', f'subj104',))
 
-    hrf, p = spm.spm_hrf(1, P)
-    SPM.convolve_glm(hrf)
+print('Loading SPM...')
+SPM.get_info_from_spm_mat()
 
-    # get raw time series in roi
-    y_raw = nt.sample_images(SPM.rawdata_files, coords)
+X0 = SPM.design_matrix
 
-    # rerun glm
-    _, info, y_filt, y_hat, y_adj, _ = SPM.rerun_glm(y_raw)
+SPM.convolve_glm(SPM.bf)
 
-    return y_filt, y_hat, y_adj
+X1 = SPM.design_matrix
+
+# coords = nt.get_mask_coords(mask_img)
+# data = nt.sample_images(SPM.rawdata_files, coords, use_dataobj=True)
+#
+# beta, info, data_filt, data_hat, data_adj, residuals = SPM.rerun_glm(data.mean(axis=1)[:, None])
+#
+# print('Updating hrf params...')
+# P = [6, 12, 1, 1, 6, 0, 32]
+# _, y_hat, y_adj, residuals = SPM.update_hrf_params(P, mask_img)
+
+# X1 = SPM.design_matrix
+
+def inspect_hrf_params(experiment, glm, sn, GoNogo, atlas, roi, P):
+
+    # default [6, 16, 1, 1, 6, 0, 32]
+    mask_img = os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}', f'{atlas}.L.{roi}.nii')
+    SPM = spm.SpmGlm(os.path.join(gl.baseDir, experiment, f'glm{glm}', f'subj{sn}',))
+
+    print('Loading SPM...')
+    SPM.get_info_from_spm_mat()
+
+    print('Updating hrf params...')
+    _, y_hat, y_adj, _ = SPM.update_hrf_params(P, mask_img)
+
+    dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}',
+                                   f'{experiment}_{sn}.dat'), sep='\t')
+    dat = dat[dat['GoNogo'] == GoNogo]
+    pinfo = pd.read_csv(os.path.join(gl.baseDir, experiment, 'participants.tsv'), sep='\t')
+    runs = pinfo[pinfo['sn'] == sn].FuncRuns.reset_index(drop=True)[0].split('.')
+    nVols = pinfo[pinfo['sn'] == sn].numTR
+    i = 0
+    for BN in dat['BN'].unique():
+        if str(BN) in runs:
+            if i == 0:
+                at = (dat[dat['BN']==BN].startTRReal).tolist()
+            else:
+                at.extend((dat[dat['BN']==BN].startTRReal + int(nVols * i)).tolist())
+            i =+ 1
+        else:
+            print(f'excluding block {BN}')
+
+    y_hat_cut = spm.cut(y_hat, 10, at, 20)
+    y_adj_cut = spm.cut(y_adj, 10, at, 20)
+
+    return y_hat_cut, y_adj_cut
 
 
 def get_timeseries_in_voxels(path_glm, masks, struct):
@@ -52,7 +97,7 @@ def get_timeseries_in_voxels(path_glm, masks, struct):
 
     for i, (s, mask) in enumerate(zip(struct, masks)):
         if isinstance(mask, str):
-            atlas = am.AtlasVolumetric('hemisphere', mask, structure=s)
+            atlas = am.AtlasVolumetric('region', mask, structure=s)
         else:
             raise Exception('mask must be the path to a .nii file')
 
@@ -73,32 +118,17 @@ def get_timeseries_in_voxels(path_glm, masks, struct):
 
     header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
 
-    cifti_yraw = nb.Cifti2Image(
-        dataobj=y_raw,
-        header=header,
-    )
-
-    cifti_yfilt = nb.Cifti2Image(
-        dataobj=y_filt,
-        header=header,
-    )
-
-    cifti_yhat = nb.Cifti2Image(
-        dataobj=y_hat,
-        header=header,
-    )
-
-    cifti_yadj = nb.Cifti2Image(
-        dataobj=y_adj,
-        header=header,
-    )
+    cifti_yraw = nb.Cifti2Image(ataobj=y_raw,header=header,)
+    cifti_yfilt = nb.Cifti2Image(dataobj=y_filt, header=header,)
+    cifti_yhat = nb.Cifti2Image(dataobj=y_hat,header=header,)
+    cifti_yadj = nb.Cifti2Image(dataobj=y_adj,header=header,)
 
     return cifti_yraw, cifti_yfilt, cifti_yhat, cifti_yadj
 
-def get_timeseries_in_parcels(path_glm, masks, rois, struct, timeseries='yhat'):
+def get_timeseries_in_parcels(path_glm, masks, rois, struct, timeseries):
 
     for i, (s, mask, roi) in enumerate(zip(struct, masks, rois)):
-        atlas = am.AtlasVolumetric('hemisphere', mask, structure=s)
+        atlas = am.AtlasVolumetric('region', mask, structure=s)
 
         if i == 0:
             label_vec, _ = atlas.get_parcel(roi)
@@ -107,8 +137,7 @@ def get_timeseries_in_parcels(path_glm, masks, rois, struct, timeseries='yhat'):
             label_vec = np.concatenate((label_vec, atlas.get_parcel(roi)[0] + label_vec.max()), axis=0)
             parcel_axis += atlas.get_parcel_axis()
 
-    cifti = nb.load(os.path.join(path_glm, f'{timeseries}.dtseries.nii'))
-    data = cifti.get_fdata()
+    data = timeseries.get_fdata()
     parcel_data, label = ds.agg_parcels(data, label_vec)
 
     row_axis = nb.cifti2.SeriesAxis(1, 1, parcel_data.shape[0], 'second')
@@ -118,7 +147,7 @@ def get_timeseries_in_parcels(path_glm, masks, rois, struct, timeseries='yhat'):
 
     return cifti_parcel
 
-def cut_timeseries_at_onsets(path_glm, masks, rois, struct, timeseries='yhat', at=None):
+def cut_timeseries_at_onsets(path_glm, masks, rois, struct, timeseries, at=None):
     for i, (s, mask, roi) in enumerate(zip(struct, masks, rois)):
         atlas = am.AtlasVolumetric(args.atlas, mask, structure=s)
 
@@ -129,10 +158,9 @@ def cut_timeseries_at_onsets(path_glm, masks, rois, struct, timeseries='yhat', a
             label_vec = np.concatenate((label_vec, atlas.get_parcel(roi)[0] + label_vec.max()), axis=0)
             parcel_axis += atlas.get_parcel_axis()
 
-    cifti = nb.load(os.path.join(path_glm, f'{timeseries}.dtseries.nii'))
-    data = cifti.get_fdata()
+    data = timeseries.get_fdata()
 
-    y_cut = spm.avg_cut(data, 10, at, 20)
+    y_cut = spm.cut(data, 10, at, 20).mean(axis=0)
 
     parcel_data, label = ds.agg_parcels(y_cut, label_vec)
 
@@ -165,7 +193,8 @@ def main(args):
                 for H in Hem]
         for ts in timeseries:
             print(f'participant {args.sn}, processing {ts} parcels...')
-            cifti_parcel = get_timeseries_in_parcels(path_glm, masks, rois, struct, ts)
+            cifti = nb.load(os.path.join(path_glm, f'{timeseries}.dtseries.nii'))
+            cifti_parcel = get_timeseries_in_parcels(path_glm, masks, rois, struct, cifti)
             nb.save(cifti_parcel, os.path.join(gl.baseDir, args.experiment,
                                         f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                         f'{args.atlas}.{ts}.ptseries.nii'))
@@ -181,7 +210,7 @@ def main(args):
         dat = dat[dat['GoNogo'] == args.GoNogo]
         pinfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'participants.tsv'), sep='\t')
         runs = pinfo[pinfo['sn'] == args.sn].FuncRuns.reset_index(drop=True)[0].split('.')
-        nVols = pinfo[pinfo['sn'] == args.sn].numTR
+        nVols = pinfo[pinfo['sn'] == args.sn].numTR.reset_index(drop=True)[0]
         i = 0
         for BN in dat['BN'].unique():
             if str(BN) in runs:
@@ -189,12 +218,13 @@ def main(args):
                     at = (dat[dat['BN']==BN].startTRReal).tolist()
                 else:
                     at.extend((dat[dat['BN']==BN].startTRReal + int(nVols * i)).tolist())
-                i =+ 1
+                i += 1
             else:
                 print(f'excluding block {BN}')
         for ts in timeseries:
             print(f'participant {args.sn}, processing {ts} cut parcels...')
-            cifti_parcel_cut = cut_timeseries_at_onsets(path_glm, masks, rois, struct, timeseries=ts, at=at)
+            cifti = nb.load(os.path.join(path_glm, f'{ts}.dtseries.nii'))
+            cifti_parcel_cut = cut_timeseries_at_onsets(path_glm, masks, rois, struct, cifti, at=at)
             nb.save(cifti_parcel_cut, os.path.join(gl.baseDir, args.experiment,
                                         f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                         f'{args.atlas}.{ts}.{args.GoNogo}.cut.ptseries.nii'))
@@ -277,6 +307,16 @@ def main(args):
                                            f'{gl.glmDir}{args.glm}',
                                            f'{args.atlas}.y_adj.nogo.cut.ptseries.nii'))
 
+    if args.what == 'inspect_hrf_params':
+
+        inspect_hrf_params(args.experiment,
+                           args.glm,
+                           args.sn,
+                           args.GoNogo,
+                           args.atlas,
+                           'S1',
+                           [6, 12, 1, 1, 6, 0, 32])
+
 
 if __name__ == '__main__':
     start = time.time()
@@ -289,6 +329,8 @@ if __name__ == '__main__':
     parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112], type=int)
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--glm', type=int, default=12)
+    parser.add_argument('--roi', type=str, default='S1')
+    parser.add_argument('--P', nargs='+', type=int, default=[6, 16, 1, 1, 6, 0, 32])
     parser.add_argument('--GoNogo', type=str, default=None)
 
     args = parser.parse_args()

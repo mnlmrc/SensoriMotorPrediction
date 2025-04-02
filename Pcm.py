@@ -7,6 +7,8 @@ warnings.filterwarnings("ignore")
 import argparse
 import pickle
 
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
 import PcmPy as pcm
 from pathlib import Path
 
@@ -33,6 +35,15 @@ def find_model(path, name):
     if m == M[-1]:
         raise Exception(f'Model name not found')
 
+def normalize_G(G):
+    return (G - G.mean()) / G.std()
+
+def normalize_Ac(Ac):
+    for a in range(Ac.shape[0]):
+        tr = np.trace(Ac[a] @ Ac[a].T)
+        Ac[a] = Ac[a] / np.sqrt(tr)
+    return Ac
+
 def calc_normalized_likelihood_in_parcel(T_cv, T_gr, parcel_field='roi', parcel_name=None):
     likelihood = T_cv.likelihood
     baseline = likelihood.loc[:, 'null'].values
@@ -56,7 +67,26 @@ def calc_normalized_likelihood_in_parcel(T_cv, T_gr, parcel_field='roi', parcel_
 
     return LL
 
+def get_likelihood_in_parcel(T_cv, T_gr, parcel_field='roi', parcel_name=None):
+    likelihood = T_cv.likelihood
+    baseline = likelihood.loc[:, 'null'].values
+    likelihood = likelihood - baseline.reshape(-1, 1)
+
+    noise_upper = (T_gr.likelihood['ceil'] - baseline).mean()
+
+    noise_lower = likelihood.ceil.mean()
+
+    assert noise_upper > noise_lower
+
+    LL = pd.melt(likelihood)
+    LL[parcel_field] = parcel_name
+    LL['noise_lower'] = noise_lower
+    LL['noise_upper'] = noise_upper
+
+    return LL
+
 def make_execution_models():
+
     C = pcm.centering(8)
 
     v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
@@ -64,26 +94,30 @@ def make_execution_models():
     v_cert = C @ np.array([0.1875, .25, 0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
     v_surprise = C @ -np.log2(np.array([.25, .5, .75, 1, 1, .75, .5, .25]))  # with Shannon information
 
-    Ac = np.zeros((5, 8, 5))
+    Ac = np.zeros((5, 8, 4))
     Ac[0, :, 0] = v_fingerID
     Ac[1, :, 1] = v_cue
-    Ac[0, :, 2] = v_fingerID
-    Ac[2, :, 2] = v_cue
-    Ac[3, :, 3] = v_cert
-    Ac[4, :, 4] = v_surprise
+    Ac[2, :, 2] = v_cert
+    Ac[3, :, 3] = v_surprise
+    Ac[4, :, 0] = v_cue
+
+    Ac = normalize_Ac(Ac)
 
     G_fingerID = np.outer(v_fingerID, v_fingerID)
     G_cue = np.outer(v_cue, v_cue)
     G_cert = np.outer(v_cert, v_cert)
     G_surprise = np.outer(v_surprise, v_surprise)
-    G_component = np.array([G_fingerID, G_cue])
+    G_component = np.array([G_fingerID / np.trace(G_fingerID),
+                            G_cue / np.trace(G_cue),
+                            G_cert / np.trace(G_cert),
+                            G_surprise / np.trace(G_surprise)
+                            ])
 
     M = []
-    M.append(pcm.FixedModel('null', np.zeros((8, 8))))  # 0
+    M.append(pcm.FixedModel('null', np.eye(8)))  # 0
     M.append(pcm.FixedModel('finger', G_fingerID))  # 1
     M.append(pcm.FixedModel('cue', G_cue))  # 2
-    M.append(pcm.FixedModel('certainty', G_cert))  # 3
-    M.append(pcm.FixedModel('independent', np.eye(8)))  # 4
+    M.append(pcm.FixedModel('uncertainty', G_cert))  # 3
     M.append(pcm.FixedModel('surprise', G_surprise))  # 5
     M.append(pcm.ComponentModel('component', G_component))  # 6
     M.append(pcm.FeatureModel('feature', Ac))  # 7
@@ -124,17 +158,19 @@ def make_planning_models():
 
     v_cue = C @ np.array([-2, -1, 0, 1, 2])
     v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0])
-    G_cue_plan = np.outer(v_cue, v_cue)
-    G_cert_plan = np.outer(v_cert, v_cert)
+
+    G_cue = np.outer(v_cue, v_cue)
+    G_cert = np.outer(v_cert, v_cert)
     G_force = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'G_obs.force.plan.npy'))
 
     M = []
     M.append(pcm.FixedModel('null', np.zeros((5, 5))))  # 0
-    M.append(pcm.FixedModel('cue', G_cue_plan))  # 1
-    M.append(pcm.FixedModel('certainty', G_cert_plan))  # 2
-    M.append(pcm.FixedModel('independent', np.eye(5)))  # 3
+    M.append(pcm.FixedModel('cue', G_cue))  # 1
+    M.append(pcm.FixedModel('uncertainty', G_cert))  # 2
+    M.append(pcm.FixedModel('equal distance', np.eye(5)))  # 3
     M.append(pcm.FixedModel('planning force', G_force.mean(axis=0)))
-    M.append(pcm.ComponentModel('component', np.array([G_cue_plan, G_cert_plan, np.eye(5)])))  # 4
+    M.append(pcm.ComponentModel('component', np.array([G_cue / np.trace(G_cue),
+                                                       G_cert / np.trace(G_cert),])))  # 4
     M.append(pcm.FreeModel('ceil', 5))  # 5
 
     return M
@@ -401,12 +437,13 @@ class Tessellation():
 
 def main(args):
 
+    scaler = StandardScaler()
+
     if args.what == 'save_tessel_execution':
 
         M = make_execution_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,  f'M.exec.glm{args.glm}.pkl'), "wb")
         pickle.dump(M, f)
-
         Tess = Tessellation(args.experiment,
                             args.snS,
                             args.glm,
@@ -425,7 +462,6 @@ def main(args):
         cifti_theta_feature = Tess.make_group_cifti_theta('feature')
         nb.save(cifti_T, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                       f'theta_feature.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.exec.dscalar.nii'))
-
 
     if args.what == 'save_tessel_planning':
         M = make_planning_models()
@@ -450,10 +486,9 @@ def main(args):
 
     if args.what == 'save_emg_execution':
 
-        M = make_execution_models_emg()
-        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                               f'M.emg.pkl'), "wb") as f:
-            pickle.dump(M, f)
+        M = make_execution_models()
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.emg.pkl'), "wb")
+        pickle.dump(M, f)
 
         snS = [100, 101, 102, 104, 105, 106, 107, 108, 109, 110]
 

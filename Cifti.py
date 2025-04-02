@@ -11,15 +11,13 @@ def main(args):
     Hem = ['L', 'R']
 
     if args.what=='gifti2cifti_glm':
-        print(f'Processing participant {sn}')
+        print(f'Processing participant {args.sn}')
         path = os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'subj{args.sn}')
         giftis = [path + '/' + f'glm{args.glm}.{args.dtype}.{H}.func.gii' for H in Hem]
         cifti_img = nt.join_giftis_to_cifti(giftis)
         nb.save(cifti_img, path + '/' + f'glm{args.glm}.{args.dtype}.dscalar.nii')
     if args.what=='gifti2cifti_glm_all':
-
         for sn in args.snS:
-            print(f'Processing participant {sn}')
             args = argparse.Namespace(
                 what='gifti2cifti_glm',
                 experiment=args.experiment,
@@ -28,9 +26,7 @@ def main(args):
                 dtype=args.dtype,
             )
             main(args)
-
     if args.what=='save_surface_cifti_avg':
-
         data = []
         for sn in args.snS:
             print(f'Processing participant {sn}')
@@ -51,8 +47,6 @@ def main(args):
             header=header,
         )
         nb.save(cifti, os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'glm{args.glm}.{args.dtype}.dscalar.nii'))
-
-
 
 
 

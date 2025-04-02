@@ -10,7 +10,7 @@ import globals as gl
 import pandas as pd
 from force import Force
 from Pcm import FixedModel
-from myplot import make_colors, make_tAx
+from depreciated.myplot import make_colors, make_tAx
 # import tkinter as tk
 import seaborn as sns
 from depreciated.rsa import plot_rdm, draw_contours

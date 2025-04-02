@@ -302,6 +302,88 @@ function varargout = smp2_glm(what, varargin)
                        
             varargout{1}= events;
             
+        case 'GLM:make_glm14'
+
+            sn = [];
+            vararginoptions(varargin,{'sn'})
+
+            subj_id = pinfo.subj_id{pinfo.sn==sn};
+
+            D = dload(fullfile(baseDir, behavDir, subj_id, ['smp2_' subj_id(5:end) '.dat']));
+
+            go = strcmp(D.GoNogo, "go");
+
+            %% planning 0%
+            plan0.BN = D.BN(D.cue==93 & ~go);
+            plan0.TN = D.TN(D.cue==93 & ~go);
+            plan0.cue = D.cue(D.cue==93 & ~go);
+            plan0.stimFinger = D.stimFinger(D.cue==93 & ~go);
+            plan0.Onset = D.startTimeReal(D.cue==93 & ~go) + D.baselineWait(D.cue==93 & ~go);
+            plan0.Duration = zeros(length(plan0.BN), 1);
+            plan0.eventtype = repmat({'0%'}, [length(plan0.BN), 1]);
+
+            %% planning 25%
+            plan25.BN = D.BN(D.cue==12 & ~go);
+            plan25.TN = D.TN(D.cue==12 & ~go);
+            plan25.cue = D.cue(D.cue==12 & ~go);
+            plan25.stimFinger = D.stimFinger(D.cue==12 & ~go);
+            plan25.Onset = D.startTimeReal(D.cue==12 & ~go) + D.baselineWait(D.cue==12 & ~go);
+            plan25.Duration = zeros(length(plan25.BN), 1);
+            plan25.eventtype = repmat({'25%'}, [length(plan25.BN), 1]);
+
+            %% planning 50% 
+            plan50.BN = D.BN(D.cue==44 & ~go);
+            plan50.TN = D.TN(D.cue==44 & ~go);
+            plan50.cue = D.cue(D.cue==44 & ~go);
+            plan50.stimFinger = D.stimFinger(D.cue==44 & ~go);
+            plan50.Onset = D.startTimeReal(D.cue==44 & ~go) + D.baselineWait(D.cue==44 & ~go);
+            plan50.Duration = zeros(length(plan50.BN), 1);
+            plan50.eventtype = repmat({'50%'}, [length(plan50.BN), 1]);
+
+            %% planning 75% 
+            plan75.BN = D.BN(D.cue==21 & ~go);
+            plan75.TN = D.TN(D.cue==21 & ~go);
+            plan75.cue = D.cue(D.cue==21 & ~go);
+            plan75.stimFinger = D.stimFinger(D.cue==21 & ~go);
+            plan75.Onset = D.startTimeReal(D.cue==21 & ~go) + D.baselineWait(D.cue==21 & ~go);
+            plan75.Duration = zeros(length(plan75.BN), 1);
+            plan75.eventtype = repmat({'75%'}, [length(plan75.BN), 1]);
+
+            %% planning 100% 
+            plan100.BN = D.BN(D.cue==39 & ~go);
+            plan100.TN = D.TN(D.cue==39 & ~go);
+            plan100.cue = D.cue( D.cue==39 & ~go);
+            plan100.stimFinger = D.stimFinger(D.cue==39 & ~go);
+            plan100.Onset = D.startTimeReal( D.cue==39 & ~go) + D.baselineWait( D.cue==39 & ~go);
+            plan100.Duration = zeros(length(plan100.BN), 1);
+            plan100.eventtype = repmat({'100%'}, [length(plan100.BN), 1]);
+            
+            %% exec
+            exec.BN = D.BN(go);
+            exec.TN = D.TN(go);
+            exec.cue = D.cue(go);
+            exec.stimFinger = D.stimFinger(go);
+            exec.Onset = D.startTimeReal(go) + D.baselineWait(go);
+            exec.Duration = zeros(length(exec.BN), 1);
+            exec.eventtype = repmat({'exec'}, [length(exec.BN), 1]);
+            
+            %% make table
+            
+            plan0 = struct2table(plan0);
+            plan25 = struct2table(plan25);
+            plan50 = struct2table(plan50);
+            plan75 = struct2table(plan75);
+            plan100 = struct2table(plan100);
+            exec = struct2table(exec);
+
+            events = [plan0; plan25; plan50; plan75; plan100; exec];
+            
+            %% convert to secs
+            events.Onset = events.Onset ./ 1000;
+            events.Duration = events.Duration ./ 1000;                 
+                       
+            varargout{1}= events;
+            
             
         case 'GLM:make_event'
 
@@ -782,7 +864,7 @@ function varargout = smp2_glm(what, varargin)
             derivs = [0, 0];
             vararginoptions(varargin,{'sn', 'glm', 'derivs'})
             
-            hrf_params = str2double(strsplit(pinfo.hrf_params{pinfo.sn==sn}, '.'));
+            hrf_params = str2double(strsplit(pinfo.hrf_params{pinfo.sn==sn}, ':'));
             
             spm_get_defaults('cmdline', true);  % Suppress GUI prompts, no request for overwirte
                 
@@ -894,5 +976,95 @@ function varargout = smp2_glm(what, varargin)
             save(GR, fullfile(baseDir, wbDir, subj_id, [glmEstDir '.' type '.R.func.gii']))
             
             cd(currentDir)
+            
+        case 'GLM:hrf'
+            
+            sn = [];
+            glm = 12;
+            atlas = 'ROI';
+            
+            vararginoptions(varargin,{'sn', 'atlas', 'glm'});
+            
+            subj_id = pinfo.subj_id{pinfo.sn==sn};
+            
+            load(fullfile(baseDir, [glmEstDir num2str(glm)], subj_id, 'SPM.mat'))
+            
 
+            Hem = {'L', 'R'};
+            rois = {'SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1'};
+            R = {};
+            r = 1;
+            for h = 1:length(Hem)
+                for rr = 1:length(rois)
+%                     h = 1;
+%                     reg = 2;
+        %             R{r}.white = fullfile(baseDir, wbDir, subj_id, [subj_id '.' Hem{h} '.white.32k.surf.gii']);
+        %             R{r}.pial = fullfile(baseDir, wbDir, subj_id, [subj_id '.' Hem{h} '.pial.32k.surf.gii']);
+        %             R{r}.image = fullfile(baseDir, [glmEstDir num2str(glm)], subj_id, 'mask.nii');
+        %             R{r}.linedef = [5 0 1];
+        %             key = atlas_gii{h}.labels.key(reg);
+        %             R{r}.location = find(atlas_gii{h}.cdata==key);
+                    R{r}.hem = Hem{h};
+                    R{r}.name = rois{rr};
+                    R{r}.file = fullfile(baseDir, 'ROI', subj_id, sprintf('%s.%s.%s.nii', atlas, Hem{h}, rois{rr}));
+                    R{r}.value = 1;
+        %             R{r}.type = 'surf_nodes_wb';
+                    R{r}.type = 'image';
+                    R{r}.threshold = .5;
+                    r = r+1;
+                end
+            end
+
+            R = region_calcregions(R);
+            
+            [y_raw,y_adj,y_hat,y_res, B, y_filt] = region_getts(SPM, R);
+            
+            TR = 1;
+            nScan = 336;
+            Dd = dload(fullfile(baseDir, behavDir, subj_id, sprintf('smp2_%d.dat', sn)));
+            
+            Dd = dload(fullfile(baseDir, behavDir, subj_id, sprintf('smp2_%d.dat', sn)));
+            
+            D = []; T = [];
+            D.ons = (Dd.startTimeReal / 1000) / TR;
+            D.ons = D.ons + (Dd.BN - 1) * nScan;
+            D.block = Dd.BN;
+            D.GoNogo = Dd.GoNogo;     
+            D.cue = Dd.cue;
+            D.stimFinger = Dd.stimFinger;
+            pre = 10;
+            post= 20;
+            for r=1:size(y_raw,2)
+                for i=1:size(D.block,1)
+                    D.y_adj(i,:)=cut(y_adj(:,r),pre,round(D.ons(i)),post,'padding','nan')';
+                    D.y_hat(i,:)=cut(y_hat(:,r),pre,round(D.ons(i)),post,'padding','nan')';
+                    D.y_res(i,:)=cut(y_res(:,r),pre,round(D.ons(i)),post,'padding','nan')';
+                    D.y_raw(i,:)=cut(y_raw(:,r),pre,round(D.ons(i)),post,'padding','nan')';
+%                     D.regr(i, :, :)=cut(regrC,pre,round(D.ons(i)),post,'padding','nan')';
+                end
+                
+                % Add the event and region information to tje structure. 
+                len = size(D.ons,1);                
+                D.SN        = ones(len,1)*sn;
+                D.region    = ones(len,1)*r;
+                D.name      = repmat({R{r}.name},len,1);
+                D.hem       = repmat({R{r}.hem},len,1);
+%                 D.type      = D.event; 
+                T           = addstruct(T,D);
+            end
+            
+            save(fullfile(baseDir, [glmEstDir num2str(glm)], subj_id, 'T.mat'), 'T','-v7');
+        
+        case 'GLM:hrf_all'
+            
+            sn = [];
+            glm = 12;
+            atlas = 'ROI';
+            
+            vararginoptions(varargin,{'sn', 'atlas', 'glm'});
+            
+            for s = sn
+                smp2_glm('GLM:hrf', 'sn', s, 'glm', glm, 'atlas', atlas);
+            end
+            
 end

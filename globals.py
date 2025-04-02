@@ -70,7 +70,7 @@ col_mov = {
 
 channels = {'mov': ['thumb', 'index', 'middle', 'ring', 'pinkie']}
 
-prestim = 1
+prestim = 1.5
 poststim = 1
 
 fsample_mov = 500
@@ -117,6 +117,7 @@ regressor_mapping = {
     '25%,ring': 10,
     '50%,ring': 11,
     '75%,ring': 12,
+    'exec': 5
 }
 
 ### colours ###

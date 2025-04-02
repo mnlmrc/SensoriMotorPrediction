@@ -130,23 +130,27 @@ def main(args):
     pinfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'participants.tsv'), sep='\t')
 
     if args.what == 'mov2npz':
-
         if args.session == 'training':
             blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).runsTraining[0].split('.')
         elif args.session == 'behavioural':
             blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).FuncRuns[0].split('.')
-
         force_segmented, descr = segment_mov(experiment=args.experiment,
                                              sn=args.sn,
                                              session=args.session,
                                              blocks=blocks,
                                              prestim=gl.prestim,
                                              poststim=gl.poststim)
-
         print(f"Saving participant subj{args.sn}, session {args.session}...")
         np.savez(os.path.join(gl.baseDir, args.experiment, args.session, f'subj{args.sn}',
                               f'{args.experiment}_{args.sn}_force_segmented.npz'),
                  data_array=force_segmented, descriptor=descr, allow_pickle=False)
+    if args.what == 'mov2npz_all':
+        for sn in args.snS:
+            args = argparse.Namespace(what='mov2npz',
+                                        experiment=args.experiment,
+                                      sn=sn,
+                                      session=args.session,)
+            main(args)
     if args.what == 'single_trial':
 
         if args.session == 'training':
@@ -210,7 +214,7 @@ def main(args):
                         descr['finger'].append(gl.channels['mov'][f])
                         descr['GoNogo'].append('go')
 
-        np.savez(os.path.join(gl.baseDir, args.experiment, f'force.segmented.avg.npz'),
+        np.savez(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'force.segmented.avg.npz'),
                  data_array=np.stack(force_avg, axis=0), descriptor=descr, allow_pickle=True)
     if args.what == 'single_trial_all':
         for sn in args.snS:

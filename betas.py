@@ -15,6 +15,59 @@ import nibabel as nb
 import nitools as nt
 
 
+def make_cifti_betas(path_glm, masks, struct):
+    SPM = spm.SpmGlm(path_glm)  #
+    SPM.get_info_from_spm_mat()
+
+    for i, (s, mask) in enumerate(zip(struct, masks)):
+        atlas = am.AtlasVolumetric('region', mask, structure=s)
+
+        if i == 0:
+            brain_axis = atlas.get_brain_model_axis()
+            coords = nt.get_mask_coords(mask)
+        else:
+            brain_axis += atlas.get_brain_model_axis()
+            coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
+
+    betas, _, info = SPM.get_betas(coords)
+
+    reg_name = np.array([n.split('*')[0] for n in info['reg_name']])
+
+    row_axis = nb.cifti2.ScalarAxis(reg_name.astype(str) + '.' + info['run_number'].astype(str))
+
+    header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
+    cifti = nb.Cifti2Image(
+        dataobj=betas,  # Stack them along the rows (adjust as needed)
+        header=header,  # Use one of the headers (may need to modify)
+    )
+    return cifti
+
+def make_cifti_residuals(path_glm, masks, struct):
+    SPM = spm.SpmGlm(path_glm)  #
+    SPM.get_info_from_spm_mat()
+
+    for i, (s, mask) in enumerate(zip(struct, masks)):
+        atlas = am.AtlasVolumetric(H, mask, structure=s)
+
+        if i == 0:
+            brain_axis = atlas.get_brain_model_axis()
+            coords = nt.get_mask_coords(mask)
+        else:
+            brain_axis += atlas.get_brain_model_axis()
+            coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
+
+    res, _, info = SPM.get_residuals(coords)
+
+    row_axis = nb.cifti2.SeriesAxis(1, 1, res.shape[0], 'second')
+
+    header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
+    cifti = nb.Cifti2Image(
+        dataobj=res,  # Stack them along the rows (adjust as needed)
+        header=header,  # Use one of the headers (may need to modify)
+    )
+    return cifti
+
+
 def get_roi(experiment=None, sn=None, Hem=None, roi=None, atlas='ROI'):
     mat = scipy.io.loadmat(os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}',
                                         f'subj{sn}_{atlas}_region.mat'))
@@ -89,6 +142,7 @@ def main(args=None):
     Hem = ['L', 'R']
     rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
     struct = ['CortexLeft', 'CortexRight']
+    path_rois = os.path.join(gl.baseDir, args.experiment, gl.roiDir)
     if args.what == 'save_rois_contrasts':
         for H in Hem:
             for roi in rois:
@@ -158,35 +212,10 @@ def main(args=None):
                 np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
                                      f'ROI.{H}.{roi}.res.npy'), res)
     if args.what == 'save_betas_cifti':
-        SPM = spm.SpmGlm(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}'))  #
-        SPM.get_info_from_spm_mat()
-
-        for i, (s, H) in enumerate(zip(struct, Hem)):
-            mask = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'Hem.{H}.nii')
-            atlas = am.AtlasVolumetric(H, mask, structure=s)
-
-            if i == 0:
-                brain_axis = atlas.get_brain_model_axis()
-                coords = nt.get_mask_coords(mask)
-            else:
-                brain_axis += atlas.get_brain_model_axis()
-                coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
-
-        betas, _, info = SPM.get_betas(coords)
-
-        reg_name = np.array([n.split('*')[0] for n in info['reg_name']])
-
-        row_axis = nb.cifti2.ScalarAxis(reg_name.astype(str) + '.' + info['run_number'].astype(str))
-
-        save_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
-
-        header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
-        cifti = nb.Cifti2Image(
-            dataobj=betas,  # Stack them along the rows (adjust as needed)
-            header=header,  # Use one of the headers (may need to modify)
-        )
-
-        nb.save(cifti, save_path + '/' + 'beta.dscalar.nii')
+        path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+        masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
+        cifti = make_cifti_betas(path_glm, masks, struct)
+        nb.save(cifti, path_glm + '/' + 'beta.dscalar.nii')
     if args.what == 'save_residuals_cifti':
         SPM = spm.SpmGlm(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}'))  #
         SPM.get_info_from_spm_mat()

@@ -35,7 +35,7 @@ def plot_flatmap_cortical_activation(img, vmin=-20, vmax=20, xlim=None, ylim=Non
         col_names = nt.get_gifti_column_names(data[h])
 
         plan_col_names = [col for col in col_names if 'index' not in col and 'ring' not in col]
-        exec_col_names = [col for col in col_names if 'index' in col or 'ring' in col]
+        exec_col_names = [col for col in col_names if 'index' in col or 'ring' in col or 'exec' in col]
 
         im = np.array([x in plan_col_names for x in col_names])
         darray_avg = np.array(darray[:, im]).mean(axis=1)
@@ -84,15 +84,28 @@ def add_colorbar(fig, ax, cax, orientation='horizontal', fraction=.02, label='',
     cbar = fig.colorbar(cax, ax=ax, orientation=orientation, fraction=fraction, anchor=anchor)
     cbar.set_label(label)
 
-def add_significant_patches_to_ml_rois(fig, axs, LL, box_width, patch_height):
+def add_noise_ceiling(fig, ax, baseline, noise_ceiling, upper_ceiling=None, xlim=(None, None),
+                      facecolor='lightgrey', alpha=0.3):
+    noise_lower = np.nanmean(noise_ceiling)
+    if upper_ceiling is not None:
+        noise_upper = np.nanmean(upper_ceiling-baseline)
+        noiserect = Rectangle((xlim[0], noise_lower), xlim[1]-xlim[0], noise_upper-noise_lower,
+                              linewidth=0, facecolor=facecolor, zorder=1e6, alpha=alpha)
+        ax.add_patch(noiserect)
+    else:
+        l = mlines.Line2D([xlim[0], xlim[1]], [noise_lower, noise_lower],color=[0,0,0], linestyle=':')
+        ax.add_line(l)
+
+def add_significant_patches_to_ml_rois(fig, axs, LL, box_width, patch_height=7, field='value', alternative0='greater',
+                                       alternative1='less'):
 
     for m, md in enumerate(LL.model.unique()):
         for r, roi in enumerate(LL.roi.unique()):
             LL_tmp = LL[(LL['model'] == md) & (LL['roi'] == roi)]
             start = m - box_width / 2 + r * 0.1
             xInt = (start, start + 0.1)
-            _, pval0 = ttest_1samp(LL_tmp['value'], popmean=0, alternative='greater')
-            _, pval1 = ttest_1samp(LL_tmp['value'], popmean=1, alternative='less')
+            _, pval0 = ttest_1samp(LL_tmp[field], popmean=0, alternative=alternative0)
+            _, pval1 = ttest_1samp(LL_tmp[field], popmean=1, alternative=alternative1)
             if pval0 < .05:
                 rect = Rectangle(
                     (xInt[0], 0),
@@ -106,7 +119,7 @@ def add_significant_patches_to_ml_rois(fig, axs, LL, box_width, patch_height):
 
     return fig, axs
 
-def add_lineplot_to_boxplot(fig, axs, data=None, x=None, y=None, hue=None, box_width=None, color='k', lw=1, ls='-', show_error=False):
+def add_lineplot_to_boxplot(fig, axs, data=None, x=None, y=None, hue=None, box_width=.8, color='k', lw=1, ls='-', show_error=False):
     x_order = data[x].unique()
     hue_order = data[hue].unique()
     n_hues = len(hue_order)
@@ -176,4 +189,68 @@ def set_spines_and_ticks_width(ax,
 
 
 
+def make_colors(n_labels, ecol=('blue', 'red')):
+    cmap = mcolors.LinearSegmentedColormap.from_list(f"{ecol[0]}_to_{ecol[1]}",
+                                                     [ecol[0], ecol[1]], N=100)
+    norm = plt.Normalize(0, n_labels)
+    colors = [cmap(norm(lab)) for lab in range(n_labels)]
+
+    return colors
+
+
+def get_clamp_lat():
+    """
+    Just get the latency of push initiation on the ring and index finger
+    Returns:
+        latency (tuple): latency_index, latency_ring
+
+    """
+    latency = pd.read_csv(os.path.join(gl.baseDir, 'smp0', 'clamped', 'smp0_clamped_latency.tsv'), sep='\t')
+    latency = latency['index'][0], latency['ring'][0]
+
+    return latency
+
+
+def make_tAx(data, latency=None):
+    """
+    Just make the time axis of any time plot aligned to the time of perturbation, taking into account the latency of
+    the push initiation on the ring and index finger
+
+    Args:
+        data: a numpy array of the data that need to be plotted. Last dimension must be time
+
+    Returns:
+        numpy.ndarray (data.shape[-1)
+
+    """
+    if latency is None:
+        latency = get_clamp_lat()
+
+    tAx = (np.linspace(-gl.prestim, gl.poststim, data.shape[-1]) - latency[0],
+           np.linspace(-gl.prestim, gl.poststim, data.shape[-1]) - latency[1])
+
+    return tAx
+
+
+def plot_bins(df):
+    pass
+
+
+def make_yref(axs, reference_length=5, pos='left'):
+    midpoint_y = (axs.get_ylim()[0] + axs.get_ylim()[1]) / 6  # Calculate the one-third of the y-axis
+
+    if pos == 'left':
+        reference_x = axs.get_xlim()[0]
+        axs.plot([reference_x, reference_x],
+                 [midpoint_y - reference_length / 2, midpoint_y + reference_length / 2],
+                 ls='-', color='k', lw=3, zorder=100)
+        axs.text(reference_x, midpoint_y, f'{reference_length}N ', color='k',
+                 ha='right', va='center', zorder=100)
+    elif pos == 'right':
+        reference_x = axs.get_xlim()[1]  # Position of the reference line
+        axs.plot([reference_x, reference_x],
+                 [midpoint_y - reference_length / 2, midpoint_y + reference_length / 2],
+                 ls='-', color='k', lw=3, zorder=100)
+        axs.text(reference_x, midpoint_y, f'{reference_length}N ', color='k',
+                 ha='left', va='center', zorder=100)
 

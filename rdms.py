@@ -153,7 +153,7 @@ def main(args):
         rdms = []
         for H in Hem:
             for roi in rois:
-                print(f'Participant {sn}, Hemisphere: {H}, region:{roi}')
+                print(f'Participant {args.sn}, Hemisphere: {H}, region:{roi}')
                 rdm = calc_rdm_roi(
                     experiment=args.experiment,
                     sn=args.sn,
@@ -169,7 +169,6 @@ def main(args):
             rdm.descriptors['noise'] = None # kill noise to allow concatenation
         rdms = rsa.rdm.concat(rdms)
         rdms.save(path, overwrite=True, file_type='hdf5')
-
     if args.what == 'save_rois_rdms_all':
         for sn in args.snS:
             args = argparse.Namespace(
@@ -179,7 +178,6 @@ def main(args):
                 glm=args.glm
             )
             main(args)
-
     if args.what == 'save_rois_rdms_avg':
         rdms = []
         for sn in args.snS:
@@ -189,7 +187,6 @@ def main(args):
         rdms = rsa.rdm.concat(rdms)
         rdms.save(os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'glm{args.glm}.ROI.hdf5'),
                   overwrite=True, file_type='hdf5')
-
     if args.what == 'save_rdm_emg':
         rdms = calc_rdm_emg(
             experiment=args.experiment,
@@ -281,6 +278,7 @@ if __name__ == '__main__':
 
     rdm_index = {
         'glm12': [0, 4, 7, 10, 2, 5, 8, 11, 3, 1, 6, 9, 12],
+        'glm14': [0, 2, 3, 4, 1, 5]
     }
 
     main(args)
