@@ -161,7 +161,24 @@ def group_by_dict_fields(data_dict, by, fields_to_average):
     return T_out
 
 
+def r_squared(y_true, y_pred):
+    """
+    Calculate the R-squared (coefficient of determination) between two vectors.
 
+    Parameters:
+    y_true (array-like): Ground truth values.
+    y_pred (array-like): Predicted values.
+
+    Returns:
+    float: R-squared value.
+    """
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    ss_res = np.sum((y_true - y_pred) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+
+    return 1 - ss_res / ss_tot if ss_tot != 0 else 0.0
 
 
 

@@ -106,5 +106,5 @@ for h, H in enumerate(Hem):
         plt.suptitle(f'{map_hem[H]}, {map_names[img.metadata["Name"]]}')
         # plt.savefig(os.path.join(gl.baseDir, 'smp1', 'figures', f'flatmap.group.{H}.{img.metadata["Name"]}.svg'),
         #             dpi=300)
-        plt.savefig(os.path.join(gl.baseDir, 'smp1', 'figures', f'flatmap.group.{H}.{img.metadata["Name"]}.png'),
-                    dpi=300)
+        # plt.savefig(os.path.join(gl.baseDir, 'smp1', 'figures', f'flatmap.group.{H}.{img.metadata["Name"]}.png'),
+        #             dpi=300)

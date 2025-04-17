@@ -14,11 +14,11 @@ import PcmPy as pcm
 from rsatoolbox.inference import noise_ceiling
 
 
-def D_to_rdm(D, descriptors=None, rdm_descriptors=None, pattern_descriptors=None, dissimilarity_measure=None):
+def D_to_rdm(D, descriptors=None, rdm_descriptors={}, pattern_descriptors=None, dissimilarity_measure=None):
 
     if D.ndim == 2:
-        idx = np.triu_indices(G)
-        dissimilarities = G[idx]
+        triu_rows, triu_cols = np.triu_indices(D.shape[0], k=1)
+        dissimilarities = D[triu_rows, triu_cols]
     if D.ndim == 3:
         triu_rows, triu_cols = np.triu_indices(D.shape[-1], k=1)
         dissimilarities = D[:, triu_rows, triu_cols]

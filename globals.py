@@ -93,11 +93,11 @@ cue_code = [93, 12, 44, 21, 39]
 stimFinger_code = [91999, 99919]
 
 cue_mapping = {
-                93: '0%',
-                12: '25%',
+                93: '100%',
+                12: '75%',
                 44: '50%',
-                21: '75%',
-                39: '100%'
+                21: '25%',
+                39: '0%'
             }
 stimFinger_mapping = {91999: 'index',
                       99919: 'ring',
@@ -109,14 +109,14 @@ regressor_mapping = {
     '50%': 2,
     '75%': 3,
     '100%': 4,
-    '25%,index': 5,
-    '50%,index': 6,
-    '75%,index': 7,
-    '100%,index': 8,
-    '0%,ring': 9,
-    '25%,ring': 10,
-    '50%,ring': 11,
-    '75%,ring': 12,
+    '0%,index': 5,
+    '25%,index': 6,
+    '50%,index': 7,
+    '75%,index': 8,
+    '25%,ring': 9,
+    '50%,ring': 10,
+    '75%,ring': 11,
+    '100%,ring': 12,
     'exec': 5
 }
 
@@ -130,14 +130,14 @@ colour_mapping = {
     '50%': colors[2],
     '75%': colors[3],
     '100%': colors[4],
+    '0%,index': colors[0],
     '25%,index': colors[1],
     '50%,index': colors[2],
     '75%,index': colors[3],
-    '100%,index': colors[4],
-    '0%,ring': colors[0],
     '25%,ring': colors[1],
     '50%,ring': colors[2],
     '75%,ring': colors[3],
+    '100%,ring': colors[4],
 }
 
 ###############
@@ -159,7 +159,7 @@ mask_stimFinger_cue[[5, 6, 10, 12, 15, 16]] = True
 borders = {'L': os.path.join(baseDir, 'smp2', surfDir, 'fs_LR.32k.L.border'),
            'R': os.path.join(baseDir, 'smp2', surfDir, 'fs_LR.32k.R.border')}
 
-atlas_dir = ["/home/ROBARTS/memanue5/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/",
+atlas_dir = ["/home/UWO/memanue5/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/",
              "/Users/mnlmrc/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/"]
 
 atlas_dir = next((Dir for Dir in atlas_dir if Path(Dir).exists()), None)

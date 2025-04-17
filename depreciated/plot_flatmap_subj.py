@@ -82,5 +82,5 @@ if __name__ == "__main__":
 
     plt.subplots_adjust(bottom=0, left=0, wspace=0, hspace=0, right=1, top=.8)
 
-    plt.savefig(os.path.join(gl.baseDir, experiment, 'figures', participant_id,
-                             f"{cond}".rstrip('.nii') + '.png'))
+    # plt.savefig(os.path.join(gl.baseDir, experiment, 'figures', participant_id,
+    #                          f"{cond}".rstrip('.nii') + '.png'))

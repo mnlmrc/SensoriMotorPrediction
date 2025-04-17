@@ -1,7 +1,7 @@
 function varargout = smp2_func(what, varargin)
 
     localPath = '/Users/mnlmrc/Documents/';
-    cbsPath = '/home/ROBARTS/memanue5/Documents/';
+    cbsPath = '/home/UWO/memanue5/Documents/';
     % Directory specification
     if isfolder(localPath)
         path = localPath;
@@ -225,7 +225,7 @@ function varargout = smp2_func(what, varargin)
             % imaging_data_raw
             run_list = {}; % Initialize as an empty cell array
             for run = runs
-                run_list{end+1} = fullfile(baseDir, imagingRawDir,...
+                run_list{end+1} = fullfile(baseDir, imagingDir,...
                     subj_id, sprintf('rp_%s_run_%02d.txt', subj_id, run)) ;
             end
 

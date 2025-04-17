@@ -3,13 +3,14 @@ import nibabel as nb
 import nitools as nt
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, FancyBboxPatch
 import surfAnalysisPy as surf
 import os
 import globals as gl
 from scipy.stats import ttest_1samp
 
-def plot_flatmap_cortical_activation(img, vmin=-20, vmax=20, xlim=None, ylim=None, figsize=(5, 6)):
+def plot_flatmap_cortical_activation(img, vmin=-20, vmax=20, xlim=None, ylim=None, figsize=(5, 6),
+                                     frame=(None, None, None, None), rounding=.2, cbar_orientation='vertical',cbar_fraction=.01):
 
     if xlim is None:
         xlim = {
@@ -33,42 +34,65 @@ def plot_flatmap_cortical_activation(img, vmin=-20, vmax=20, xlim=None, ylim=Non
         darray = nt.get_gifti_data_matrix(data[h])
 
         col_names = nt.get_gifti_column_names(data[h])
-
         plan_col_names = [col for col in col_names if 'index' not in col and 'ring' not in col]
         exec_col_names = [col for col in col_names if 'index' in col or 'ring' in col or 'exec' in col]
 
         im = np.array([x in plan_col_names for x in col_names])
         darray_avg = np.array(darray[:, im]).mean(axis=1)
         plt.sca(axs[0, h])
-        surf.plot.plotmap(darray_avg, f'fs32k_{H}',
+        ax = surf.plot.plotmap(darray_avg, f'fs32k_{H}',
                           underlay=None,
                           borders=gl.borders[H],
                           cscale=[vmin, vmax],
-                          cmap='jet',
+                          cmap='bwr',
                           underscale=[-1.5, 1],
                           alpha=.5,
                           new_figure=False,
                           colorbar=False,
                           frame=[xlim[H][0], xlim[H][1], ylim[H][0], ylim[H][1]])
+
+        # Add a patch with rounded corners on top
+        bbox = FancyBboxPatch((frame[0], frame[1]), frame[2], frame[3],
+                              boxstyle=f"round,pad=0,rounding_size={rounding}",
+                              transform=ax.transAxes,
+                              facecolor='none',
+                              edgecolor='none',
+                              zorder=10,
+                              clip_on=False)
+        for artist in ax.get_children():
+            if hasattr(artist, 'set_clip_path'):
+                artist.set_clip_path(bbox)
 
         im = np.array([x in exec_col_names for x in col_names])
         darray_avg = np.array(darray[:, im]).mean(axis=1)
         plt.sca(axs[1, h])
-        surf.plot.plotmap(darray_avg, f'fs32k_{H}',
+        ax = surf.plot.plotmap(darray_avg, f'fs32k_{H}',
                           underlay=None,
                           borders=gl.borders[H],
                           cscale=[vmin, vmax],
-                          cmap='jet',
+                          cmap='bwr',
                           underscale=[-1.5, 1],
                           alpha=.5,
                           new_figure=False,
                           colorbar=False,
                           frame=[xlim[H][0], xlim[H][1], ylim[H][0], ylim[H][1]])
 
+        # Add a patch with rounded corners on top
+        bbox = FancyBboxPatch((frame[0], frame[1]), frame[2], frame[3],
+                              boxstyle=f"round,pad=0,rounding_size={rounding}",
+                              transform=ax.transAxes,
+                              facecolor='none',
+                              edgecolor='none',
+                              zorder=10,
+                              clip_on=False)
+        for artist in ax.get_children():
+            if hasattr(artist, 'set_clip_path'):
+                artist.set_clip_path(bbox)
+
     # make colorbar
     norm = plt.Normalize(vmin=vmin, vmax=vmax)
-    sm = ScalarMappable(norm=norm, cmap='jet')
-    cbar = fig.colorbar(sm, ax=[axs[1, 0], axs[1, 1]], orientation='horizontal', fraction=0.03)
+    sm = ScalarMappable(norm=norm, cmap='bwr')
+    cbar = fig.colorbar(sm, ax=axs, orientation='vertical', fraction=0.01)
     cbar.set_label('activation vs. baseline (a.u.)')
 
     # cosmetic
@@ -236,7 +260,7 @@ def plot_bins(df):
     pass
 
 
-def make_yref(axs, reference_length=5, pos='left'):
+def make_yref(axs, reference_length=5, pos='left', unit='N', custom_text=None):
     midpoint_y = (axs.get_ylim()[0] + axs.get_ylim()[1]) / 6  # Calculate the one-third of the y-axis
 
     if pos == 'left':
@@ -251,6 +275,50 @@ def make_yref(axs, reference_length=5, pos='left'):
         axs.plot([reference_x, reference_x],
                  [midpoint_y - reference_length / 2, midpoint_y + reference_length / 2],
                  ls='-', color='k', lw=3, zorder=100)
-        axs.text(reference_x, midpoint_y, f'{reference_length}N ', color='k',
-                 ha='left', va='center', zorder=100)
+        if custom_text is None:
+            axs.text(reference_x, midpoint_y, f'{reference_length}{unit} ', color='k',
+                     ha='left', va='center', zorder=100)
+        else:
+            axs.text(reference_x, midpoint_y, custom_text, color='k',ha='left', va='center', zorder=100)
 
+def save_figure_incremental(fig, base_name, ext='svg'):
+    """
+    Save a figure without overwriting by auto-incrementing the filename.
+
+    Parameters:
+        fig        : matplotlib figure object
+        base_name  : base name of the figure file (e.g., 'plot')
+        folder     : destination folder
+        ext        : file extension ('pdf', 'svg', etc.)
+    """
+    folder = os.path.join(gl.baseDir, 'figures')
+    os.makedirs(folder, exist_ok=True)
+    existing = [f for f in os.listdir(folder) if f.startswith(base_name) and f.endswith('.' + ext)]
+
+    # Extract number suffixes and find the next available one
+    suffixes = []
+    for f in existing:
+        parts = f.replace(f'.{ext}', '').split('_')
+        if parts[-1].isdigit():
+            suffixes.append(int(parts[-1]))
+    next_suffix = max(suffixes, default=0) + 1
+
+    filename = f"{base_name}_{next_suffix}.{ext}"
+    filepath = os.path.join(folder, filename)
+
+    fig.savefig(filepath, format=ext, dpi=600, bbox_inches='tight')
+    print(f"Figure saved to: {filepath}")
+
+
+def make_axes_square(ax):
+    pos = ax.get_position()  # Get [left, bottom, width, height] in figure fraction
+    center_x = pos.x0 + pos.width / 2
+    center_y = pos.y0 + pos.height / 2
+    size = min(pos.width, pos.height)
+    new_pos = [
+        center_x - size / 2,  # new left
+        center_y - size / 2,  # new bottom
+        size,                 # new width
+        size                  # new height
+    ]
+    ax.set_position(new_pos)

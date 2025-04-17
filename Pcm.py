@@ -7,7 +7,7 @@ warnings.filterwarnings("ignore")
 import argparse
 import pickle
 
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+# from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 import PcmPy as pcm
 from pathlib import Path
@@ -89,10 +89,10 @@ def make_execution_models():
 
     C = pcm.centering(8)
 
-    v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
-    v_cue = C @ np.array([-1, 0, 1, 2, -2, -1, 0, 1])
-    v_cert = C @ np.array([0.1875, .25, 0.1875, 0, 0, 0.1875, .25, 0.1875])  # variance of a Bernoulli distribution
-    v_surprise = C @ -np.log2(np.array([.25, .5, .75, 1, 1, .75, .5, .25]))  # with Shannon information
+    v_fingerID = C @ np.array([-1, -1, -1, -1, 1, 1, 1, 1])
+    v_cue = C @ np.array([-2, -1, 0, 1, -1, 0, 1, 2])
+    v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0.1875, .25, 0.1875, 0, ])  # variance of a Bernoulli distribution
+    v_surprise = C @ -np.log2(np.array([1, .75, .5, .25, .25, .5, .75, 1, ]))  # with Shannon information
 
     Ac = np.zeros((5, 8, 4))
     Ac[0, :, 0] = v_fingerID
@@ -126,34 +126,7 @@ def make_execution_models():
     return M
 
 
-def make_execution_models_emg():
-    C = pcm.centering(8)
-
-    v_fingerID = C @ np.array([1, 1, 1, 1, -1, -1, -1, -1])
-    v_cue = C @ np.array([2, -1, 0, 1, -2, -1, 0, 1, ])
-
-    Ac = np.zeros((3, 8, 3))
-    Ac[0, :, 0] = v_fingerID
-    Ac[1, :, 1] = v_cue
-    Ac[2, :, 0] = v_cue
-
-    G_fingerID = np.outer(v_fingerID, v_fingerID)
-    G_cue = np.outer(v_cue, v_cue)
-
-    M = []
-    M.append(pcm.FixedModel('null', np.zeros((8, 8))))
-    M.append(pcm.FixedModel('finger', G_fingerID))
-    M.append(pcm.FixedModel('cue', G_cue))
-    M.append(pcm.FixedModel('indipendent', np.eye(8)))
-    M.append(pcm.ComponentModel('finger+cue (component)',
-                                np.array([G_fingerID, G_cue, ])))
-    M.append(pcm.FeatureModel('finger+cue (feature)', Ac))
-    M.append(pcm.FreeModel('ceil', 8))  # Noise ceiling model
-
-    return M
-
-
-def make_planning_models():
+def make_planning_models(test_planning_force=True):
     C = pcm.centering(5)
 
     v_cue = C @ np.array([-2, -1, 0, 1, 2])
@@ -161,14 +134,18 @@ def make_planning_models():
 
     G_cue = np.outer(v_cue, v_cue)
     G_cert = np.outer(v_cert, v_cert)
-    G_force = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'G_obs.force.plan.npy'))
+
+    path_G_force = os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'G_obs.force.plan.npy')
+    if test_planning_force:
+        G_force = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'G_obs.force.plan.npy'))
 
     M = []
     M.append(pcm.FixedModel('null', np.zeros((5, 5))))  # 0
     M.append(pcm.FixedModel('cue', G_cue))  # 1
     M.append(pcm.FixedModel('uncertainty', G_cert))  # 2
-    M.append(pcm.FixedModel('equal distance', np.eye(5)))  # 3
-    M.append(pcm.FixedModel('planning force', G_force.mean(axis=0)))
+    M.append(pcm.FixedModel('equal distance', np.eye(5)))
+    if test_planning_force:
+        M.append(pcm.FixedModel('planning force', G_force.mean(axis=0)))
     M.append(pcm.ComponentModel('component', np.array([G_cue / np.trace(G_cue),
                                                        G_cert / np.trace(G_cert),])))  # 4
     M.append(pcm.FreeModel('ceil', 5))  # 5
@@ -277,6 +254,10 @@ class Tessellation():
             T_cv, theta_cv = pcm.fit_model_group_crossval(Y, self.M, fit_scale=True, verbose=True, fixed_effect='block')
             T_gr, _ = pcm.fit_model_group(Y, self.M, fit_scale=True, verbose=True, fixed_effect='block')
 
+            # for i in range(len(theta_cv)):
+            #     n_param = self.M[i].n_param
+            #     theta_cv[i] = theta_cv[i][:n_param] / np.linalg.norm(theta_cv[i][:n_param])
+
             likelihood = T_cv.likelihood
             baseline = likelihood.loc[:, 'null'].values
             likelihood = likelihood - baseline.reshape(-1, 1)
@@ -362,7 +343,7 @@ class Tessellation():
                 )
 
             # # Serial processing of tessels
-            # for ntessel in range(2):
+            # for ntessel in range(5):
             #     self.results[H] = self._store_T_and_theta_from_tessel(H, ntessel)
 
 
@@ -416,7 +397,7 @@ class Tessellation():
         column_names = [f'param #{n+1}' for n in range(theta.shape[1])]
         gifti_img_theta = nt.make_func_gifti(theta,
                                              anatomical_struct=self.struct[self.Hem.index(H)],
-                                             column_names=self.col_names)
+                                             column_names=column_names)
 
         return gifti_img_theta
 
@@ -436,8 +417,6 @@ class Tessellation():
 
 
 def main(args):
-
-    scaler = StandardScaler()
 
     if args.what == 'save_tessel_execution':
 
@@ -460,7 +439,7 @@ def main(args):
         nb.save(cifti_theta_component, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                       f'theta_component.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.exec.dscalar.nii'))
         cifti_theta_feature = Tess.make_group_cifti_theta('feature')
-        nb.save(cifti_T, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+        nb.save(cifti_theta_feature, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                       f'theta_feature.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.exec.dscalar.nii'))
 
     if args.what == 'save_tessel_planning':
@@ -490,73 +469,74 @@ def main(args):
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.emg.pkl'), "wb")
         pickle.dump(M, f)
 
-        snS = [100, 101, 102, 104, 105, 106, 107, 108, 109, 110]
+        # snS = [100, 101, 102, 104, 105, 106, 107, 108, 109, 110]
 
-        N = len(snS)
+        N = len(args.snS)
 
-        G_obs = np.zeros((N, 8, 8))
-        Y = list()
-        for s, sn in enumerate(snS):
-            npz = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}',
-                                       f'{args.experiment}_{sn}_binned.npz'), allow_pickle=True)
+        for epoch in args.epochs:
+            G_obs = np.zeros((N, 8, 8))
+            Y = list()
+            for s, sn in enumerate(args.snS):
+                npz = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}',
+                                           f'{args.experiment}_{sn}_binned.npz'), allow_pickle=True)
 
-            emg = npz['data_array'][-1]
-            descr = npz['descriptor'].item()
-            timepoints = list(descr['time windows'].keys())
+                descr = npz['descriptor'].item()
+                timepoints = list(descr['time windows'].keys())
 
-            dat = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
-                                           f'{args.experiment}_{sn}.dat'), sep='\t')
-            dat['stimFinger'] = dat['stimFinger'].map(gl.stimFinger_mapping)
-            dat['cue'] = dat['cue'].map(gl.cue_mapping)
-            dat['BN'] = dat['BN'].astype(str)
+                emg = npz['data_array'][timepoints.index(epoch)]
 
-            cov = emg.T @ emg
+                dat = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
+                                               f'{args.experiment}_{sn}.dat'), sep='\t')
+                dat['stimFinger'] = dat['stimFinger'].map(gl.stimFinger_mapping)
+                dat['cue'] = dat['cue'].map(gl.cue_mapping)
+                dat['BN'] = dat['BN'].astype(str)
 
-            emg = emg / np.sqrt(np.diag(cov))
+                cov = emg.T @ emg
 
-            dat[['ch_' + str(x) for x in range(emg.shape[-1])]] = emg
+                emg = emg / np.sqrt(np.diag(cov))
 
-            dat = dat.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
-            cond_vec = dat['stimFinger'] + ',' + dat['cue']
-            part_vec = dat['BN']
+                dat[['ch_' + str(x) for x in range(emg.shape[-1])]] = emg
 
-            obs_des = {'cond_vec': cond_vec,
-                       'part_vec': part_vec}
+                dat = dat.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
+                cond_vec = dat['cue'] + ',' + dat['stimFinger']
+                part_vec = dat['BN']
 
-            Y.append(pcm.dataset.Dataset(dat[['ch_' + str(x) for x in range(emg.shape[-1])]].to_numpy(),
-                                         obs_descriptors=obs_des))
+                obs_des = {'cond_vec': cond_vec.map(gl.regressor_mapping),
+                           'part_vec': part_vec}
 
-            G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                                             Y[s].obs_descriptors['part_vec'],
-                                             X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+                Y.append(pcm.dataset.Dataset(dat[['ch_' + str(x) for x in range(emg.shape[-1])]].to_numpy(),
+                                             obs_descriptors=obs_des))
 
-        T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-        T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-        T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+                G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                                                 Y[s].obs_descriptors['part_vec'],
+                                                 X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
-        path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
+            T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+            T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+            T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 
-        os.makedirs(path, exist_ok=True)
+            path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
 
-        np.save(os.path.join(path, f'G_obs.emg.Vol.npy'), G_obs)
+            os.makedirs(path, exist_ok=True)
 
-        T_in.to_pickle(os.path.join(path, f'T_in.emg.Vol.pkl'))
-        T_cv.to_pickle(os.path.join(path, f'T_cv.emg.Vol.pkl'))
-        T_gr.to_pickle(os.path.join(path, f'T_gr.emg.Vol.pkl'))
+            np.save(os.path.join(path, f'G_obs.emg.{epoch}.npy'), G_obs)
 
-        with open(os.path.join(path, f'theta_in.emg.Vol.pkl'), 'wb') as f:
-            pickle.dump(theta_in, f)
-        with open(os.path.join(path, f'theta_cv.emg.Vol.pkl'), 'wb') as f:
-            pickle.dump(theta_cv, f)
-        with open(os.path.join(path, f'theta_gr.emg.Vol.pkl'), 'wb') as f:
-            pickle.dump(theta_gr, f)
+            T_in.to_pickle(os.path.join(path, f'T_in.emg.{epoch}.pkl'))
+            T_cv.to_pickle(os.path.join(path, f'T_cv.emg.{epoch}.pkl'))
+            T_gr.to_pickle(os.path.join(path, f'T_gr.emg.{epoch}.pkl'))
+
+            with open(os.path.join(path, f'theta_in.emg.{epoch}.pkl'), 'wb') as f:
+                pickle.dump(theta_in, f)
+            with open(os.path.join(path, f'theta_cv.emg.{epoch}.pkl'), 'wb') as f:
+                pickle.dump(theta_cv, f)
+            with open(os.path.join(path, f'theta_gr.emg.{epoch}.pkl'), 'wb') as f:
+                pickle.dump(theta_gr, f)
 
     if args.what == 'save_force_execution':
 
         M = make_execution_models()
-        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                               f'M.force.exec.p'), "wb") as f:
-            pickle.dump(M, f)
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.force.exec.p'), "wb")
+        pickle.dump(M, f)
 
         N = len(args.snS)
 
@@ -610,10 +590,10 @@ def main(args):
 
     if args.what == 'save_force_planning':
 
-        M = make_planning_models()
-        with open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                               f'M.force.plan.p'), "wb") as f:
-            pickle.dump(M, f)
+        M = make_planning_models(test_planning_force=False)
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                               f'M.force.plan.p'), "wb")
+        pickle.dump(M, f)
 
         N = len(args.snS)
 
@@ -622,9 +602,9 @@ def main(args):
         for s, sn in enumerate(args.snS):
             force = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
                                              f'{args.experiment}_{sn}_force_single_trial.tsv'), sep='\t')
-            # force = force[force['GoNogo'] == 'nogo'] if 'GoNogo' in force else force # select only go trial
+            #force = force[force['GoNogo'] == 'nogo'] if 'GoNogo' in force else force # select only go trial
             force['cue'] = force['cue'].map(gl.cue_mapping)
-            force['stimFinger'] = force['stimFinger'].map(gl.stimFinger_mapping)
+            # force['stimFinger'] = force['stimFinger'].map(gl.stimFinger_mapping)
             force = force.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
             cond_vec = force['cue'] #+ ',' + force['stimFinger']
             part_vec = force['BN']
@@ -832,7 +812,8 @@ if __name__ == '__main__':
     # parser.add_argument('--Hem', type=str, default=None)
     parser.add_argument('--glm', type=int, default=12)
     parser.add_argument('--n_jobs', type=int, default=12)
-    parser.add_argument('--n_tessels', type=int, default=42, choices=[42, 162, 362, 642, 1002, 1442])
+    parser.add_argument('--epochs', nargs='+', type=str, default=['SLR', 'LLR', 'Vol'])
+    parser.add_argument('--n_tessels', type=int, default=362, choices=[42, 162, 362, 642, 1002, 1442])
 
     args = parser.parse_args()
 
