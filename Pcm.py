@@ -26,14 +26,16 @@ import sys
 
 import Functional_Fusion.atlas_map as am
 
-def find_model(path, name):
-    f = open(path, 'rb')
-    M = pickle.load(f)
-    for m in M:
-        if m.name == name:
-            return m, M.index(m)
-    if m == M[-1]:
-        raise Exception(f'Model name not found')
+def find_model(M, name):
+    if type(M) == str:
+        f = open(M, 'rb')
+        M = pickle.load(f)
+    if type(M) == list:
+        for m in M:
+            if m.name == name:
+                return m, M.index(m)
+        if m == M[-1]:
+            raise Exception(f'Model name not found')
 
 def normalize_G(G):
     return (G - G.mean()) / G.std()
@@ -85,21 +87,30 @@ def get_likelihood_in_parcel(T_cv, T_gr, parcel_field='roi', parcel_name=None):
 
     return LL
 
-def make_execution_models():
+def make_execution_models(centering=False):
 
     C = pcm.centering(8)
 
-    v_fingerID = C @ np.array([-1, -1, -1, -1, 1, 1, 1, 1])
-    v_cue = C @ np.array([-2, -1, 0, 1, -1, 0, 1, 2])
-    v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0.1875, .25, 0.1875, 0, ])  # variance of a Bernoulli distribution
-    v_surprise = C @ -np.log2(np.array([1, .75, .5, .25, .25, .5, .75, 1, ]))  # with Shannon information
+    if centering:
+        v_fingerID = C @ np.array([-1, -1, -1, -1, 1, 1, 1, 1])
+        v_cue = C @ np.array([1, 2, 3, 4, 2, 3, 4, 5])
+        v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0.1875, .25, 0.1875, 0, ])  # variance of a Bernoulli distribution
+        v_surprise = C @ -np.log2(np.array([1, .75, .5, .25, .25, .5, .75, 1, ]))  # with Shannon information
+    else:
+        v_fingerID = np.array([-1, -1, -1, -1, 1, 1, 1, 1])
+        v_cue = np.array([1, 2, 3, 4, 2, 3, 4, 5])
+        v_cert = np.array([0, 0.1875, .25, 0.1875, 0.1875, .25, 0.1875, 0, ])  # variance of a Bernoulli distribution
+        v_surprise = -np.log2(np.array([1, .75, .5, .25, .25, .5, .75, 1, ]))  # with Shannon information
 
-    Ac = np.zeros((5, 8, 4))
+    Ac = np.zeros((6, 8, 6))
     Ac[0, :, 0] = v_fingerID
+    Ac[0, :, 4] = v_fingerID
     Ac[1, :, 1] = v_cue
+    Ac[1, :, 5] = v_cue
     Ac[2, :, 2] = v_cert
     Ac[3, :, 3] = v_surprise
-    Ac[4, :, 0] = v_cue
+    Ac[4, :, 4] = v_cue
+    Ac[5, :, 5] = v_fingerID
 
     Ac = normalize_Ac(Ac)
 
@@ -126,18 +137,18 @@ def make_execution_models():
     return M
 
 
-def make_planning_models(test_planning_force=True):
-    C = pcm.centering(5)
+def make_planning_models(experiment, test_planning_force=True):
+    # C = pcm.centering(5)
 
-    v_cue = C @ np.array([-2, -1, 0, 1, 2])
-    v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0])
+    v_cue = np.array([1, 2, 3, 4, 5])
+    v_cert = np.array([0, 0.1875, .25, 0.1875, 0])
 
     G_cue = np.outer(v_cue, v_cue)
     G_cert = np.outer(v_cert, v_cert)
 
-    path_G_force = os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'G_obs.force.plan.npy')
+    path_G_force = os.path.join(gl.baseDir, experiment, gl.pcmDir, 'G_obs.force.plan.npy')
     if test_planning_force:
-        G_force = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'G_obs.force.plan.npy'))
+        G_force = np.load(os.path.join(gl.baseDir, experiment, gl.pcmDir, 'G_obs.force.plan.npy'))
 
     M = []
     M.append(pcm.FixedModel('null', np.zeros((5, 5))))  # 0
@@ -647,7 +658,7 @@ def main(args):
 
     if args.what == 'save_rois_planning':
 
-        M = make_planning_models()
+        M = make_planning_models(args.experiment)
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.glm{args.glm}.pkl'), "wb")
         pickle.dump(M, f)
 

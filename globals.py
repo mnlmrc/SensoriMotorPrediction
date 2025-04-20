@@ -109,19 +109,19 @@ regressor_mapping = {
     '50%': 2,
     '75%': 3,
     '100%': 4,
-    '0%,index': 5,
-    '25%,index': 6,
-    '50%,index': 7,
-    '75%,index': 8,
-    '25%,ring': 9,
-    '50%,ring': 10,
-    '75%,ring': 11,
-    '100%,ring': 12,
+    '0%,I': 5,
+    '25%,I': 6,
+    '50%,I': 7,
+    '75%,I': 8,
+    '25%,R': 9,
+    '50%,R': 10,
+    '75%,R': 11,
+    '100%,R': 12,
     'exec': 5
 }
 
 ### colours ###
-cmap = plt.get_cmap("coolwarm")
+cmap = plt.get_cmap('vanimo')
 colors = [cmap(i) for i in np.linspace(0, 1, 5)]
 
 colour_mapping = {
