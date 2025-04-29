@@ -99,8 +99,8 @@ cue_mapping = {
                 21: '25%',
                 39: '0%'
             }
-stimFinger_mapping = {91999: 'I',
-                      99919: 'R',
+stimFinger_mapping = {91999: 'index',
+                      99919: 'ring',
                       99999: 'nogo'}
 
 regressor_mapping = {
@@ -121,29 +121,23 @@ regressor_mapping = {
 }
 
 ### colours ###
-cmap_plan = plt.get_cmap('Greys')
-col_plan = [cmap_plan(i) for i in np.linspace(.2, 1, 5)]
-
-cmap_index = plt.get_cmap('Greens')
-col_index = [cmap_index(i) for i in np.linspace(.2, 1, 4)]
-
-cmap_ring = plt.get_cmap('Oranges')
-col_ring = [cmap_ring(i) for i in np.linspace(.2, 1, 4)]
+cmap = plt.get_cmap('vanimo')
+colors = [cmap(i) for i in np.linspace(0, 1, 5)]
 
 colour_mapping = {
-    '0%': col_plan[0],
-    '25%': col_plan[1],
-    '50%': col_plan[2],
-    '75%': col_plan[3],
-    '100%': col_plan[4],
-    '0%,index': col_index[0],
-    '25%,index': col_index[1],
-    '50%,index': col_index[2],
-    '75%,index': col_index[3],
-    '25%,ring': col_ring[0],
-    '50%,ring': col_ring[1],
-    '75%,ring': col_ring[2],
-    '100%,ring': col_ring[3],
+    '0%': colors[0],
+    '25%': colors[1],
+    '50%': colors[2],
+    '75%': colors[3],
+    '100%': colors[4],
+    '0%,index': colors[0],
+    '25%,index': colors[1],
+    '50%,index': colors[2],
+    '75%,index': colors[3],
+    '25%,ring': colors[1],
+    '50%,ring': colors[2],
+    '75%,ring': colors[3],
+    '100%,ring': colors[4],
 }
 
 ###############
