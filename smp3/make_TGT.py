@@ -19,9 +19,10 @@ for run in range(nruns):
 
     # Shuffle the rest of the fields together
     shuffled_group2 = df[['subNum', 'cueID', 'stimFinger', 'execMaxTime', 'feedbackTime', 'trialLabel', 'TrigExec',
-                          'TrigPlan', 'stimTrigExec', 'stimTrigPlan']].sample(frac=1).reset_index(drop=True)
+                          'TrigPlan', 'stimTrigExec']].sample(frac=1).reset_index(drop=True)
     df[['subNum', 'cueID', 'stimFinger', 'execMaxTime', 'feedbackTime', 'trialLabel', 'TrigExec',
-                          'TrigPlan', 'stimTrigExec', 'stimTrigPlan']] = shuffled_group2
+                          'TrigPlan', 'stimTrigExec']] = shuffled_group2
+    df['stimTrigPlan'] = df['planTime'] - 100
 
     # Compute startTime
     start_times = [10000]
