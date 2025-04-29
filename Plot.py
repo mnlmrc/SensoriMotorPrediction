@@ -9,6 +9,47 @@ import os
 import globals as gl
 from scipy.stats import ttest_1samp
 
+def plot_force_aligned(force, descr, go_or_nogo, vsep, axs):
+    tAx = np.linspace(-gl.prestim, gl.poststim, force.shape[-1])
+    for cue in descr.cue.unique():
+        for sf, stimF in enumerate(descr.stimFinger.unique()):
+            for f, finger in enumerate(descr.finger.unique()):
+                mask = (descr.cue == cue) & (descr.stimFinger == stimF) & (descr.GoNogo == go_or_nogo) & (descr.finger == finger)
+                if not mask.any():
+                    continue
+                force_avg = force[mask].mean(axis=0).squeeze()
+                force_err = force[mask].std(axis=0).squeeze() / np.sqrt(force[mask].shape[0])
+
+                ax_idx = sf if go_or_nogo == 'go' else 0
+                label = cue if (go_or_nogo == 'go' and sf == 2 and f == 0) else None
+
+                # Determine color key
+                color_key = f'{cue}' if stimF == 'nogo' else f'{cue},{stimF}'
+                color = gl.colour_mapping.get(color_key, 'black')  # fallback color
+
+                axs[ax_idx].plot(tAx, force_avg + f * vsep, color=color, label=label)
+                axs[ax_idx].fill_between(tAx, force_avg + f * vsep - force_err, force_avg + f * vsep + force_err,
+                                         color=color, lw=0, alpha=.2)
+
+def annotate_finger_labels(force, descr, ax, vsep):
+    for f, finger in enumerate(descr.finger.unique()):
+        mask = (descr.GoNogo == 'nogo') & (descr.finger == finger)
+        force_avg = force[mask].mean(axis=0).squeeze()
+        force_err = force[mask].std(axis=0).squeeze() / np.sqrt(force[mask].shape[0])
+        ax.text(.1, force_avg.mean() + f * vsep + force_err.mean() + .1, finger, va='bottom', ha='left')
+
+def auto_margin(lines, margin_ratio=0.1, default_ylim=(-1, 1)):
+    if not lines:
+        return default_ylim
+    all_y = np.concatenate([line.get_ydata() for line in lines if line.get_ydata().size > 0])
+    if all_y.size == 0:
+        return default_ylim
+    y_min, y_max = np.nanmin(all_y), np.nanmax(all_y)
+    if not np.isfinite(y_min) or not np.isfinite(y_max):
+        return default_ylim
+    margin = (y_max - y_min) * margin_ratio
+    return [y_min - margin, y_max + margin]
+
 def plot_flatmap_cortical_activation(img, vmin=-20, vmax=20, xlim=None, ylim=None, figsize=(5, 6),
                                      frame=(None, None, None, None), rounding=.2, cbar_orientation='vertical',cbar_fraction=.01):
 
@@ -281,7 +322,7 @@ def make_yref(axs, reference_length=5, pos='left', unit='N', custom_text=None):
         else:
             axs.text(reference_x, midpoint_y, custom_text, color='k',ha='left', va='center', zorder=100)
 
-def save_figure_incremental(fig, base_name, ext='svg'):
+def save_figure_incremental(fig, base_name, ext='svg', overwrite=True):
     """
     Save a figure without overwriting by auto-incrementing the filename.
 
@@ -295,16 +336,19 @@ def save_figure_incremental(fig, base_name, ext='svg'):
     os.makedirs(folder, exist_ok=True)
     existing = [f for f in os.listdir(folder) if f.startswith(base_name) and f.endswith('.' + ext)]
 
-    # Extract number suffixes and find the next available one
-    suffixes = []
-    for f in existing:
-        parts = f.replace(f'.{ext}', '').split('_')
-        if parts[-1].isdigit():
-            suffixes.append(int(parts[-1]))
-    next_suffix = max(suffixes, default=0) + 1
-
-    filename = f"{base_name}_{next_suffix}.{ext}"
-    filepath = os.path.join(folder, filename)
+    if overwrite is False:
+        # Extract number suffixes and find the next available one
+        suffixes = []
+        for f in existing:
+            parts = f.replace(f'.{ext}', '').split('_')
+            if parts[-1].isdigit():
+                suffixes.append(int(parts[-1]))
+        next_suffix = max(suffixes, default=0) + 1
+        filename = f"{base_name}_{next_suffix}.{ext}"
+        filepath = os.path.join(folder, filename)
+    else:
+        filename = f"{base_name}.{ext}"
+        filepath = os.path.join(folder, filename)
 
     fig.savefig(filepath, format=ext, dpi=600, bbox_inches='tight')
     print(f"Figure saved to: {filepath}")
