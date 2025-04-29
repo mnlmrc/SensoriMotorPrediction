@@ -87,7 +87,7 @@ def get_likelihood_in_parcel(T_cv, T_gr, parcel_field='roi', parcel_name=None):
 
     return LL
 
-def make_execution_models(centering=False):
+def make_execution_models(centering=True):
 
     C = pcm.centering(8)
 
@@ -104,13 +104,11 @@ def make_execution_models(centering=False):
 
     Ac = np.zeros((6, 8, 6))
     Ac[0, :, 0] = v_fingerID
-    Ac[0, :, 4] = v_fingerID
-    Ac[1, :, 1] = v_cue
-    Ac[1, :, 5] = v_cue
-    Ac[2, :, 2] = v_cert
-    Ac[3, :, 3] = v_surprise
-    Ac[4, :, 4] = v_cue
-    Ac[5, :, 5] = v_fingerID
+    Ac[1, :, 1] = v_fingerID
+    Ac[2, :, 1] = v_cue
+    Ac[3, :, 2] = v_cue
+    Ac[4, :, 3] = v_cert
+    Ac[5, :, 4] = v_surprise
 
     Ac = normalize_Ac(Ac)
 
