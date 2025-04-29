@@ -87,28 +87,30 @@ def get_likelihood_in_parcel(T_cv, T_gr, parcel_field='roi', parcel_name=None):
 
     return LL
 
-def make_execution_models(centering=True, normalize=True):
+def make_execution_models(centering=False):
 
     C = pcm.centering(8)
 
     if centering:
         v_fingerID = C @ np.array([-1, -1, -1, -1, 1, 1, 1, 1])
-        v_cue = C @ np.array([-1, -.5, 0, .5, -.5, 0, .5, 1])
+        v_cue = C @ np.array([1, 2, 3, 4, 2, 3, 4, 5])
         v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0.1875, .25, 0.1875, 0, ])  # variance of a Bernoulli distribution
         v_surprise = C @ -np.log2(np.array([1, .75, .5, .25, .25, .5, .75, 1, ]))  # with Shannon information
     else:
         v_fingerID = np.array([-1, -1, -1, -1, 1, 1, 1, 1])
-        v_cue = np.array([-1, -.5, 0, .5, -.5, 0, .5, 1])
+        v_cue = np.array([1, 2, 3, 4, 2, 3, 4, 5])
         v_cert = np.array([0, 0.1875, .25, 0.1875, 0.1875, .25, 0.1875, 0, ])  # variance of a Bernoulli distribution
         v_surprise = -np.log2(np.array([1, .75, .5, .25, .25, .5, .75, 1, ]))  # with Shannon information
 
-    Ac = np.zeros((6, 8, 5))
+    Ac = np.zeros((6, 8, 6))
     Ac[0, :, 0] = v_fingerID
+    Ac[0, :, 4] = v_fingerID
     Ac[1, :, 1] = v_cue
-    Ac[2, :, 1] = v_fingerID
-    Ac[3, :, 2] = v_cue
-    Ac[4, :, 3] = v_cert
-    Ac[5, :, 4] = v_surprise
+    Ac[1, :, 5] = v_cue
+    Ac[2, :, 2] = v_cert
+    Ac[3, :, 3] = v_surprise
+    Ac[4, :, 4] = v_cue
+    Ac[5, :, 5] = v_fingerID
 
     Ac = normalize_Ac(Ac)
 
@@ -135,33 +137,28 @@ def make_execution_models(centering=True, normalize=True):
     return M
 
 
-def make_planning_models(centering=False):
-    C = pcm.centering(5)
+def make_planning_models(experiment, test_planning_force=True):
+    # C = pcm.centering(5)
 
-    if centering:
-        v_cue = C @ np.array([-1, -.5, 0, .5, 1])
-        v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0])
-    else:
-        v_cue = np.array([-1, -.5, 0, .5, 1])
-        v_cert = np.array([0, 0.1875, .25, 0.1875, 0])
+    v_cue = np.array([1, 2, 3, 4, 5])
+    v_cert = np.array([0, 0.1875, .25, 0.1875, 0])
 
     G_cue = np.outer(v_cue, v_cue)
     G_cert = np.outer(v_cert, v_cert)
 
-    # path_G_force = os.path.join(gl.baseDir, experiment, gl.pcmDir, 'G_obs.force.plan.npy')
-    # if test_planning_force:
-    #     G_force = np.load(os.path.join(gl.baseDir, experiment, gl.pcmDir, 'G_obs.force.plan.npy'))
+    path_G_force = os.path.join(gl.baseDir, experiment, gl.pcmDir, 'G_obs.force.plan.npy')
+    if test_planning_force:
+        G_force = np.load(os.path.join(gl.baseDir, experiment, gl.pcmDir, 'G_obs.force.plan.npy'))
 
     M = []
     M.append(pcm.FixedModel('null', np.zeros((5, 5))))  # 0
     M.append(pcm.FixedModel('cue', G_cue))  # 1
     M.append(pcm.FixedModel('uncertainty', G_cert))  # 2
     M.append(pcm.FixedModel('equal distance', np.eye(5)))
-    # if test_planning_force:
-    #     M.append(pcm.FixedModel('planning force', G_force.mean(axis=0)))
+    if test_planning_force:
+        M.append(pcm.FixedModel('planning force', G_force.mean(axis=0)))
     M.append(pcm.ComponentModel('component', np.array([G_cue / np.trace(G_cue),
-                                                       G_cert / np.trace(G_cert),
-                                                       np.eye(5) / 5])))  # 4
+                                                       G_cert / np.trace(G_cert),])))  # 4
     M.append(pcm.FreeModel('ceil', 5))  # 5
 
     return M
