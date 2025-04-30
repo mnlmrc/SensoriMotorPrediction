@@ -135,32 +135,30 @@ def make_execution_models(centering=True, normalize=True):
     return M
 
 
-def make_planning_models(centering=False):
+def make_planning_models(centering=True):
     C = pcm.centering(5)
 
     if centering:
         v_cue = C @ np.array([-1, -.5, 0, .5, 1])
         v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0])
+        v_shift = C @ np.array([0, 1, 0, -1, 0])
     else:
         v_cue = np.array([-1, -.5, 0, .5, 1])
         v_cert = np.array([0, 0.1875, .25, 0.1875, 0])
 
     G_cue = np.outer(v_cue, v_cue)
     G_cert = np.outer(v_cert, v_cert)
-
-    # path_G_force = os.path.join(gl.baseDir, experiment, gl.pcmDir, 'G_obs.force.plan.npy')
-    # if test_planning_force:
-    #     G_force = np.load(os.path.join(gl.baseDir, experiment, gl.pcmDir, 'G_obs.force.plan.npy'))
+    G_shift = np.outer(v_shift, v_shift)
 
     M = []
     M.append(pcm.FixedModel('null', np.zeros((5, 5))))  # 0
     M.append(pcm.FixedModel('cue', G_cue))  # 1
     M.append(pcm.FixedModel('uncertainty', G_cert))  # 2
+    M.append(pcm.FixedModel('shift probability', G_shift))
     M.append(pcm.FixedModel('equal distance', np.eye(5)))
-    # if test_planning_force:
-    #     M.append(pcm.FixedModel('planning force', G_force.mean(axis=0)))
     M.append(pcm.ComponentModel('component', np.array([G_cue / np.trace(G_cue),
                                                        G_cert / np.trace(G_cert),
+                                                       G_shift / np.trace(G_shift),
                                                        np.eye(5) / 5])))  # 4
     M.append(pcm.FreeModel('ceil', 5))  # 5
 

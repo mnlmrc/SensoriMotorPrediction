@@ -99,8 +99,8 @@ cue_mapping = {
                 21: '25%',
                 39: '0%'
             }
-stimFinger_mapping = {91999: 'I',
-                      99919: 'R',
+stimFinger_mapping = {91999: 'index',
+                      99919: 'ring',
                       99999: 'nogo'}
 
 regressor_mapping = {
@@ -109,14 +109,14 @@ regressor_mapping = {
     '50%': 2,
     '75%': 3,
     '100%': 4,
-    '0%,I': 5,
-    '25%,I': 6,
-    '50%,I': 7,
-    '75%,I': 8,
-    '25%,R': 9,
-    '50%,R': 10,
-    '75%,R': 11,
-    '100%,R': 12,
+    '0%,index': 5,
+    '25%,index': 6,
+    '50%,index': 7,
+    '75%,index': 8,
+    '25%,ring': 9,
+    '50%,ring': 10,
+    '75%,ring': 11,
+    '100%,ring': 12,
     'exec': 5
 }
 
