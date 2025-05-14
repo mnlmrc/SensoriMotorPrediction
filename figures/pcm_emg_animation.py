@@ -5,6 +5,7 @@ import seaborn as sns
 import os
 import globals as gl
 from util import lp_filter
+import PcmPy as pcm
 
 plt.style.use('dark_background')
 
@@ -58,7 +59,7 @@ ax.axvline(.1, color='w', lw=0.8, ls=':')
 ax.set_xlim(-.11, .4)
 ax.set_ylabel('weight')
 ax.spines[['bottom', 'right', 'top']].set_visible(False)
-ax.spines[['left']].set_bounds(-.5, .5)
+ax.spines[['left']].set_bounds(-.5, .75)
 ax.spines[['left']].set_linewidth(2)
 ax.tick_params(axis='x', which='both', length=0)
 ax.tick_params(axis='y', width=2)
@@ -95,7 +96,7 @@ ax = axs[0]
 # Initial inset parameters
 inset_width = 0.2
 inset_height = 1
-y0 = 1  # within the visible range
+y0 = 1.1  # within the visible range
 x_start = 0.0
 x_end = 1 - inset_width
 num_frames = 100
@@ -107,15 +108,22 @@ inset.set_xticks([])
 inset.set_yticks([])
 inset_frame = [x_start, y0, inset_width, inset_height]
 
-G_start = int(fs * 1 - fs * .05)
-G_end = int(fs * 1 + fs * .35)
+G_start = int(fs * 1 - fs * .05 + fs * latency)
+G_end = int(fs * 1 + fs * .35 + fs * latency)
 G_points = np.linspace(G_start, G_end, num_frames, dtype=int)
+
+cursor1 = axs[0].axvline(x=tAx[G_points[0]], color='r', lw=2)
+cursor2 = axs[1].axvline(x=tAx[G_points[0]], color='r', lw=2)
 
 def update(frame):
     global inset
+    global cursor1
+    global cursor2
 
     # Remove the previous inset
     inset.remove()
+    cursor1.remove()
+    cursor2.remove()
 
     # Compute new x position
     x = x_start + (x_end - x_start) * frame / (num_frames - 1)
@@ -128,13 +136,21 @@ def update(frame):
     for spine in inset.spines.values():
         spine.set_color('white')
 
-    D = pcm.G_to_dist(G_obs[G_points[frame]] / np.trace(G_obs[G_points[frame]]))
+    D = pcm.G_to_dist(G_obs[G_points[frame]]) # / np.trace(G_obs[G_points[frame]]))
 
-    inset.imshow(D)
+    cursor1 = axs[0].axvline(x=tAx[G_points[frame]], color='r', lw=2)
+    cursor2 = axs[1].axvline(x=tAx[G_points[frame]], color='r', lw=2)
 
-ani = FuncAnimation(fig, update, frames=num_frames, interval=100)
+    inset.imshow(D, vmin=0, vmax=.0005)
+    inset.set_xticks(np.arange(8))
+    inset.set_xticklabels(list(gl.regressor_mapping.keys())[5:13], fontsize=8, rotation=90, ha='right')
+    inset.set_yticks(np.arange(8))
+    inset.set_yticklabels(list(gl.regressor_mapping.keys())[5:13], fontsize=8, ha='right')
 
-ani.save('inset_slide.gif', writer='pillow', fps=10)
+
+ani = FuncAnimation(fig, update, frames=num_frames, interval=50)
+
+ani.save('pcm_emg_animation.gif', writer='pillow', fps=20)
 
 plt.show()
 
