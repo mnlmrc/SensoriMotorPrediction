@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import os
 import scipy
+import glob
 
 from nitools import spm
 import Functional_Fusion.atlas_map as am
@@ -38,6 +39,44 @@ def make_cifti_betas(path_glm, masks, struct):
     header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
     cifti = nb.Cifti2Image(
         dataobj=betas,  # Stack them along the rows (adjust as needed)
+        header=header,  # Use one of the headers (may need to modify)
+    )
+    return cifti
+
+
+def make_cifti_contrasts(path_glm, masks, struct):
+    for i, (s, mask) in enumerate(zip(struct, masks)):
+        atlas = am.AtlasVolumetric('region', mask, structure=s)
+
+        if i == 0:
+            brain_axis = atlas.get_brain_model_axis()
+            coords = nt.get_mask_coords(mask)
+        else:
+            brain_axis += atlas.get_brain_model_axis()
+            coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
+
+    files = glob.glob(os.path.join(path_glm, '*reginfo.tsv'))
+
+    if files:
+        reginfo = pd.read_csv(files[0], sep='\t')
+    else:
+        raise FileNotFoundError("No file ending with 'reginfo.tsv' found.")
+    regressors = reginfo['name'].unique()
+
+    contrasts = list()
+    for regr, regressor in enumerate(regressors):
+        vol = nb.load(os.path.join(path_glm, f'con_{regressor.replace(" ", "")}.nii'))
+        con = nt.sample_image(vol, coords[0], coords[1], coords[2], 0)
+        contrasts.append(con)
+
+    contrasts = np.array(contrasts)
+
+    regressor = [r.replace(" ", "") for r in regressors]
+    row_axis = nb.cifti2.ScalarAxis(regressors)
+
+    header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
+    cifti = nb.Cifti2Image(
+        dataobj=contrasts,  # Stack them along the rows (adjust as needed)
         header=header,  # Use one of the headers (may need to modify)
     )
     return cifti
@@ -143,79 +182,16 @@ def main(args=None):
     rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
     struct = ['CortexLeft', 'CortexRight']
     path_rois = os.path.join(gl.baseDir, args.experiment, gl.roiDir)
-    if args.what == 'save_rois_contrasts':
-        for H in Hem:
-            for roi in rois:
-                print(f'Hemisphere: {H}, region:{roi}')
-                contrasts = get_roi_contrasts(
-                    experiment=args.experiment,
-                    sn=args.sn,
-                    Hem=H,
-                    roi=roi,
-                    glm=args.glm,
-                )
-                np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
-                                     f'ROI.{H}.{roi}.con.npy'), contrasts)
-    if args.what == 'save_rois_contrasts_avg':
-        dict_con = {
-            'condition': [],
-            'sn': [],
-            'activity': [],
-            'roi': [],
-            'Hem': []
-        }
-        for H in Hem:
-            for r, roi in enumerate(rois):
-                for s, sn in enumerate(args.snS):
-
-                    print(f'subj{sn}, {roi}')
-
-                    reginfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}',
-                                                       f'subj{sn}_reginfo.tsv'), sep="\t")
-
-                    con = np.load(
-                        os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}', f'ROI.{H}.{roi}.con.npy'))
-
-                    for regr, regressor in enumerate(reginfo.name.unique()):
-                        dict_con['activity'].append(np.nanmean(con[reginfo.name.unique() == regressor]))
-                        dict_con['sn'].append(sn)
-                        dict_con['condition'].append(regressor)
-                        dict_con['roi'].append(roi)
-                        dict_con['Hem'].append(H)
-
-        df_con = pd.DataFrame(dict_con)
-        df_con.to_csv(os.path.join(gl.baseDir, args.experiment, f'ROI.con.avg.tsv'), sep='\t', index=False)
-    if args.what == 'save_rois_betas':
-        for H in Hem:
-            for roi in rois:
-                print(f'Hemisphere: {H}, region:{roi}')
-                betas = get_roi_betas(
-                    experiment=args.experiment,
-                    sn=args.sn,
-                    Hem=H,
-                    roi=roi,
-                    glm=args.glm,
-                )
-                np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
-                                     f'ROI.{H}.{roi}.beta.npy'), betas)
-    if args.what == 'save_rois_ResMS':
-        for H in Hem:
-            for roi in rois:
-                print(f'Hemisphere: {H}, region:{roi}')
-                res = get_roi_ResMS(
-                    experiment=args.experiment,
-                    sn=args.sn,
-                    Hem=H,
-                    roi=roi,
-                    glm=args.glm,
-                )
-                np.save(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
-                                     f'ROI.{H}.{roi}.res.npy'), res)
     if args.what == 'save_betas_cifti':
         path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
         masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
         cifti = make_cifti_betas(path_glm, masks, struct)
         nb.save(cifti, path_glm + '/' + 'beta.dscalar.nii')
+    if args.what == 'save_contrasts_cifti':
+        path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+        masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
+        cifti = make_cifti_contrasts(path_glm, masks, struct)
+        nb.save(cifti, path_glm + '/' + 'contrast.dscalar.nii')
     if args.what == 'save_residuals_cifti':
         SPM = spm.SpmGlm(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}'))  #
         SPM.get_info_from_spm_mat()
@@ -253,6 +229,45 @@ def main(args=None):
                 glm=args.glm
             )
             main(args)
+    if args.what == 'save_contrasts_cifti_all':
+        for sn in args.snS:
+            args = argparse.Namespace(
+                what='save_contrasts_cifti',
+                experiment=args.experiment,
+                sn=sn,
+                glm=args.glm
+            )
+            main(args)
+    if args.what == 'save_contrasts_roi':
+        con_dict = {
+            'con': [],
+            'condition': [],
+            'sn': [],
+            'roi': [],
+            'Hem': []
+        }
+        for sn in args.snS:
+            path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}')
+            cifti = nb.load(path_glm + '/' + 'contrast.dscalar.nii')
+            regr = cifti.header.get_axis(0).name[[0, 4, 7, 10, 2, 1, 5, 8, 11, 6, 9, 12, 3]]
+            vol = nt.volume_from_cifti(cifti)
+            for H in Hem:
+                for roi in rois:
+                    mask = os.path.join(path_rois, f'subj{sn}', f'ROI.{H}.{roi}.nii')
+                    coords = nt.get_mask_coords(mask)
+                    con = nt.sample_image(vol, coords[0], coords[1], coords[2], 0)
+                    con = np.nanmean(con, axis=0)[[0, 4, 7, 10, 2, 1, 5, 8, 11, 6, 9, 12, 3]]
+                    for i, c in enumerate(con):
+                        con_dict['con'].append(c)
+                        con_dict['condition'].append(regr[i])
+                        con_dict['sn'].append(sn)
+                        con_dict['roi'].append(roi)
+                        con_dict['Hem'].append(H)
+
+        con_df = pd.DataFrame(con_dict)
+        con_df.to_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', 'ROI.con.avg.tsv'),
+                      sep='\t',index=False)
+
     if args.what == 'save_residuals_cifti_all':
         for sn in args.snS:
             print(f'Processing subj{sn}...')

@@ -214,13 +214,44 @@ def add_lineplot_to_boxplot(fig, axs, data=None, x=None, y=None, hue=None, box_w
     return fig, axs
 
 
+def set_dark_background(fig):
+    """Apply dark background styling to all axes in a Matplotlib Figure."""
+    fig.patch.set_facecolor('black')  # Figure background
+
+    for ax in fig.get_axes():
+        # Axes background
+        ax.set_facecolor('black')
+
+        # Spines
+        for spine in ax.spines.values():
+            spine.set_color('white')
+
+        # Tick marks and labels
+        ax.tick_params(axis='both', labelcolor='white', color='white',)
+        for tick in ax.xaxis.get_major_ticks():
+            tick.tick1line.set_color('white')
+            tick.tick2line.set_color('white')
+        for tick in ax.yaxis.get_major_ticks():
+            tick.tick1line.set_color('white')
+            tick.tick2line.set_color('white')
+
+        # Axis labels and title
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
+
+        # Optional: grid color
+        ax.grid(color='gray')
+
+
 def set_spines_and_ticks_width(ax,
                                spine_width=1.5,
                                spine_sides=('left', 'bottom', 'right', 'top'),
                                tick_width=1.5,
                                tick_length=3.5,
                                axes=('x', 'y'),
-                               which='both'):
+                               which='both',
+                               colors='k'):
     """
     Adjust the width of spines and ticks on a matplotlib Axes object.
 
@@ -250,7 +281,7 @@ def set_spines_and_ticks_width(ax,
 
     # Set tick parameters
     for axis in axes:
-        ax.tick_params(axis=axis, width=tick_width, length=tick_length, which=which)
+        ax.tick_params(axis=axis, width=tick_width, length=tick_length, which=which, colors=colors)
 
 
 

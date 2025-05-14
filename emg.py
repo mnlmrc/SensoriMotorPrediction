@@ -4,8 +4,91 @@ import pandas as pd
 import numpy as np
 import os
 import globals as gl
+from scipy.signal import resample
 
-def load_delsys(experiment=None, participant_id=None, block=None, muscle_names=None, trigger_name=None):
+
+def detect_trig(trig_sig, time_trig, amp_threshold=None, ntrials=None, debugging=False):
+    """
+
+    :param trig_sig:
+    :param time_trig:
+    :param amp_threshold:
+    :param ntrials:
+    :param debugging:
+    :return:
+    """
+
+    ########## old trigger detection (subj 100-101)
+    # trig_sig = trig_sig / np.max(trig_sig)
+    # diff_trig = np.diff(trig_sig)
+    # diff_trig[diff_trig < self.amp_threshold] = 0
+    # locs, _ = find_peaks(diff_trig)
+    ##############################################
+
+    # trig_sig = pd.to_numeric(trig_sig).to_numpy()
+    # time_trig = pd.to_numeric(time_trig).to_numpy()
+
+    trig_sig[trig_sig < amp_threshold] = 0
+    trig_sig[trig_sig > amp_threshold] = 1
+
+    # Detecting the edges
+    diff_trig = np.diff(trig_sig)
+
+    locs = np.where(diff_trig == 1)[0]
+
+    # Debugging plots
+    if debugging:
+        # Printing the number of triggers detected and number of trials
+        print("\nNum Trigs Detected = {}".format(len(locs)))
+        print("Num Trials in Run = {}".format(ntrials))
+        print("====NumTrial should be equal to NumTrigs====\n\n\n")
+
+        # plotting block
+        plt.figure()
+        plt.plot(trig_sig, 'k', linewidth=1.5)
+        plt.plot(diff_trig, '--r', linewidth=1)
+        plt.scatter(locs, diff_trig[locs], color='red', marker='o', s=30)
+        plt.xlabel("Time (index)")
+        plt.ylabel("Trigger Signal (black), Diff Trigger (red dashed), Detected triggers (red/blue points)")
+        plt.ylim([-1.5, 1.5])
+        plt.show()
+
+    # Getting rise and fall times and indexes
+    rise_idx = locs
+    rise_times = time_trig[rise_idx]
+
+    # Sanity check
+    if len(rise_idx) != ntrials:  # | (len(fall_idx) != Emg.ntrials):
+        raise ValueError(f"Wrong number of trials: {len(rise_idx)}")
+
+    return rise_times, rise_idx
+
+
+def emg_segment(data, timestamp, prestim=None, poststim=None, fsample=None):
+    """
+
+    :param data:
+    :param timestamp:
+    :param prestim:
+    :param poststim:
+    :param fsample:
+    :return:
+    """
+    muscle_names = data.columns
+    n_muscles = len(muscle_names)
+    ntrials = len(timestamp)
+    timepoints = int(fsample * (prestim + poststim))
+
+    emg_segmented = np.zeros((ntrials, n_muscles, timepoints))
+    for tr, idx in enumerate(timestamp):
+        for m, muscle in enumerate(muscle_names):
+            emg_segmented[tr, m] = data[muscle][idx - int(prestim * fsample):
+                                                idx + int(poststim * fsample)].to_numpy()
+
+    return emg_segmented
+
+
+def load_delsys(filepath, trigger_name=None, muscle_names=None):
     """returns a pandas DataFrame with the raw EMG data recorded using the Delsys system
 
     :param participant_id:
@@ -15,8 +98,8 @@ def load_delsys(experiment=None, participant_id=None, block=None, muscle_names=N
     :param trigger_name:
     :return:
     """
-    fname = f"{experiment}_{participant_id}_{block}.csv"
-    filepath = os.path.join(gl.make_dirs(experiment, "emg", participant_id), fname)
+    # fname = f"{experiment}_{participant_id}_{block}.csv"
+    # filepath = os.path.join(gl.make_dirs(experiment, "emg", participant_id), fname)
 
     # read data from .csv file (Delsys output)
     with open(filepath, 'rt') as fid:
@@ -64,6 +147,46 @@ def load_delsys(experiment=None, participant_id=None, block=None, muscle_names=N
 
     return df_out
 
+
+def main(args):
+    if args.what=='segment_tms':
+
+        muscle_names = [f'flx_D{i+1}' for i in range(5)] + [f'ext_D{i+1}' for i in range(5)] + ['FDI']
+
+        filepath = os.path.join(gl.baseDir, args.experiment, 'emg',  f'Trial_1.csv')
+
+        df = load_delsys(filepath, 'Trigger', muscle_names)
+        trig_sig = df['Trigger'].to_numpy()
+        trig_time = df['time'].to_numpy()
+
+        dat = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'behavioural', f'{args.experiment}_{args.sn}.dat'), sep='\t')
+
+        ntrials = dat.shape[0]
+
+        idx, _ = detect_trig(trig_sig, trig_time, amp_threshold=2, ntrials=ntrials)
+        df = df.drop(columns=['time', 'trigger'])
+
+        df_segment = emg_segment(df, idx, .5, 1, 2148)
+
+    if args.what=='make_bins':
+
+        for sn in args.snS:
+            emg = np.load(gl.baseDir, experiment, 'emg', f'subj{sn}', f'{experiment}_{sn}.npy')
+            for win in args.wins:
+                pass
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('what', nargs='?', default=None)
+    parser.add_argument('--sn', type=int, default=None)
+    parser.add_argument('--snS', type=int, default=None)
+    parser.add_argument('--experiment', type=str, default='smp3')
+
+    args = parser.parse_args()
+
+    main(args)
 
 # def make_participants_dict(snS):
 #

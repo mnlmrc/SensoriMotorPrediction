@@ -40,46 +40,13 @@ col_mov = {
              'thumb', 'index', 'middle', 'ring', 'pinkie', 'indexViz', 'ringViz'],
 }
 
-# participants = {
-#     'smp0': ['subj100',
-#              'subj101',
-#              'subj102',
-#              'subj103',
-#              'subj104',
-#              'subj105',
-#              'subj106',
-#              'subj107',
-#              'subj108',
-#              'subj109',
-#              'subj110'],
-#     'smp1': ['subj100',
-#              'subj101',
-#              'subj102',
-#              'subj103',
-#              'subj104',
-#              # 'subj105',
-#              # 'subj106'
-#              ],
-#     'smp2': ['subj100',
-#              'subj101',
-#              # 'subj102',
-#              # 'subj103',
-#              # 'subj104'
-#              ]
-# }
-
 channels = {'mov': ['thumb', 'index', 'middle', 'ring', 'pinkie']}
 
 prestim = 1.5
 poststim = 1
 
 fsample_mov = 500
-# TR = 1
-# N = {
-#     'smp0': len(participants['smp0']),
-#     'smp1': len(participants['smp1']),
-#     'smp2': len(participants['smp2']),
-# }
+
 planState = {
     'smp0': 2,
     'smp1': 3,
@@ -122,7 +89,7 @@ regressor_mapping = {
 
 ### colours ###
 cmap_plan = plt.get_cmap('Greys')
-col_plan = [cmap_plan(i) for i in np.linspace(.2, 1, 5)]
+col_plan = [cmap_plan(i) for i in np.linspace(.2, .8, 5)]
 
 cmap_index = plt.get_cmap('Greens')
 col_index = [cmap_index(i) for i in np.linspace(.2, 1, 4)]

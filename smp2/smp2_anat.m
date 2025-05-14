@@ -2,7 +2,7 @@
 function varargout = smp2_anat(what, varargin)
 
     localPath = '/Users/mnlmrc/Documents/';
-    cbsPath = '/home/ROBARTS/memanue5/Documents/';
+    cbsPath = '/home/UWO/memanue5/Documents/';
     % Directory specification
     if isfolder(localPath)
         path = localPath;

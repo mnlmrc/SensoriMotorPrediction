@@ -181,4 +181,33 @@ def r_squared(y_true, y_pred):
     return 1 - ss_res / ss_tot if ss_tot != 0 else 0.0
 
 
+def lp_filter(data, cutoff, fs, axis=-1, numtaps=None, k=4):
+    """
+    Low-pass FIR filter using firwin and filtfilt with smart padlen handling.
+
+    Parameters:
+    - data: np.ndarray
+    - cutoff: float, cutoff frequency (Hz)
+    - fs: float, sampling frequency (Hz)
+    - axis: int, axis to filter along
+    - numtaps: int or None, filter length
+    - k: float, scaling factor for numtaps if auto-calculated
+
+    Returns:
+    - np.ndarray, filtered data
+    """
+    if numtaps is None:
+        numtaps = int(np.ceil(k * fs / cutoff))
+        if numtaps % 2 == 0:
+            numtaps += 1
+
+    fir_coeff = firwin(numtaps, cutoff, fs=fs, pass_zero='lowpass')
+
+    # Calculate safe padlen
+    padlen = 3 * (numtaps - 1)
+    data_len = data.shape[axis]
+    if padlen >= data_len:
+        padlen = data_len - 1  # prevent error
+
+    return filtfilt(fir_coeff, 1, data, axis=axis, padlen=padlen)
 

@@ -149,7 +149,7 @@ def calc_rdm_emg(experiment=None, sn=None):
 def main(args):
     Hem = ['L', 'R']
     rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
-    if args.what == 'save_rois_rdms':
+    if args.what == 'rois_rdms':
         rdms = []
         for H in Hem:
             for roi in rois:
@@ -169,7 +169,7 @@ def main(args):
             rdm.descriptors['noise'] = None # kill noise to allow concatenation
         rdms = rsa.rdm.concat(rdms)
         rdms.save(path, overwrite=True, file_type='hdf5')
-    if args.what == 'save_rois_rdms_all':
+    if args.what == 'rois_rdms_all':
         for sn in args.snS:
             args = argparse.Namespace(
                 what='save_rois_rdms',
@@ -178,7 +178,7 @@ def main(args):
                 glm=args.glm
             )
             main(args)
-    if args.what == 'save_rois_rdms_avg':
+    if args.what == 'rois_rdms_avg':
         rdms = []
         for sn in args.snS:
             rdms_subj = rsa.rdm.load_rdm(
@@ -187,7 +187,7 @@ def main(args):
         rdms = rsa.rdm.concat(rdms)
         rdms.save(os.path.join(gl.baseDir, args.experiment, gl.rdmDir, f'glm{args.glm}.ROI.hdf5'),
                   overwrite=True, file_type='hdf5')
-    if args.what == 'save_rdm_emg':
+    if args.what == 'emg_rdms':
         rdms = calc_rdm_emg(
             experiment=args.experiment,
             sn=args.sn,

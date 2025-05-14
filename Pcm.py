@@ -6,7 +6,7 @@ warnings.filterwarnings("ignore")
 
 import argparse
 import pickle
-
+from itertools import combinations
 # from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 import PcmPy as pcm
@@ -127,13 +127,12 @@ def make_execution_models(centering=True, normalize=True):
     M.append(pcm.FixedModel('finger', G_fingerID))  # 1
     M.append(pcm.FixedModel('cue', G_cue))  # 2
     M.append(pcm.FixedModel('uncertainty', G_cert))  # 3
-    M.append(pcm.FixedModel('surprise', G_surprise))  # 5
-    M.append(pcm.ComponentModel('component', G_component))  # 6
-    M.append(pcm.FeatureModel('feature', Ac))  # 7
-    M.append(pcm.FreeModel('ceil', 8))  # 8
+    M.append(pcm.FixedModel('surprise', G_surprise))  # 4
+    M.append(pcm.ComponentModel('component', G_component))  # 5
+    M.append(pcm.FeatureModel('feature', Ac))  # 6
+    M.append(pcm.FreeModel('ceil', 8))  # 7
 
     return M
-
 
 def make_planning_models(centering=True):
     C = pcm.centering(5)
@@ -163,6 +162,119 @@ def make_planning_models(centering=True):
     M.append(pcm.FreeModel('ceil', 5))  # 5
 
     return M
+
+def G_obs_in_timepoint(Data, dat, timepoint):
+    Y = list()
+    N = len(Data)
+    G_obs = np.zeros((N, 8, 8))
+    for s, (D, dd) in enumerate(zip(Data, dat)):
+        emg = D[..., timepoint]
+
+        cov = emg.T @ emg
+
+        emg = emg / np.sqrt(np.diag(cov))
+
+        dd[['ch_' + str(x) for x in range(emg.shape[-1])]] = emg
+
+        dd = dd.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
+        cond_vec = dd['cue'] + ',' + dd['stimFinger']
+        part_vec = dd['BN']
+
+        obs_des = {'cond_vec': cond_vec.map(gl.regressor_mapping),
+                   'part_vec': part_vec}
+
+        Y.append(pcm.dataset.Dataset(dd[['ch_' + str(x) for x in range(emg.shape[-1])]].to_numpy(),
+                                     obs_descriptors=obs_des))
+
+        G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                                         Y[s].obs_descriptors['part_vec'],
+                                         X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+
+    return G_obs, Y
+
+def fit_model_in_timepoint(M, Data, dat, timepoint):
+    G_obs, Y = G_obs_in_timepoint(Data, dat, timepoint)
+
+    T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+    T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+    T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+
+    likelihood = T_cv.likelihood
+    baseline = likelihood.loc[:, 'null'].values
+    likelihood = likelihood - baseline.reshape(-1, 1)
+    noise_upper = (T_gr.likelihood['ceil'] - baseline)
+    noise_lower = likelihood.ceil
+
+    return likelihood, noise_upper, noise_lower, baseline, theta_in
+
+def store_T_and_theta_from_timepoint(M, Data, dat, timepoint):
+    col_names = [m.name for m in M]
+
+    T = {
+        'likelihood': [],
+        'noise_upper': [],
+        'noise_lower': [],
+        'baseline': [],
+        'col_names': [],
+        'sn': []
+    }
+
+    theta = {}
+    for md in M:
+        if md.n_param > 0: # skip models with 0 params i.e. Fixed Models
+            theta[md.name] = {
+                'theta': [],
+                '#param': [],
+                'sn': []
+            }
+
+    likelihood, noise_upper, noise_lower, baseline, theta_in = fit_model_in_timepoint(M, Data, dat, timepoint)
+
+    for s, sn in enumerate(args.snS):
+        for c, col in enumerate(col_names):
+            T['likelihood'].append(likelihood[col][s])
+            T['noise_upper'].append(noise_upper[s])
+            T['noise_lower'].append(noise_lower[s])
+            T['baseline'].append(baseline[s])
+            T['col_names'].append(col)
+            T['sn'].append(sn)
+        for m, md in enumerate(M):
+            if md.n_param > 0:
+                for c in range(md.n_param):
+                    theta[md.name]['theta'].append(theta_in[m][c, s])
+                    theta[md.name]['sn'].append(sn)
+                    theta[md.name]['#param'].append(c)
+
+    T = pd.DataFrame(T)
+    for md in M:
+        if md.n_param > 0:
+            theta[md.name] = pd.DataFrame(theta[md.name])
+
+    return T, theta, timepoint
+
+def extract_results_from_parallel_process(M, results, sn):
+    col_names = [m.name for m in M]
+
+    # Aggregate results from parallel processes
+    T = np.full((6444, len(M) + 3), np.nan)
+    theta = {}
+    for md in M:
+        theta[md.name] = np.full((6444, md.n_param), np.nan)
+
+    for Tt, th, tp in results:
+        for c, col in enumerate(col_names):
+            LL = Tt[(Tt['sn'] == sn) & (Tt['col_names'] == col)]['likelihood']
+            T[tp, c] = LL
+        T[tp, -3] = Tt[(Tt['sn'] == sn)]['noise_upper'].unique()
+        T[tp, -2] = Tt[(Tt['sn'] == sn)]['noise_lower'].unique()
+        T[tp, -1] = Tt[(Tt['sn'] == sn)]['baseline'].unique()
+        for md in M:
+            for c in range(md.n_param):
+                theta_tmp = th[md.name]
+                theta[md.name][tp, c] = theta_tmp['theta'][
+                    (theta_tmp['sn'] == sn) & (theta_tmp['#param'] == c)]
+
+    return T, theta
 
 
 class Tessellation():
@@ -265,10 +377,6 @@ class Tessellation():
         try:
             T_cv, theta_cv = pcm.fit_model_group_crossval(Y, self.M, fit_scale=True, verbose=True, fixed_effect='block')
             T_gr, _ = pcm.fit_model_group(Y, self.M, fit_scale=True, verbose=True, fixed_effect='block')
-
-            # for i in range(len(theta_cv)):
-            #     n_param = self.M[i].n_param
-            #     theta_cv[i] = theta_cv[i][:n_param] / np.linalg.norm(theta_cv[i][:n_param])
 
             likelihood = T_cv.likelihood
             baseline = likelihood.loc[:, 'null'].values
@@ -430,7 +538,7 @@ class Tessellation():
 
 def main(args):
 
-    if args.what == 'save_tessel_execution':
+    if args.what == 'tessel_execution':
 
         M = make_execution_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,  f'M.exec.glm{args.glm}.pkl'), "wb")
@@ -454,7 +562,7 @@ def main(args):
         nb.save(cifti_theta_feature, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                       f'theta_feature.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.exec.dscalar.nii'))
 
-    if args.what == 'save_tessel_planning':
+    if args.what == 'tessel_planning':
         M = make_planning_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.glm{args.glm}.p'), "wb")
         pickle.dump(M, f)
@@ -475,7 +583,64 @@ def main(args):
         nb.save(cifti_theta_component, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                                     f'theta_component.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.plan.dscalar.nii'))
 
-    if args.what == 'save_emg_execution':
+    if args.what == 'G_obs_emg_continuous':
+        emg = []
+        dat = []
+        for sn in args.snS:
+            emg.append(np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}',
+                                            f'{args.experiment}_{sn}.npy')))
+            dat_tmp = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
+                                                f'{args.experiment}_{sn}.dat'), sep='\t')
+            dat_tmp['stimFinger'] = dat_tmp['stimFinger'].map(gl.stimFinger_mapping)
+            dat_tmp['cue'] = dat_tmp['cue'].map(gl.cue_mapping)
+            dat_tmp['BN'] = dat_tmp['BN'].astype(str)
+            dat.append(dat_tmp)
+
+        G_obs = []
+        for tp in range(6444):
+            print(f'tp: {tp}/{6444}')
+            G_obs_tmp, _ = G_obs_in_timepoint(emg, dat, tp)
+            G_obs.append(G_obs_tmp)
+
+        np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'G_obs.emg.continuous.npy'), np.array(G_obs))
+
+    if args.what == 'emg_continuous':
+
+        M = make_execution_models()
+        col_names = [m.name for m in M]
+
+        emg = []
+        dat = []
+        for sn in args.snS:
+            emg.append(np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}',
+                                            f'{args.experiment}_{sn}.npy')))
+            dat_tmp = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
+                                               f'{args.experiment}_{sn}.dat'), sep='\t')
+            dat_tmp['stimFinger'] = dat_tmp['stimFinger'].map(gl.stimFinger_mapping)
+            dat_tmp['cue'] = dat_tmp['cue'].map(gl.cue_mapping)
+            dat_tmp['BN'] = dat_tmp['BN'].astype(str)
+            dat.append(dat_tmp)
+
+        # fit_model_in_timepoint(M, emg, dat, 0)
+        with parallel_backend("loky"):  # use threading for debug in PyCharm, for run use loky
+            results = Parallel(n_jobs=args.n_jobs)(
+                delayed(store_T_and_theta_from_timepoint)(M, emg, dat, tp)
+                for tp in range(6444)
+            )
+
+        T, theta = [], []
+        for sn in args.snS:
+            Tt, th = extract_results_from_parallel_process(M, results, sn)
+            T.append(Tt)
+            theta.append(th['feature'])
+
+        T = np.array(T)
+        theta = np.array(theta)
+
+        np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_cv.emg.continuous.npy'), T)
+        np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'theta_in.emg.continuous.npy'), theta)
+
+    if args.what == 'emg_execution':
 
         M = make_execution_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.emg.pkl'), "wb")
@@ -544,7 +709,7 @@ def main(args):
             with open(os.path.join(path, f'theta_gr.emg.{epoch}.pkl'), 'wb') as f:
                 pickle.dump(theta_gr, f)
 
-    if args.what == 'save_force_execution':
+    if args.what == 'force_execution':
 
         M = make_execution_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.force.exec.p'), "wb")
@@ -600,7 +765,7 @@ def main(args):
         with open(os.path.join(path, f'theta_gr.force.exec.p'), 'wb') as f:
             pickle.dump(theta_gr, f)
 
-    if args.what == 'save_force_planning':
+    if args.what == 'force_planning':
 
         M = make_planning_models(test_planning_force=False)
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
@@ -657,7 +822,7 @@ def main(args):
         with open(os.path.join(path, f'theta_gr.force.plan.p'), 'wb') as f:
             pickle.dump(theta_gr, f)
 
-    if args.what == 'save_rois_planning':
+    if args.what == 'rois_planning':
 
         M = make_planning_models(args.experiment)
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.glm{args.glm}.pkl'), "wb")
@@ -732,7 +897,7 @@ def main(args):
                                        f'theta_gr.plan.glm{args.glm}.{H}.{roi}.pkl'), 'wb')
                 pickle.dump(theta_gr, f)
 
-    if args.what == 'save_rois_execution':
+    if args.what == 'rois_execution':
 
         M = make_execution_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
@@ -810,6 +975,241 @@ def main(args):
                                        f'theta_gr.exec.glm{args.glm}.{H}.{roi}.pkl'), 'wb') as f:
                     pickle.dump(theta_gr, f)
 
+    if args.what == 'rois_plan-exec':
+
+        Hem = ['L', 'R']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        for H in Hem:
+            for roi in rois:
+
+                N = len(args.snS)
+
+                G_obs = np.zeros((N, 13, 13))
+                Y = list()
+                for s, sn in enumerate(args.snS):
+                    glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}')
+                    cifti_img = nb.load(os.path.join(glm_path, f'beta.dscalar.nii'))
+                    beta_img = nt.volume_from_cifti(cifti_img, struct_names=['CortexLeft', 'CortexRight'])
+
+                    mask = nb.load(
+                        os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{sn}', f'ROI.{H}.{roi}.nii'))
+                    coords = nt.get_mask_coords(mask)
+
+                    betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
+
+                    res_img = nb.load(os.path.join(glm_path, 'ResMS.nii'))
+                    res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
+
+                    betas_prewhitened = betas / np.sqrt(res)
+                    betas_prewhitened = betas_prewhitened[:, np.all(~np.isnan(betas_prewhitened), axis=0)]
+
+                    reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
+                    cond_vec = np.array([gl.regressor_mapping[r[0]] for r in reginfo])
+                    part_vec = np.array([int(r[1]) for r in reginfo])
+
+                    obs_des = {'cond_vec': cond_vec,
+                               'part_vec': part_vec}
+
+                    Y.append(pcm.dataset.Dataset(betas_prewhitened, obs_descriptors=obs_des))
+
+                    G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
+                                                     Y[s].obs_descriptors['part_vec'],
+                                                     X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
+
+                path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
+
+                os.makedirs(path, exist_ok=True)
+
+                np.save(os.path.join(path, f'G_obs.plan-exec.glm{args.glm}.{H}.{roi}.npy'), G_obs)
+
+    if args.what == 'correlation_plan-exec':
+
+        Mflex = pcm.CorrelationModel("flex", num_items=1, corr=None, cond_effect=False)
+
+        Hem = ['L', 'R']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        for H in Hem:
+            for roi in rois:
+
+                N = len(args.snS)
+                Y = list()
+                for s, sn in enumerate(args.snS):
+                    glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}')
+                    cifti_img = nb.load(os.path.join(glm_path, f'beta.dscalar.nii'))
+                    beta_img = nt.volume_from_cifti(cifti_img, struct_names=['CortexLeft', 'CortexRight'])
+
+                    mask = nb.load(
+                        os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{sn}', f'ROI.{H}.{roi}.nii'))
+                    coords = nt.get_mask_coords(mask)
+
+                    betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
+
+                    res_img = nb.load(os.path.join(glm_path, 'ResMS.nii'))
+                    res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
+
+                    betas_prewhitened = betas / np.sqrt(res)
+                    betas_prewhitened = betas_prewhitened[:, np.all(~np.isnan(betas_prewhitened), axis=0)]
+
+                    reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
+                    cond_vec = np.array([r[0] for r in reginfo])
+                    part_vec = np.array([int(r[1]) for r in reginfo])
+
+                    betas_reduced = []
+                    cond_vec_reduced = []
+                    part_vec_reduced = []
+                    for part in np.unique(part_vec):
+                        cond_vec_tmp = cond_vec[part_vec == part]
+                        beta_tmp = betas_prewhitened[part_vec == part, :]
+
+                        plan = (beta_tmp[cond_vec_tmp == '100%'] - beta_tmp[cond_vec_tmp == '0%']).squeeze()
+                        exec = (beta_tmp[np.char.find(cond_vec_tmp, 'ring') >= 0].mean(axis=0) -
+                                     beta_tmp[np.char.find(cond_vec_tmp, 'index') >= 0].mean(axis=0)).squeeze()
+
+                        betas_reduced.append(plan)
+                        betas_reduced.append(exec)
+                        cond_vec_reduced.append('plan')
+                        cond_vec_reduced.append('exec')
+                        part_vec_reduced.append(part)
+                        part_vec_reduced.append(part)
+
+                    obs_des = {'cond_vec': np.array(cond_vec_reduced),
+                               'part_vec': np.array(part_vec_reduced)}
+
+                    Y.append(pcm.dataset.Dataset(np.array(betas_reduced), obs_descriptors=obs_des))
+
+                T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False)
+                T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True)
+
+                T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                            f'T_in.corr.glm{args.glm}.{H}.{roi}.pkl'))
+                T_gr.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                            f'T_gr.corr.glm{args.glm}.{H}.{roi}.pkl'))
+
+                path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
+
+                os.makedirs(path, exist_ok=True)
+
+                f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                      f'theta_in.corr.glm{args.glm}.{H}.{roi}.pkl'), 'wb')
+                pickle.dump(theta_in, f)
+
+                f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                      f'theta_gr.corr.glm{args.glm}.{H}.{roi}.pkl'), 'wb')
+                pickle.dump(theta_gr, f)
+
+    if args.what == 'correlation_plan-exec_within_finger':
+
+        Mflex = pcm.CorrelationModel("flex", num_items=1, corr=None, cond_effect=False)
+
+        Hem = ['L', 'R']
+        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+        for finger in ['index', 'ring']:
+            for H in Hem:
+                for roi in rois:
+
+                    N = len(args.snS)
+                    Y = list()
+                    for s, sn in enumerate(args.snS):
+                        glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}')
+                        cifti_img = nb.load(os.path.join(glm_path, f'beta.dscalar.nii'))
+                        beta_img = nt.volume_from_cifti(cifti_img, struct_names=['CortexLeft', 'CortexRight'])
+
+                        mask = nb.load(
+                            os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{sn}', f'ROI.{H}.{roi}.nii'))
+                        coords = nt.get_mask_coords(mask)
+
+                        betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
+
+                        res_img = nb.load(os.path.join(glm_path, 'ResMS.nii'))
+                        res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
+
+                        betas_prewhitened = betas / np.sqrt(res)
+                        betas_prewhitened = betas_prewhitened[:, np.all(~np.isnan(betas_prewhitened), axis=0)]
+
+                        reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
+                        cond_vec = np.array([r[0] for r in reginfo])
+                        part_vec = np.array([int(r[1]) for r in reginfo])
+
+                        betas_reduced = []
+                        cond_vec_reduced = []
+                        part_vec_reduced = []
+                        for part in np.unique(part_vec):
+                            cond_vec_tmp = cond_vec[part_vec == part]
+                            beta_tmp = betas_prewhitened[part_vec == part, :]
+
+                            if finger=='index':
+                                plan = (beta_tmp[cond_vec_tmp == '0%'] - beta_tmp[cond_vec_tmp == '75%']).squeeze()
+                                exec = (beta_tmp[cond_vec_tmp == '0%,index'] - beta_tmp[cond_vec_tmp == '75%,index']).squeeze()
+                            elif finger=='ring':
+                                plan = (beta_tmp[cond_vec_tmp == '100%'] - beta_tmp[cond_vec_tmp == '25%']).squeeze()
+                                exec = (beta_tmp[cond_vec_tmp == '100%,ring'] - beta_tmp[cond_vec_tmp == '25%,ring']).squeeze()
+
+                            betas_reduced.append(plan)
+                            betas_reduced.append(exec)
+                            cond_vec_reduced.append('plan')
+                            cond_vec_reduced.append('exec')
+                            part_vec_reduced.append(part)
+                            part_vec_reduced.append(part)
+
+                        obs_des = {'cond_vec': np.array(cond_vec_reduced),
+                                   'part_vec': np.array(part_vec_reduced)}
+
+                        Y.append(pcm.dataset.Dataset(np.array(betas_reduced), obs_descriptors=obs_des))
+
+                        # if finger == 'index':
+                        #     probs = ['0%', '25%', '50%', '75%']
+                        #     regressor_mapping = {
+                        #         '0%': 0,
+                        #         '25%': 1,
+                        #         '50%': 2,
+                        #         '75%': 3,
+                        #         '0%,index': 4,
+                        #         '25%,index': 5,
+                        #         '50%,index': 6,
+                        #         '75%,index': 7,
+                        #     }
+                        # elif finger == 'ring':
+                        #     probs = ['25%', '50%', '75%', '100%']
+                        #     regressor_mapping = {
+                        #         '25%': 0,
+                        #         '50%': 1,
+                        #         '75%': 2,
+                        #         '100%': 3,
+                        #         '25%,ring': 4,
+                        #         '50%,ring': 5,
+                        #         '75%,ring': 6,
+                        #         '100%,ring': 7,
+                        #     }
+                        #
+                        # mask = np.array([r[0] in probs or finger in r[0] for r in reginfo])
+                        # betas_prewhitened = betas_prewhitened[mask, :]
+                        # cond_vec = np.array(cond_vec)[mask]
+                        # part_vec = np.array(part_vec)[mask]
+                        #
+                        # obs_des = {'cond_vec': np.vectorize(regressor_mapping.get)(cond_vec),
+                        #            'part_vec': np.array(part_vec)}
+                        #
+                        # Y.append(pcm.dataset.Dataset(betas_prewhitened, obs_descriptors=obs_des))
+
+                    T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False)
+                    T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True)
+
+                    T_in.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                                f'T_in.corr.{finger}.glm{args.glm}.{H}.{roi}.pkl'))
+                    T_gr.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                                f'T_gr.corr.{finger}.glm{args.glm}.{H}.{roi}.pkl'))
+
+                    path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
+
+                    os.makedirs(path, exist_ok=True)
+
+                    f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                          f'theta_in.corr.{finger}.glm{args.glm}.{H}.{roi}.pkl'), 'wb')
+                    pickle.dump(theta_in, f)
+
+                    f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                          f'theta_gr.corr.{finger}.glm{args.glm}.{H}.{roi}.pkl'), 'wb')
+                    pickle.dump(theta_gr, f)
 
 if __name__ == '__main__':
     start = time.time()
