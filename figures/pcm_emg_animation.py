@@ -56,7 +56,7 @@ ax.axvline(.025, color='w', lw=0.8, ls='--')
 ax.axvline(.05, color='w', lw=0.8, ls='-.')
 ax.axvline(.1, color='w', lw=0.8, ls=':')
 
-ax.set_xlim(-.11, .5)
+ax.set_xlim(-.12, .5)
 ax.set_ylim(-.25, .75)
 
 ax.set_ylabel('weight')
@@ -105,7 +105,7 @@ ax = axs[0]
 inset_width = 0.2
 inset_height = 1
 y0 = 1.2
-x_start = 0.0
+x_start = 0.1
 x_end = 1 - inset_width
 num_frames = 100
 
