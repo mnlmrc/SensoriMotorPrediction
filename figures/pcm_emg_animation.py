@@ -42,13 +42,13 @@ fig, axs = plt.subplots(2, sharex=True, constrained_layout=True, figsize=(5, 6))
 ax = axs[0]
 ax.plot(tAx, finger.mean(axis=0), label='finger', color=colors[0])
 ax.fill_between(tAx, finger.mean(axis=0) - finger.std(axis=0) / np.sqrt(N),
-                finger.mean(axis=0) + finger.std(axis=0) / np.sqrt(N), color=colors[0], alpha=.2)
+                finger.mean(axis=0) + finger.std(axis=0) / np.sqrt(N), color=colors[0], alpha=.2, lw=0)
 ax.plot(tAx, cue.mean(axis=0), label='cue', color=colors[1])
 ax.fill_between(tAx, cue.mean(axis=0) - cue.std(axis=0) / np.sqrt(N),
-                cue.mean(axis=0) + cue.std(axis=0) / np.sqrt(N), color=colors[1], alpha=.2)
+                cue.mean(axis=0) + cue.std(axis=0) / np.sqrt(N), color=colors[1], alpha=.2, lw=0)
 ax.plot(tAx, interaction.mean(axis=0), label='interaction', color=colors[2])
 ax.fill_between(tAx, interaction.mean(axis=0) - interaction.std(axis=0) / np.sqrt(N),
-                interaction.mean(axis=0) + interaction.std(axis=0) / np.sqrt(N), color=colors[2], alpha=.2)
+                interaction.mean(axis=0) + interaction.std(axis=0) / np.sqrt(N), color=colors[2], alpha=.2, lw=0)
 
 ax.axhline(0, color='w', lw=0.8)
 ax.axvline(0, color='w', lw=0.8)
@@ -56,21 +56,27 @@ ax.axvline(.025, color='w', lw=0.8, ls='--')
 ax.axvline(.05, color='w', lw=0.8, ls='-.')
 ax.axvline(.1, color='w', lw=0.8, ls=':')
 
-ax.set_xlim(-.11, .4)
+ax.set_xlim(-.11, .5)
+ax.set_ylim(-.25, .75)
+
 ax.set_ylabel('weight')
 ax.spines[['bottom', 'right', 'top']].set_visible(False)
-ax.spines[['left']].set_bounds(-.5, .75)
+ax.spines[['left']].set_bounds(-.2, .6)
 ax.spines[['left']].set_linewidth(2)
 ax.tick_params(axis='x', which='both', length=0)
 ax.tick_params(axis='y', width=2)
-ax.legend(loc='lower right')
+ax.legend(loc='lower right', ncol=3,)
+
+ax.text(0.0375, .8,'SLR',  ha='center', va='top', color='w', rotation=90,)
+ax.text(0.075, .8,'LLR',  ha='center', va='top', color='w', rotation=90,)
+ax.text(0.25, .8,'Vol',  ha='center', va='top', color='w',rotation=90,)
 
 # Bottom plot: Bayes factor
 ax = axs[1]
 T_filtered = lp_filter(T, 50, 2148)
 ax.plot(tAx, T_filtered.mean(axis=0), color='w')
 ax.fill_between(tAx, T_filtered.mean(axis=0) - T_filtered.std(axis=0) / np.sqrt(N),
-                T_filtered.mean(axis=0) + T_filtered.std(axis=0) / np.sqrt(N), color=colors[2], alpha=.2)
+                T_filtered.mean(axis=0) + T_filtered.std(axis=0) / np.sqrt(N), color=colors[2], alpha=.2, lw=0)
 
 ax.axhline(0, color='w', lw=0.8)
 ax.axvline(0, color='w', lw=0.8)
@@ -79,13 +85,15 @@ ax.axvline(.05, color='w', lw=0.8, ls='-.')
 ax.axvline(.1, color='w', lw=0.8, ls=':')
 
 ax.set_ylabel('log Bayes factor')
-ax.set_ylim((0, 15))
+ax.set_ylim((0, 16))
 ax.spines[['right', 'top']].set_visible(False)
 ax.spines[['left']].set_bounds(0, 15)
-ax.spines[['bottom']].set_bounds(-.1, .4)
+ax.spines[['bottom']].set_bounds(-.1, .5)
 ax.spines[['left', 'bottom']].set_linewidth(2)
 ax.tick_params(axis='x', width=2)
 ax.tick_params(axis='y', width=2)
+
+ax.set_xlabel('time relative to perturbation (s)')
 
 #########
 # Inset
@@ -96,7 +104,7 @@ ax = axs[0]
 # Initial inset parameters
 inset_width = 0.2
 inset_height = 1
-y0 = 1.1  # within the visible range
+y0 = 1.2
 x_start = 0.0
 x_end = 1 - inset_width
 num_frames = 100
@@ -109,19 +117,34 @@ inset.set_yticks([])
 inset_frame = [x_start, y0, inset_width, inset_height]
 
 G_start = int(fs * 1 - fs * .05 + fs * latency)
-G_end = int(fs * 1 + fs * .35 + fs * latency)
+G_end = int(fs * 1 + fs * .45 + fs * latency)
 G_points = np.linspace(G_start, G_end, num_frames, dtype=int)
+
+# # Create a second inset for the colorbar just to the right
+# cbar_offset = 0.01  # distance between inset and colorbar
+# cbar_width = 0.01
+# cbar_height = inset_height / 3  # Half the height of the inset
+# cbar_bottom = y0 + (inset_height - cbar_height) / 2  # Centered vertically
+# cbar_ax = ax.inset_axes([x_start + inset_width + cbar_offset, cbar_bottom,
+#                          cbar_width, cbar_height], transform=ax.transAxes)
+
+# # Plot imshow and colorbar
+# im = inset.imshow(D, vmin=0, vmax=.0005)
+# cbar = fig.colorbar(im, cax=cbar_ax)
+# cbar.ax.tick_params(labelsize=6)
 
 cursor1 = axs[0].axvline(x=tAx[G_points[0]], color='r', lw=2)
 cursor2 = axs[1].axvline(x=tAx[G_points[0]], color='r', lw=2)
 
 def update(frame):
     global inset
+    # global cbar
     global cursor1
     global cursor2
 
     # Remove the previous inset
     inset.remove()
+    # cbar.ax.remove()
     cursor1.remove()
     cursor2.remove()
 
@@ -141,12 +164,16 @@ def update(frame):
     cursor1 = axs[0].axvline(x=tAx[G_points[frame]], color='r', lw=2)
     cursor2 = axs[1].axvline(x=tAx[G_points[frame]], color='r', lw=2)
 
-    inset.imshow(D, vmin=0, vmax=.0005)
+    im = inset.imshow(D, vmin=0, vmax=.001)
     inset.set_xticks(np.arange(8))
     inset.set_xticklabels(list(gl.regressor_mapping.keys())[5:13], fontsize=8, rotation=90, ha='right')
     inset.set_yticks(np.arange(8))
     inset.set_yticklabels(list(gl.regressor_mapping.keys())[5:13], fontsize=8, ha='right')
 
+    # cbar_ax = ax.inset_axes([x + inset_width + cbar_offset, cbar_bottom,
+    #                          cbar_width, cbar_height], transform=ax.transAxes)
+    # cbar = fig.colorbar(im, cax=cbar_ax)
+    # cbar.ax.tick_params(labelsize=6)
 
 ani = FuncAnimation(fig, update, frames=num_frames, interval=50)
 

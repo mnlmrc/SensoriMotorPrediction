@@ -115,7 +115,7 @@ if __name__ == "__main__":
     cbar = fig.colorbar(cax, ax=axs, orientation='vertical', fraction=.01, pad=.5)
     cbar.set_label('cross-validated\nmultivariate distance (a.u.)', fontsize=12)
 
-    # fig.suptitle('Cross-validated distances between EMG patterns averaged across participants', fontsize=18)
+    # fig.suptitle('Cross-validated distances between EMG patterns averaged across_participants', fontsize=18)
 
     fig.subplots_adjust(bottom=.2)
 

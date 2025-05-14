@@ -68,7 +68,7 @@
 #                     "middle_ext", "ring_ext", "pinkie_ext", "fdi"]
 #         }
 #
-#         # calculate descriptives across participants for each channel
+#         # calculate descriptives across_participants for each channel
 #         M, SD, SE, _ = create_channels_dictionary(Y, channels=channels[datatype])
 #
 #         # plot channels

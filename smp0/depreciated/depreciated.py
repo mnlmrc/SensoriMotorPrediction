@@ -358,7 +358,7 @@ def Z_condition(conditions):
 #     return p_dict
 #
 #
-# # Channels recorded across participants. May vary in individual participants
+# # Channels recorded across_participants. May vary in individual participants
 # channels = {
 #     'mov': ["thumb", "index", "middle", "ring", "pinkie"],
 #     'emg': ["thumb_flex", "index_flex", "middle_flex", "ring_flex",
