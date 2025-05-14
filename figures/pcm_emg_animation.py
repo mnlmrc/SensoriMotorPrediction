@@ -11,9 +11,12 @@ plt.style.use('dark_background')
 experiment = 'smp0'
 latency = .05
 
+fs = 2148
+
 # Load data
 theta = np.load(os.path.join(gl.baseDir, experiment, gl.pcmDir, f'theta_in.emg.continuous.npy'))
 T = np.load(os.path.join(gl.baseDir, experiment, gl.pcmDir, f'T_cv.emg.continuous.npy'))[..., 6]
+G_obs = np.load(os.path.join(gl.baseDir, experiment, gl.pcmDir, f'G_obs.emg.continuous.npy')).mean(axis=1)
 
 # Preprocess theta
 theta2 = theta ** 2
@@ -32,7 +35,7 @@ interaction = theta_filtered[1]
 colors = sns.color_palette("Set3", n_colors=3)
 
 # Set up figure
-fig, axs = plt.subplots(2, sharex=True, constrained_layout=True)
+fig, axs = plt.subplots(2, sharex=True, constrained_layout=True, figsize=(5, 6))
 
 # Top plot: weights
 ax = axs[0]
@@ -85,38 +88,54 @@ ax.tick_params(axis='y', width=2)
 
 #########
 # Inset
-########
+#########
 
 ax = axs[0]
 
-# Define inset position and size (relative to axs[0])
-inset = ax.inset_axes([0, 1, .3, 1], transform=ax.transAxes)
-
-# Set time window to zoom into (adjust as needed)
-inset_xlim = (0.0, 0.1)
-
-# Set limits and styling
-inset.set_xlim(*inset_xlim)
-inset.set_ylim(axs[0].get_ylim())  # match y-axis range
-inset.set_facecolor('black')
-inset.tick_params(axis='both', colors='white', labelsize=6)
-inset.spines['bottom'].set_color('white')
-inset.spines['left'].set_color('white')
-inset.spines['top'].set_color('white')
-inset.spines['right'].set_color('white')
-# inset.set_title('Zoom', color='white', fontsize=8)
-
-# Animation parameters
-window_width = 0.1
+# Initial inset parameters
+inset_width = 0.2
+inset_height = 1
+y0 = 1  # within the visible range
+x_start = 0.0
+x_end = 1 - inset_width
 num_frames = 100
-x_start = tAx[0]
-x_end = tAx[-1] - window_width
+
+# Create an initial inset so we can keep a reference
+inset = ax.inset_axes([x_start, y0, inset_width, inset_height], transform=ax.transAxes)
+inset.set_facecolor('black')
+inset.set_xticks([])
+inset.set_yticks([])
+inset_frame = [x_start, y0, inset_width, inset_height]
+
+G_start = int(fs * 1 - fs * .05)
+G_end = int(fs * 1 + fs * .35)
+G_points = np.linspace(G_start, G_end, num_frames, dtype=int)
 
 def update(frame):
-    xmin = x_start + frame * (x_end - x_start) / (num_frames - 1)
-    xmax = xmin + window_width
-    inset.set_xlim(xmin, xmax)
+    global inset
+
+    # Remove the previous inset
+    inset.remove()
+
+    # Compute new x position
+    x = x_start + (x_end - x_start) * frame / (num_frames - 1)
+
+    # Create new inset at the new position
+    inset = ax.inset_axes([x, y0, inset_width, inset_height], transform=ax.transAxes)
+    inset.set_facecolor('black')
+    inset.set_xticks([])
+    inset.set_yticks([])
+    for spine in inset.spines.values():
+        spine.set_color('white')
+
+    D = pcm.G_to_dist(G_obs[G_points[frame]] / np.trace(G_obs[G_points[frame]]))
+
+    inset.imshow(D)
 
 ani = FuncAnimation(fig, update, frames=num_frames, interval=100)
+
+ani.save('inset_slide.gif', writer='pillow', fps=10)
+
+plt.show()
 
 
