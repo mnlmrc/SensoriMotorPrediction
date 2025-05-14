@@ -8,6 +8,12 @@ def extract_svg_figures(notebook_path, tag):
     with open(notebook_path, 'r', encoding='utf-8') as f:
         nb = nbformat.read(f, as_version=4)
 
+    # Inject SVG rendering config as the first code cell
+    svg_config_cell = nbformat.v4.new_code_cell(
+        source="%matplotlib inline\n%config InlineBackend.figure_format = 'svg'"
+    )
+    nb.cells.insert(0, svg_config_cell)
+
     # Execute notebook
     client = NotebookClient(nb)
     client.execute()
