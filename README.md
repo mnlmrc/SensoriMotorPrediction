@@ -6,11 +6,12 @@ MATLAB R2020a (version used for fMRI data preprocessing), SPM12 (https://www.fil
 
 # **fMRI data**
 
-The raw fMRI data are stored following the Brain Imaging Data Structure (BIDS). Participants information are stored in the participants.tsv file. 
+The raw fMRI data are stored following the Brain Imaging Data Structure (BIDS). Participants' information are stored in the participants.tsv file. 
 
 ## Preprocessing
 
-For preprocessing, we used the MATLAB functions smp2_anat (structural images), smp2_func (EPI images and fieldmap correction) and smp2_glm (first-level GLM) in sensori-motor-prediction/smp2.
+For preprocessing, we used the MATLAB functions smp2_anat (structural images), smp2_func (EPI images and fieldmap correction) 
+and smp2_glm (first-level GLM) in sensori-motor-prediction/smp2.
 
 ### Structural images
 
@@ -23,8 +24,23 @@ For preprocessing, we used the MATLAB functions smp2_anat (structural images), s
 
 More on surface reconstruction pipelines [here](https://diedrichsenlab.github.io/guides/06_surface_analysis.html).
 
-First-level GLM: ...
+### First-level GLM: 
+...
 
-ROI definition: ...
+Using the `betas` module, the beta coefficient estimated for each regressor can be stored in a single CIFTI file 
+using the make_cifti_betas function from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines):
 
-Time
+```
+    if args.what == 'save_betas_cifti':
+        path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+        masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
+        cifti = bt.make_cifti_betas(path_glm, masks, struct)
+```
+
+### ROI definition
+
+Surface-based definition of cortical ROIs is implemented in the `rois` module using the `Rois` class 
+from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines), which in turn uses the functions and classes 
+from the `atlas_map` module from [Functional_Fusion](https://github.com/DiedrichsenLab/Functional_Fusion)
+
+
