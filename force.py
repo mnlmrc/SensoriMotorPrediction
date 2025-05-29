@@ -69,6 +69,37 @@ def segment_mov(experiment=None, sn=None, session=None, blocks=None, prestim=gl.
     return np.array(force), descr
 
 
+def calc_md(X):
+    """
+
+    Args:
+        X: timepoints x channels data
+
+    Returns:
+
+    """
+    N, m = X.shape
+    F1 = X[0]
+    FN = X[-1] - F1  # Shift the end point
+
+    shifted_matrix = X - F1  # Shift all points
+
+    d = list()
+
+    for t in range(1, N - 1):
+        Ft = shifted_matrix[t]
+
+        # Project Ft onto the ideal straight line
+        proj = np.dot(Ft, FN) / np.dot(FN, FN) * FN
+
+        # Calculate the Euclidean distance
+        d.append(np.linalg.norm(Ft - proj))
+
+    d = np.array(d)
+    MD = d.mean()
+
+    return MD, d
+
 def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1.5, 0), (.2, .4), ]):
     ch_idx = [col in gl.channels['mov'] for col in gl.col_mov[experiment]]
 
@@ -80,6 +111,7 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
         'TN': [],
         'stimFinger': [],
         'cue': [],
+        'MD': [],
     }
     fingers = ['thumb', 'index', 'middle', 'ring', 'pinkie']
     for i in range(len(win)):
@@ -112,9 +144,14 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
                 end = onset + int(w[1] * gl.fsample_mov)
                 force_tmp = mov[start:end, ch_idx].mean(axis=0)
 
+
                 for j, f in enumerate(fingers):
                     force_dict[f'{f}{i}'].append(force_tmp[j])
 
+            # calc mean deviation
+            X = mov[onset:onset + int(.5 * gl.fsample_mov), ch_idx]
+            md, _ = calc_md(X)
+            force_dict['MD'].append(md)
             force_dict['stimFinger'].append(dat_tmp.iloc[ons]['stimFinger'])
             force_dict['cue'].append(dat_tmp.iloc[ons]['cue'])
             force_dict['BN'].append(dat_tmp.iloc[ons]['BN'])
@@ -260,7 +297,7 @@ if __name__ == '__main__':
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112], type=int)
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113], type=int)
     parser.add_argument('--session', type=str, default='behavioural')
 
     args = parser.parse_args()

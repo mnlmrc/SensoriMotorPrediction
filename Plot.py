@@ -8,6 +8,7 @@ import surfAnalysisPy as surf
 import os
 import globals as gl
 from scipy.stats import ttest_1samp
+import SUITPy.flatmap as flatmap
 
 def plot_force_aligned(force, descr, go_or_nogo, vsep, axs):
     tAx = np.linspace(-gl.prestim, gl.poststim, force.shape[-1])
@@ -141,6 +142,63 @@ def plot_flatmap_cortical_activation(img, vmin=-20, vmax=20, xlim=None, ylim=Non
     axs[0, 1].set_title('Right hemisphere\nPlanning')
     axs[1, 0].set_title('Execution')
     axs[1, 1].set_title('Execution')
+
+    return fig, axs
+
+
+def plot_flatmap_cerebellar_activation(img, vmin=-20, vmax=20, xlim=None, ylim=None, figsize=(5, 6),
+                                     frame=(None, None, None, None), rounding=.2, cbar_orientation='vertical',cbar_fraction=.01):
+
+    if xlim is None:
+        xlim = {
+            'L': [-80, 120],
+            'R': [-120, 80],
+        }
+    if ylim is None:
+        ylim = {
+            'L': [-50, 150],
+            'R': [-60, 140]
+        }
+
+    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=figsize)
+
+    gifti = nb.load(img)
+
+    darray = nt.get_gifti_data_matrix(gifti)
+
+    col_names = nt.get_gifti_column_names(gifti)
+    plan_col_names = [col for col in col_names if 'index' not in col and 'ring' not in col]
+    exec_col_names = [col for col in col_names if 'index' in col or 'ring' in col or 'exec' in col]
+
+    im = np.array([x in plan_col_names for x in col_names])
+    darray_avg = np.array(darray[:, im]).mean(axis=1)
+    plt.sca(axs[0])
+    ax = flatmap.plot(data=darray_avg,
+                      cmap='bwr',
+                      cscale=[vmin, vmax],
+                      new_figure=False,
+                      colorbar=False,
+                      render='matplotlib')
+
+    im = np.array([x in exec_col_names for x in col_names])
+    darray_avg = np.array(darray[:, im]).mean(axis=1)
+    plt.sca(axs[1])
+    ax = flatmap.plot(data=darray_avg,
+                      cmap='bwr',
+                      cscale=[vmin, vmax],
+                      new_figure=False,
+                      colorbar=False,
+                      render='matplotlib')
+
+    # make colorbar
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    sm = ScalarMappable(norm=norm, cmap='bwr')
+    cbar = fig.colorbar(sm, ax=axs, orientation='vertical', fraction=0.01)
+    cbar.set_label('activation vs. baseline (a.u.)')
+
+    # cosmetic
+    axs[0].set_title('Planning')
+    axs[1].set_title('Execution')
 
     return fig, axs
 

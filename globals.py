@@ -46,6 +46,7 @@ prestim = 1.5
 poststim = 1
 
 fsample_mov = 500
+fsample_mov = 2148
 
 planState = {
     'smp0': 2,
@@ -132,10 +133,10 @@ mask_stimFinger_cue[[5, 6, 10, 12, 15, 16]] = True
 borders = {'L': os.path.join(baseDir, 'smp2', surfDir, 'fs_LR.32k.L.border'),
            'R': os.path.join(baseDir, 'smp2', surfDir, 'fs_LR.32k.R.border')}
 
-atlas_dir = ["/home/UWO/memanue5/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/",
+atlasDirs = ["/home/UWO/memanue5/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/",
              "/Users/mnlmrc/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/"]
 
-atlas_dir = next((Dir for Dir in atlas_dir if Path(Dir).exists()), None)
+atlasDir = next((Dir for Dir in atlasDirs if Path(Dir).exists()), None)
 
 rois = {
         'Desikan': [

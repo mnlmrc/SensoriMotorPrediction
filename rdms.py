@@ -15,7 +15,18 @@ from rsatoolbox.inference import noise_ceiling
 
 
 def D_to_rdm(D, descriptors=None, rdm_descriptors={}, pattern_descriptors=None, dissimilarity_measure=None):
+    """
 
+    Args:
+        D: (m-)n-by-n dissimilarity matrix
+        descriptors:
+        rdm_descriptors: m rdm descriptors (e.g., subject labels)
+        pattern_descriptors: n pattern descriptors (e.g., condition labels)
+        dissimilarity_measure:
+
+    Returns:
+
+    """
     if D.ndim == 2:
         triu_rows, triu_cols = np.triu_indices(D.shape[0], k=1)
         dissimilarities = D[triu_rows, triu_cols]

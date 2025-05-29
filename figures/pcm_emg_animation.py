@@ -43,12 +43,12 @@ ax = axs[0]
 ax.plot(tAx, finger.mean(axis=0), label='finger', color=colors[0])
 ax.fill_between(tAx, finger.mean(axis=0) - finger.std(axis=0) / np.sqrt(N),
                 finger.mean(axis=0) + finger.std(axis=0) / np.sqrt(N), color=colors[0], alpha=.2, lw=0)
-ax.plot(tAx, cue.mean(axis=0), label='cue', color=colors[1])
+ax.plot(tAx, cue.mean(axis=0), label='cue', color=colors[2])
 ax.fill_between(tAx, cue.mean(axis=0) - cue.std(axis=0) / np.sqrt(N),
-                cue.mean(axis=0) + cue.std(axis=0) / np.sqrt(N), color=colors[1], alpha=.2, lw=0)
-ax.plot(tAx, interaction.mean(axis=0), label='interaction', color=colors[2])
+                cue.mean(axis=0) + cue.std(axis=0) / np.sqrt(N), color=colors[2], alpha=.2, lw=0)
+ax.plot(tAx, interaction.mean(axis=0), label='interaction', color=colors[1])
 ax.fill_between(tAx, interaction.mean(axis=0) - interaction.std(axis=0) / np.sqrt(N),
-                interaction.mean(axis=0) + interaction.std(axis=0) / np.sqrt(N), color=colors[2], alpha=.2, lw=0)
+                interaction.mean(axis=0) + interaction.std(axis=0) / np.sqrt(N), color=colors[1], alpha=.2, lw=0)
 
 ax.axhline(0, color='w', lw=0.8)
 ax.axvline(0, color='w', lw=0.8)

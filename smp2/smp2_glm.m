@@ -58,7 +58,7 @@ function varargout = smp2_glm(what, varargin)
     
     % Read info from participants .tsv file 
     % pinfo = dload(fullfile(baseDir,'participants.tsv'));    
-    pinfo = dload(fullfile(baseDir,'participants_backup.tsv'));
+    pinfo = dload(fullfile(baseDir,'participants.tsv'));
     
     switch what
         
@@ -906,7 +906,7 @@ function varargout = smp2_glm(what, varargin)
                smp2_glm('GLM:within_participant', 'sn', s, 'glm', glm)
             end
         
-       case 'SURF:vol2surf'
+        case 'SURF:vol2surf'
             
             currentDir = pwd;
 

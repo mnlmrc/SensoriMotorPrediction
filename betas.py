@@ -9,39 +9,12 @@ import glob
 
 from nitools import spm
 import Functional_Fusion.atlas_map as am
+import imaging_pipelines.betas as bt
 
 import globals as gl
 
 import nibabel as nb
 import nitools as nt
-
-
-def make_cifti_betas(path_glm, masks, struct):
-    SPM = spm.SpmGlm(path_glm)  #
-    SPM.get_info_from_spm_mat()
-
-    for i, (s, mask) in enumerate(zip(struct, masks)):
-        atlas = am.AtlasVolumetric('region', mask, structure=s)
-
-        if i == 0:
-            brain_axis = atlas.get_brain_model_axis()
-            coords = nt.get_mask_coords(mask)
-        else:
-            brain_axis += atlas.get_brain_model_axis()
-            coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
-
-    betas, _, info = SPM.get_betas(coords)
-
-    reg_name = np.array([n.split('*')[0] for n in info['reg_name']])
-
-    row_axis = nb.cifti2.ScalarAxis(reg_name.astype(str) + '.' + info['run_number'].astype(str))
-
-    header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
-    cifti = nb.Cifti2Image(
-        dataobj=betas,  # Stack them along the rows (adjust as needed)
-        header=header,  # Use one of the headers (may need to modify)
-    )
-    return cifti
 
 
 def make_cifti_contrasts(path_glm, masks, struct):
@@ -185,12 +158,26 @@ def main(args=None):
     if args.what == 'save_betas_cifti':
         path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
         masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
-        cifti = make_cifti_betas(path_glm, masks, struct)
+        cifti = bt.make_cifti_betas(path_glm, masks, struct)
+        nb.save(cifti, path_glm + '/' + 'beta.dscalar.nii')
+    if args.what == 'save_betas_cifti_cerebellum':
+        path_rois = os.path.join(gl.baseDir, args.experiment, 'SUIT', gl.roiDir)
+        path_glm = os.path.join(gl.baseDir, args.experiment, 'SUIT', f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+        reginfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
+                                           f'subj{args.sn}_reginfo.tsv'), sep="\t")
+        betas = [f'{path_glm}' + '/' + f'wdbeta_{i+1:04d}.nii' for i in range(reginfo.shape[0])]
+        masks = [os.path.join(path_rois, f'subj{args.sn}', f'cerebellum.{H}.nii') for H in Hem]
+        print(f'mask: {masks}')
+        row_axis = nb.cifti2.ScalarAxis(reginfo['name'].astype(str).replace(' ','') + '.' + reginfo['run'].astype(str))
+        cifti = bt.make_cifti_betas(path_glm, masks, struct=['Cerebellum'], betas=betas, row_axis=row_axis)
         nb.save(cifti, path_glm + '/' + 'beta.dscalar.nii')
     if args.what == 'save_contrasts_cifti':
         path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
         masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
-        cifti = make_cifti_contrasts(path_glm, masks, struct)
+        reginfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
+                                           f'subj{args.sn}_reginfo.tsv'), sep="\t")
+        regressors = reginfo['name'].str.replace(' ', '')
+        cifti = bt.make_cifti_contrasts(path_glm, masks, struct, regressors=regressors)
         nb.save(cifti, path_glm + '/' + 'contrast.dscalar.nii')
     if args.what == 'save_residuals_cifti':
         SPM = spm.SpmGlm(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}'))  #

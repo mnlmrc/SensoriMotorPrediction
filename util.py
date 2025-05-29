@@ -211,3 +211,41 @@ def lp_filter(data, cutoff, fs, axis=-1, numtaps=None, k=4):
 
     return filtfilt(fir_coeff, 1, data, axis=axis, padlen=padlen)
 
+
+def pairwise_permutation_tests(data=None, dv=None, within=None, subject=None, n_resamples=10000, alternative='two-sided'):
+    results = []
+
+    levels = data[within].unique()
+    pairs = list(combinations(levels, 2))
+
+    for cond1, cond2 in pairs:
+        df1 = data[data[within] == cond1].sort_values(subject)
+        df2 = data[data[within] == cond2].sort_values(subject)
+
+        # Make sure subjects are aligned
+        common_subjects = np.intersect1d(df1[subject], df2[subject])
+        df1 = df1[df1[subject].isin(common_subjects)].sort_values(subject)
+        df2 = df2[df2[subject].isin(common_subjects)].sort_values(subject)
+
+        vals1 = df1[dv].values
+        vals2 = df2[dv].values
+
+        stat = lambda x, y: np.mean(x - y)
+        res = permutation_test((vals1, vals2), statistic=stat,
+                               permutation_type='pairings',
+                               alternative=alternative,
+                               n_resamples=n_resamples,
+                               random_state=42)
+
+        results.append({
+            'A': cond1,
+            'B': cond2,
+            'mean(A)': np.mean(vals1),
+            'mean(B)': np.mean(vals2),
+            'diff': np.mean(vals1 - vals2),
+            'p-value': res.pvalue,
+            'n': len(vals1)
+        })
+
+    return pd.DataFrame(results)
+
