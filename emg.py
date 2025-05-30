@@ -6,6 +6,8 @@ import os
 import globals as gl
 from scipy.signal import resample
 import pickle
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 
 def detect_trig(trig_sig, time_trig, amp_threshold=None, ntrials=None, debugging=False):
@@ -191,6 +193,13 @@ def main(args):
             ntrials = dat_tmp.shape[0]
             _, timestamp = detect_trig(trig_sig, trig_time, ntrials=ntrials, amp_threshold=2)
 
+            for t, _ in enumerate(timestamp):
+                stimFinger = dat_tmp.iloc[t]['stimFinger']
+                if stimFinger==91999:
+                    timestamp[t] += int(.042 * 2148) # .046
+                elif stimFinger==99919:
+                    timestamp[t] += int(.05 * 2148) # .06
+
             emg.append(emg_segment(df_out.iloc[:, :-2], timestamp, prestim=1, poststim=2, fsample=2148))
 
         emg = np.vstack(emg)
@@ -230,7 +239,7 @@ def main(args):
             emg_raw = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}', f'emg_raw.npy'))
             emg_rect = np.abs(emg_raw)
             bs = emg_rect[..., :2148].mean(axis=-1, keepdims=True)
-            emg = emg_rect / bs
+            emg = emg_rect - bs
             dat = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
                                            f'{args.experiment}_{sn}.dat'), sep='\t')
             blocks = [int(b) for b in pinfo[pinfo['sn'] == sn].blocks_emg.iloc[0].split('.')]
@@ -250,6 +259,37 @@ def main(args):
         f = open(os.path.join(gl.baseDir, args.experiment, 'emg', 'emg.p'), 'wb')
         pickle.dump(Dict, f)
 
+    if args.what == 'pca':
+
+        print(f'loading subj{args.sn}...')
+        emg_raw = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', f'emg_raw.npy'))
+        emg_rect = np.abs(emg_raw)
+        bs = emg_rect[..., :2148].mean(axis=-1, keepdims=True)
+        emg = emg_rect - bs
+        shape = emg.shape
+        emg_stacked = np.transpose(emg, (0, 2, 1)).reshape(-1, emg.shape[1])
+
+        pca = PCA(n_components=2)
+
+        scaler = StandardScaler()
+
+        # emg_stacked = scaler.fit_transform(emg_stacked)
+
+        PCs = pca.fit_transform(emg_stacked)
+        PCs = PCs.reshape(emg.shape[0], emg.shape[-1], -1)  # (200, 6444, n_components)
+        PCs = np.transpose(PCs, (0, 2, 1))
+
+        np.save(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', 'pcs.npy'), PCs)
+
+    if args.what=='pca_all':
+        for sn in args.snS:
+            args = argparse.Namespace(
+                what='pca',
+                experiment=args.experiment,
+                sn=sn,
+            )
+            main(args)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -262,68 +302,3 @@ if __name__ == '__main__':
 
     main(args)
 
-# def make_participants_dict(snS):
-#
-#     emg_dict = {
-#         'thumb_flex': [],
-#         'fdi': [],
-#         'index_flex':[],
-#         'middle_flex':[],
-#         'ring_flex':[],
-#         'pinkie_flex':[],
-#         'thumb_ext':[],
-#         'index_ext':[],
-#         'middle_ext':[],
-#         'ring_ext':[],
-#         'pinkie_ext':[],
-#         'sn': [],
-#         'BN': [],
-#         'TN': [],
-#         'cue': [],
-#         'stimFinger': []
-#     }
-#
-#     channels = 'thumb_flex',
-#         'fdi',
-#         'index_flex',
-#         'middle_flex',
-#         'ring_flex',
-#         'pinkie_flex':[],
-#         'thumb_ext':[],
-#         'index_ext':[],
-#         'middle_ext':[],
-#         'ring_ext':[],
-#         'pinkie_ext':[],
-#
-#     emg_path = os.path.join(gl.baseDir, 'smp0', 'emg')
-#     dat_path = os.path.join(gl.baseDir, 'smp0', 'behavioural')
-#     for sn in snS:
-#         emg = np.load(os.path.join(emg_path, f'subj{sn}', f'smp0_{sn}.npy'))
-#         bins = pd.read_csv(os.path.join(emg_path, f'subj{sn}', f'smp0_{sn}_binned.tsv'), sep='\t')
-#         dat = pd.read_csv(os.path.join(dat_path, f'subj{sn}', f'smp0_{sn}.dat'), sep='\t')
-#         recorded_channels = bins.columns[1:-4]
-#         for TN in range(dat.shape[0]):
-#             emg_dict['TN'].append(dat.iloc[TN]['TN'])
-#             emg_dict['cue'].append(dat.iloc[TN]['cue'])
-#             emg_dict['stimFinger'].append(dat.iloc[TN]['stimFinger'])
-#             emg_dict['sn'].append(sn)
-#             emg_dict['BN'].append(dat.iloc[TN]['BN'])
-#             for ch, channel in enumerate(channels):
-#                 emg_tmp = emg[TN, ch]
-#                 emg_dict[channel].append(emg_tmp)
-#
-#
-#     pass
-# def main(args):
-#     if args.what=='make_participants_dict':
-#         make_participants_dict(args.snS)
-#
-# if __name__ == '__main__':
-#     parser = argparse.ArgumentParser()
-#
-#     parser.add_argument('what', nargs='?', default=None)
-#     parser.add_argument('--snS', type=int, default=[100, 101, 102, 104, 105, 106])
-#
-#     args = parser.parse_args()
-#
-#     main(args)

@@ -8,6 +8,7 @@ import surfAnalysisPy as surf
 import os
 import globals as gl
 from scipy.stats import ttest_1samp
+import matplotlib.transforms as mtransforms
 import SUITPy.flatmap as flatmap
 
 def plot_force_aligned(force, descr, go_or_nogo, vsep, axs):
@@ -390,26 +391,37 @@ def plot_bins(df):
     pass
 
 
-def make_yref(axs, reference_length=5, pos='left', unit='N', custom_text=None):
-    midpoint_y = (axs.get_ylim()[0] + axs.get_ylim()[1]) / 6  # Calculate the one-third of the y-axis
+def make_yref(ax, reference_length=5, pos='left', unit='N', custom_text=None, color='k'):
+
+    # Compute location in axes coordinates (0 to 1)
+    midpoint_ax_y = 0.3  # halfway in the vertical direction
+    length_ax = reference_length / (ax.get_ylim()[1] - ax.get_ylim()[0])
+
+    # Convert axes coordinates to display coordinates
+    trans = ax.transAxes
+    fig = ax.figure
 
     if pos == 'left':
-        reference_x = axs.get_xlim()[0]
-        axs.plot([reference_x, reference_x],
-                 [midpoint_y - reference_length / 2, midpoint_y + reference_length / 2],
-                 ls='-', color='k', lw=3, zorder=100)
-        axs.text(reference_x, midpoint_y, f'{reference_length}N ', color='k',
-                 ha='right', va='center', zorder=100)
+        x_ref = -0.05  # just outside the axis on the left
+        ha = 'right'
     elif pos == 'right':
-        reference_x = axs.get_xlim()[1]  # Position of the reference line
-        axs.plot([reference_x, reference_x],
-                 [midpoint_y - reference_length / 2, midpoint_y + reference_length / 2],
-                 ls='-', color='k', lw=3, zorder=100)
-        if custom_text is None:
-            axs.text(reference_x, midpoint_y, f'{reference_length}{unit} ', color='k',
-                     ha='left', va='center', zorder=100)
-        else:
-            axs.text(reference_x, midpoint_y, custom_text, color='k',ha='left', va='center', zorder=100)
+        x_ref = 1.05  # just outside the axis on the right
+        ha = 'left'
+    else:
+        raise ValueError("pos must be 'left' or 'right'")
+
+    # Draw the line in axes coordinates
+    ax.plot([x_ref, x_ref],
+            [midpoint_ax_y - length_ax/2, midpoint_ax_y + length_ax/2],
+            transform=trans,
+            color=color, lw=2, zorder=100, clip_on=False)
+
+    # Add text label
+    text = custom_text if custom_text is not None else f' {reference_length}{unit}'
+    ax.text(x_ref, midpoint_ax_y, text,
+            transform=trans,
+            color=color, ha=ha, va='center',
+            zorder=100, clip_on=False)
 
 def save_figure_incremental(fig, base_name, ext='svg', overwrite=True):
     """
