@@ -11,6 +11,12 @@ plt.style.use('dark_background')
 experiment = 'smp0'
 snS = [100, 101, 102, 104, 105, 106, 107, 108, 109, 110]
 
+wins = [(-.1, 0.0), (.025, .05), (.05, .1), (.1, .5)]
+epochs = ['Pre', 'SLR', 'LLR', 'Vol']
+onset = 2148
+
+N = 10
+
 # Map: (cue, stimFinger) → list of PC arrays
 pc = {
     '0%,index': [],
@@ -54,7 +60,30 @@ for k, v in pc.items():
         pc_avg[k] = pcs.mean(axis=0)  # avg across subjects → (2, T)
 
 # === ANIMATION ===
-fig, ax = plt.subplots(figsize=(4, 3.5), constrained_layout=True)
+fig, axs = plt.subplots(1, 5, gridspec_kw={'width_ratios': [.3, .3, .3, .3, 5]},
+                        sharey=True, figsize=(5, 3), constrained_layout=True)
+
+ax = axs[-1]
+
+for k, v in pc.items():
+    pc[k] = np.array(v).mean(axis=1)
+    for w, win in enumerate(wins):
+        pc_avg_w = pc[k][..., int(onset + win[0] * fs):int(onset + win[1] * fs)].mean(axis=(0, -1))
+        pc_avg_err = pc[k][..., int(onset + win[0] * fs):int(onset + win[1] * fs)].mean(axis=-1).std(axis=0) / np.sqrt(
+            N)
+
+        axs[w].scatter(0, pc_avg_w[1], color=gl.colour_mapping[k])
+        axs[w].set_xticks([])
+        axs[w].set_title(epochs[w], fontsize=12, va='center', rotation=90)
+
+        if w > 0:
+            axs[w].spines[['top', 'right', 'bottom', 'left']].set_visible(False)
+            axs[w].tick_params(width=0)
+        else:
+            axs[w].spines[['top', 'right', 'bottom', ]].set_visible(False)
+            axs[w].spines[['left', ]].set_bounds(-.5, 1)
+            axs[w].spines[['left', ]].set_linewidth(2)
+            axs[w].tick_params(width=2)
 
 lines = {}
 dots = {}
@@ -65,25 +94,26 @@ for k in pc_avg:
     dots[k] = dot
 
 ax.set_xlim([-1.1, 3.5])
-ax.set_ylim([-1.1, 1.2])
+ax.set_ylim([-.9, 1.2])
 
-ax.spines[['top', 'right']].set_visible(False)
+ax.spines[['top', 'right', 'left']].set_visible(False)
 ax.spines['bottom'].set_linewidth(2)
 ax.spines['left'].set_linewidth(2)
 ax.spines['left'].set_bounds(-1, 1)
 ax.spines['bottom'].set_bounds(-1, 3)
-ax.tick_params(width=2)
+ax.tick_params('x', width=2)
+ax.tick_params('y', width=0)
 
 
+axs[0].set_ylabel("Projection onto PC2")
 ax.set_xlabel("Projection onto PC1")
-ax.set_ylabel("Projection onto PC1")
-ax.set_title("EMG trajectory")
+# ax.set_title("EMG trajectories")
 # ax.legend()
 
-time_text = ax.text(-0.9, -1, '', transform=ax.transData,
+time_text = ax.text(-.9, -.8, '', transform=ax.transData,
                     ha='left', va='bottom', fontsize=10, color='white')
 
-
+fig.suptitle('EMG trajectories')
 
 def init():
     for line in lines.values():
