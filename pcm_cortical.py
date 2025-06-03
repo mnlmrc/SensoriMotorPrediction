@@ -671,29 +671,29 @@ def main(args):
 
         R = Rois(args.snS, M, glm_path, cifti_img, roi_path, roi_imgs, regressor_mapping=gl.regressor_mapping,
                  regr_of_interest=[5, 6, 7, 8, 9, 10, 11, 12])
-        for roi_img in roi_imgs:
-            R._make_roi_dataset(roi_img)
-        # res = R.run_parallel_pcm_across_rois()
-        #
-        # for H in Hem:
-        #     for roi in rois:
-        #         r = res['roi_img'].index(f'ROI.{H}.{roi}.nii')
-        #
-        #         path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
-        #         os.makedirs(path, exist_ok=True)
-        #
-        #         res['T_in'][r].to_pickle(os.path.join(path, f'T_in.exec.glm{args.glm}.{H}.{roi}.p'))
-        #         res['T_cv'][r].to_pickle(os.path.join(path, f'T_cv.exec.glm{args.glm}.{H}.{roi}.p'))
-        #         res['T_gr'][r].to_pickle(os.path.join(path, f'T_gr.exec.glm{args.glm}.{H}.{roi}.p'))
-        #
-        #         np.save(os.path.join(path, f'G_obs.exec.glm{args.glm}.{H}.{roi}.npy'), res['G_obs'][r])
-        #
-        #         f = open(os.path.join(path, f'theta_in.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
-        #         pickle.dump(res['theta_in'][r], f)
-        #         f = open(os.path.join(path, f'theta_cv.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
-        #         pickle.dump(res['theta_cv'][r], f)
-        #         f = open(os.path.join(path, f'theta_gr.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
-        #         pickle.dump(res['theta_gr'][r], f)
+        # for roi_img in roi_imgs:
+        #     R._make_roi_dataset(roi_img)
+        res = R.run_parallel_pcm_across_rois()
+
+        for H in Hem:
+            for roi in rois:
+                r = res['roi_img'].index(f'ROI.{H}.{roi}.nii')
+
+                path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
+                os.makedirs(path, exist_ok=True)
+
+                res['T_in'][r].to_pickle(os.path.join(path, f'T_in.exec.glm{args.glm}.{H}.{roi}.p'))
+                res['T_cv'][r].to_pickle(os.path.join(path, f'T_cv.exec.glm{args.glm}.{H}.{roi}.p'))
+                res['T_gr'][r].to_pickle(os.path.join(path, f'T_gr.exec.glm{args.glm}.{H}.{roi}.p'))
+
+                np.save(os.path.join(path, f'G_obs.exec.glm{args.glm}.{H}.{roi}.npy'), res['G_obs'][r])
+
+                f = open(os.path.join(path, f'theta_in.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
+                pickle.dump(res['theta_in'][r], f)
+                f = open(os.path.join(path, f'theta_cv.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
+                pickle.dump(res['theta_cv'][r], f)
+                f = open(os.path.join(path, f'theta_gr.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
+                pickle.dump(res['theta_gr'][r], f)
 
     if args.what == 'cerebellum_planning':
 
