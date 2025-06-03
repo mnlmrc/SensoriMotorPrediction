@@ -223,6 +223,7 @@ def main(args):
             npz = np.load(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
                                        f'{args.experiment}_{sn}_force_segmented.npz'))
             force = npz['data_array']
+            pass
             for c, cue in enumerate(gl.cue_code):
 
                 for f in range(force.shape[1]):

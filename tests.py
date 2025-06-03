@@ -4,7 +4,7 @@ import os
 import globals as gl
 import PcmPy as pcm
 import nibabel as nb
-from Pcm import make_execution_models
+from pcm_cortical import make_execution_models
 import matplotlib.pyplot as plt
 
 sn = 109

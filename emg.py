@@ -6,8 +6,8 @@ import os
 import globals as gl
 from scipy.signal import resample
 import pickle
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA, NMF, TruncatedSVD
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
 def detect_trig(trig_sig, time_trig, amp_threshold=None, ntrials=None, debugging=False):
@@ -265,17 +265,19 @@ def main(args):
         emg_raw = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', f'emg_raw.npy'))
         emg_rect = np.abs(emg_raw)
         bs = emg_rect[..., :2148].mean(axis=-1, keepdims=True)
-        emg = emg_rect - bs
+        emg = emg_rect #/ bs
         shape = emg.shape
         emg_stacked = np.transpose(emg, (0, 2, 1)).reshape(-1, emg.shape[1])
 
-        pca = PCA(n_components=2)
+        pca = PCA(n_components=3)
+        # nmf = NMF(n_components=3, max_iter=1000)
 
+        # scaler = MinMaxScaler()
         scaler = StandardScaler()
-
-        # emg_stacked = scaler.fit_transform(emg_stacked)
+        emg_stacked = scaler.fit_transform(emg_stacked)
 
         PCs = pca.fit_transform(emg_stacked)
+        # PCs =  nmf.fit_transform(emg_stacked)
         PCs = PCs.reshape(emg.shape[0], emg.shape[-1], -1)  # (200, 6444, n_components)
         PCs = np.transpose(PCs, (0, 2, 1))
 

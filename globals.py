@@ -46,7 +46,7 @@ prestim = 1.5
 poststim = 1
 
 fsample_mov = 500
-fsample_mov = 2148
+fsample_emg = 2148
 
 planState = {
     'smp0': 2,
@@ -90,13 +90,13 @@ regressor_mapping = {
 
 ### colours ###
 cmap_plan = plt.get_cmap('Greys')
-col_plan = [cmap_plan(i) for i in np.linspace(.2, .8, 5)]
+col_plan = [cmap_plan(i) for i in np.linspace(.1, .9, 5)]
 
 cmap_index = plt.get_cmap('Greens')
-col_index = [cmap_index(i) for i in np.linspace(.2, 1, 4)]
+col_index = [cmap_index(i) for i in np.linspace(.2, .9, 5)][:4]
 
 cmap_ring = plt.get_cmap('Oranges')
-col_ring = [cmap_ring(i) for i in np.linspace(.2, 1, 4)]
+col_ring = [cmap_ring(i) for i in np.linspace(.2, .9, 5)][1:]
 
 colour_mapping = {
     '0%': col_plan[0],
