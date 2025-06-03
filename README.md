@@ -27,20 +27,20 @@ More on surface reconstruction pipelines [here](https://diedrichsenlab.github.io
 ### First-level GLM: 
 ...
 
-Using the `betas` module, the beta coefficient estimated for each regressor can be stored in a single CIFTI file 
-using the make_cifti_betas function from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines):
+Using the `betas` module, the beta coefficients estimated for each regressor and the contrasts from 1st level GLM 
+can be stored in a single CIFTI file using the make_cifti_betas function from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines):
 
-```
-    if args.what == 'save_betas_cifti':
-        path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
-        masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
-        cifti = bt.make_cifti_betas(path_glm, masks, struct)
-```
+- beta coefficient estimated for each regressor: `python betas.py save_betas_cifti --sn <subject number>>`
+- Save contrasts to a single cifti file: `python betas.py save_contrasts_cifti --sn <subject number>>`
+
+Both the above steps require first to create masks for each hemisphere (see ROI definition).
 
 ### ROI definition
 
 Surface-based definition of cortical ROIs is implemented in the `rois` module using the `Rois` class 
 from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines), which in turn uses the functions and classes 
-from the `atlas_map` module from [Functional_Fusion](https://github.com/DiedrichsenLab/Functional_Fusion)
+from the `atlas_map` module from [Functional_Fusion](https://github.com/DiedrichsenLab/Functional_Fusion):
+
+- Save NIFTI files of ROI masks plus NIFTI hemisphere masks: `python rois.py make_cortical_rois --sn <subject number>`
 
 
