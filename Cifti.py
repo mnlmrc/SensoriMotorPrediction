@@ -49,10 +49,6 @@ def main(args):
         nb.save(cifti_img, os.path.join(gl.baseDir, args.experiment, gl.wbDir,
                                f'glm{args.glm}.{args.dtype}.dscalar.nii'))
 
-        pass
-        # cifti_img = nt.join_giftis_to_cifti(giftis)
-        # nb.save(cifti_img, os.join.path(gl.baseDir, args.experiment, gl.wbDir,
-        #                                 f'glm{args.glm}.{args.dtype}.dscalar.nii'))
     if args.what=='save_smoothed_surface_cifti_avg':
         nt.smooth_cifti(os.path.join(gl.baseDir, args.experiment, gl.wbDir,
                                f'glm{args.glm}.{args.dtype}.dscalar.nii'),
@@ -61,6 +57,12 @@ def main(args):
                         '/home/UWO/memanue5/Documents/GitHub/surfAnalysisPy/standard_mesh/fs_L/fs_LR.32k.L.flat.surf.gii',
                         '/home/UWO/memanue5/Documents/GitHub/surfAnalysisPy/standard_mesh/fs_R/fs_LR.32k.R.flat.surf.gii'
                         )
+        cifti = nb.load(os.path.join(gl.baseDir, args.experiment, gl.wbDir,
+                                     f'glm{args.glm}.{args.dtype}.smooth.dscalar.nii'))
+        # giftis = nt.split_cifti_to_giftis(cifti)
+
+        pass
+
     if args.what=='plan-exec':
 
         data = []
@@ -105,6 +107,12 @@ def main(args):
                         '/home/UWO/memanue5/Documents/GitHub/surfAnalysisPy/standard_mesh/fs_L/fs_LR.32k.L.flat.surf.gii',
                         '/home/UWO/memanue5/Documents/GitHub/surfAnalysisPy/standard_mesh/fs_R/fs_LR.32k.R.flat.surf.gii'
                         )
+
+        giftis = nt.split_cifti_to_giftis(cifti_img, column_names=['plan', 'exec'], type='func')
+        nb.save(giftis[0], os.path.join(gl.baseDir, args.experiment, gl.wbDir,
+                                        f'glm{args.glm}.{args.dtype}.L.plan-exec.smooth.func.gii'))
+        nb.save(giftis[1], os.path.join(gl.baseDir, args.experiment, gl.wbDir,
+                                        f'glm{args.glm}.{args.dtype}.R.plan-exec.smooth.func.gii'))
 
     if args.what == 'save_smoothed_flatmap_cerebellum_avg':
         funcdata_across = []

@@ -19,7 +19,7 @@ function varargout = smp2_suit(what, varargin)
     addpath([path 'MATLAB/spm12/'])
     addpath([path 'GitHub/rwls/'])
     addpath([path 'GitHub/surfing/surfing/'])
-    % addpath([path 'GitHub/suit/'])
+    addpath([path 'GitHub/suit/'])
     addpath([path 'GitHub/rsatoolbox_matlab/'])
     addpath([path 'GitHub/surfing/toolbox_fast_marching/'])
     addpath([path 'GitHub/region/'])
@@ -118,7 +118,7 @@ function varargout = smp2_suit(what, varargin)
         % Example usage: nishimoto_imana('SUIT:reslice','type','ResMS', 'mask', 'pcereb_corr')
         % make sure that you reslice into 2mm^3 resolution
         currentDir = pwd;
-        mask = ['c_' subj_id '_anatomical_pcereb_corr']; % 'cereb_prob_corr_grey' or 'cereb_prob_corr' or 'dentate_mask' or 'pcereb'
+        mask = ['c_' subj_id '_anatomical_pcereb']; % 'cereb_prob_corr_grey' or 'cereb_prob_corr' or 'dentate_mask' or 'pcereb'
         glm  = sprintf('glm%d', glm);             % glm number. Used for reslicing betas and contrasts
         glmSubjDir = fullfile(baseDir,glm,subj_id);
         switch type
@@ -137,6 +137,10 @@ function varargout = smp2_suit(what, varargin)
             case 'ResMS'
                 images = 'ResMS';
                 source=dir(fullfile(glmSubjDir,'ResMS.nii')); % images to be resliced
+                cd(glmSubjDir)
+            case 'mask'
+                images = 'mask';
+                source=dir(fullfile(glmSubjDir,'mask.nii')); % images to be resliced
                 cd(glmSubjDir)
         end
         job.subj.affineTr = {fullfile(baseDir,'SUIT/anatomicals',subj_id,['Affine_c_',subj_id ,'_anatomical_seg1.mat'])};

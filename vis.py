@@ -2,6 +2,7 @@ import numpy as np
 import nibabel as nb
 import nitools as nt
 import matplotlib.pyplot as plt
+import PcmPy as pcm
 from matplotlib.cm import ScalarMappable
 from matplotlib.patches import Rectangle, FancyBboxPatch
 import surfAnalysisPy as surf
@@ -10,6 +11,51 @@ import globals as gl
 from scipy.stats import ttest_1samp
 import matplotlib.transforms as mtransforms
 import SUITPy.flatmap as flatmap
+
+
+def plot_D_lfp(row, col, axs, G, ticklabels, vmin=None, vmax=None, sqrt=False):
+    ax = axs[row, col]
+    D = pcm.G_to_dist(G)
+    if sqrt:
+        D = np.sign(D) * np.sqrt(np.abs(D))
+    h = ax.imshow(D,vmin=vmin,vmax=vmax)
+    ax.set_xticks(np.linspace(0, G.shape[1] - 1, G.shape[1]))
+    ax.set_yticks(np.linspace(0, G.shape[1] - 1, G.shape[1]))
+    ax.set_xticklabels(ticklabels, rotation=90)
+    ax.set_yticklabels(ticklabels)
+
+    return ax, h
+
+
+def plot_theta_lfp_mean(row, col, axs, tAx, theta, tr, n_params, range, color):
+    ax = axs[row, col]
+    var_expl = np.exp(theta[:, :n_params])
+    var_expl_pre = var_expl[range].mean(axis=0)
+    xbar = np.linspace(0, var_expl_pre.shape[0]-1, var_expl_pre.shape[0])
+    ax.bar(xbar, var_expl_pre, color=color, width=1)
+    ax.spines[['top', 'right', 'bottom', 'left']].set_visible(False)
+    ax.set_xticks([])
+    ax.tick_params(which='both', left=False, bottom=False)
+
+    return ax
+
+def plot_theta_lfp(row, axs, tAx, theta, tr, n_params, color):
+    ax = axs[row, 0]
+    var_expl = np.exp(theta[:, :n_params])
+    for i in range(var_expl.shape[1]):
+        ax.plot(tAx, var_expl[:, i], color=color[i])
+    ax.plot(tAx, tr, ls='--', color='k')
+    ax.axhline(0, color='k', lw=.8)
+    ax.spines[['top', 'right', 'bottom']].set_visible(False)
+    ax.axvline(0, color='k', lw=.8)
+    if row == axs.shape[0] - 1:
+        ax.spines['bottom'].set_visible(True)
+        ax.spines['bottom'].set_bounds(-1, 1)
+    else:
+        ax.tick_params(bottom=False)
+
+    return ax
+
 
 def plot_force_aligned(force, descr, go_or_nogo, vsep, axs):
     tAx = np.linspace(-gl.prestim, gl.poststim, force.shape[-1])

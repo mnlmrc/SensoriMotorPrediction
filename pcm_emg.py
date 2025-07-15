@@ -93,8 +93,6 @@ class EMG():
             G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
                                              Y[s].obs_descriptors['part_vec'],
                                              X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
-            # tr = np.trace(G)
-            # Y[s].measurements /= np.sqrt(np.abs(tr))
 
         return G_obs, Y
 
@@ -118,8 +116,9 @@ class EMG():
 
         _, theta_in = pcm.fit_model_individ(Y, self.M, fit_scale=False, verbose=True, fixed_effect='block')
         T_cv, _ = pcm.fit_model_group_crossval(Y, self.M, fit_scale=True, verbose=True, fixed_effect='block')
+        T_gr, _ = pcm.fit_model_group(Y, self.M, fit_scale=True, verbose=True, fixed_effect='block')
 
-        return G_obs, T_cv, theta_in, win
+        return G_obs, T_cv, T_gr, theta_in, win
 
     def run_parallel_pcm_across_timepoints(self):
         with parallel_backend("loky"):  # use threading for debug in PyCharm, for run use loky
@@ -132,7 +131,7 @@ class EMG():
         #     self.run_pcm_in_roi(roi)
 
         results = self._extract_results_from_parallel_process(results,
-                                      field_names=['G_obs', 'T_cv', 'theta_in', 'win'])
+                                      field_names=['G_obs', 'T_cv', 'T_gr', 'theta_in', 'win'])
         return results
 
     def _extract_results_from_parallel_process(self, results, field_names):
@@ -205,11 +204,8 @@ def main(args):
         start = -0.1
         end = 0.5
         wins = [(t - width / 2, t + width / 2) for t in np.linspace(start, end, n_wins)]
-        # Generate non-overlapping windows
-        # wins = [(t, t + width) for t in np.arange(start, end, width)]
 
         fs = 2148
-        # latency = .05 * fs
         onset = int(1 * fs)
 
         emg = []
@@ -286,6 +282,7 @@ def main(args):
         for w, win in enumerate(wins):
             theta_in = res_dict['theta_in'][w]
             T_cv = res_dict['T_cv'][w]
+            T_gr= res_dict['T_gr'][w]
             G_obs = res_dict['G_obs'][w]
 
             f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'theta_in.emg.{epochs[w]}.p'), "wb")
@@ -293,6 +290,9 @@ def main(args):
 
             f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_cv.emg.{epochs[w]}.p'), "wb")
             pickle.dump(T_cv, f)
+
+            f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_gr.emg.{epochs[w]}.p'), "wb")
+            pickle.dump(T_gr, f)
 
             np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'G_obs.emg.{epochs[w]}.npy'), G_obs)
 
@@ -327,7 +327,7 @@ def main(args):
 
         Emg = EMG(M, emg, dat, wins, onset, 2148)
         res_dict = Emg.fit_model_family_across_rois('component', basecomp=np.eye(8)[None, :, :], # basecomp needs to be num_basecompxNxN
-                                             comp_names=['finger', 'cue', 'uncertainty', 'surprise'])
+                                             comp_names=['finger', 'cue', 'surprise'])
 
         for w, win in enumerate(wins):
             theta = res_dict['theta'][w]
@@ -396,7 +396,7 @@ def main(args):
 
     if args.what == 'force_planning':
 
-        M = make_planning_models(test_planning_force=False)
+        M = make_planning_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                f'M.force.plan.p'), "wb")
         pickle.dump(M, f)
@@ -430,7 +430,7 @@ def main(args):
                                              Y[s].obs_descriptors['part_vec'],
                                              X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
 
-        T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
+        T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=False, verbose=True, fixed_effect='block')
         T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
         T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
 

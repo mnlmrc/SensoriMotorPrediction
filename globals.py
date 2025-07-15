@@ -61,60 +61,65 @@ cue_code = [93, 12, 44, 21, 39]
 stimFinger_code = [91999, 99919]
 
 cue_mapping = {
-                93: '100%',
-                12: '75%',
-                44: '50%',
-                21: '25%',
-                39: '0%'
+                93: '0-100',
+                12: '25-75',
+                44: '50-50',
+                21: '75-25',
+                39: '100-0'
             }
 stimFinger_mapping = {91999: 'index',
                       99919: 'ring',
                       99999: 'nogo'}
 
 regressor_mapping = {
-    '0%': 0,
-    '25%': 1,
-    '50%': 2,
-    '75%': 3,
-    '100%': 4,
-    '0%,index': 5,
-    '25%,index': 6,
-    '50%,index': 7,
-    '75%,index': 8,
-    '25%,ring': 9,
-    '50%,ring': 10,
-    '75%,ring': 11,
-    '100%,ring': 12,
+    '100-0': 0,
+    '75-25': 1,
+    '50-50': 2,
+    '25-75': 3,
+    '0-100': 4,
+    '100-0,index': 5,
+    '75-25,index': 6,
+    '50-50,index': 7,
+    '25-75,index': 8,
+    '75-25,ring': 9,
+    '50-50,ring': 10,
+    '25-75,ring': 11,
+    '0-100,ring': 12,
     'exec': 5
 }
 
 ### colours ###
 cmap_plan = plt.get_cmap('Greys')
-col_plan = [cmap_plan(i) for i in np.linspace(.1, .9, 5)]
+col_plan = [cmap_plan(i) for i in np.linspace(.3, .9, 5)]
 
 cmap_index = plt.get_cmap('Greens')
-col_index = [cmap_index(i) for i in np.linspace(.2, .9, 5)][:4]
+col_index = [cmap_index(i) for i in np.linspace(.3, .9, 5)][:4]
 
 cmap_ring = plt.get_cmap('Oranges')
-col_ring = [cmap_ring(i) for i in np.linspace(.2, .9, 5)][1:]
+col_ring = [cmap_ring(i) for i in np.linspace(.3, .9, 5)][1:]
 
 colour_mapping = {
-    '0%': col_plan[0],
-    '25%': col_plan[1],
-    '50%': col_plan[2],
-    '75%': col_plan[3],
-    '100%': col_plan[4],
-    '0%,index': col_index[0],
-    '25%,index': col_index[1],
-    '50%,index': col_index[2],
-    '75%,index': col_index[3],
-    '25%,ring': col_ring[0],
-    '50%,ring': col_ring[1],
-    '75%,ring': col_ring[2],
-    '100%,ring': col_ring[3],
+    '100-0': col_plan[0],
+    '75-25': col_plan[1],
+    '50-50': col_plan[2],
+    '25-75': col_plan[3],
+    '0-100': col_plan[4],
+    '100-0,index': col_index[0],
+    '75-25,index': col_index[1],
+    '50-50,index': col_index[2],
+    '25-75,index': col_index[3],
+    '75-25,ring': col_ring[0],
+    '50-50,ring': col_ring[1],
+    '25-75,ring': col_ring[2],
+    '0-100,ring': col_ring[3],
 }
 
 ###############
+
+reg_interest = {
+    'exec': [5, 6, 7, 8, 9, 10, 11, 12],
+    'plan': [0,1, 2, 3, 4]
+}
 
 # make rdm masks for cue vs stimFinger effect (plus interaction)
 mask_stimFinger = np.zeros([28], dtype=bool)

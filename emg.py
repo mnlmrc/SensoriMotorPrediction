@@ -10,7 +10,7 @@ from sklearn.decomposition import PCA, NMF, TruncatedSVD
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
-def detect_trig(trig_sig, time_trig, amp_threshold=None, ntrials=None, debugging=False):
+def detect_trig(trig_sig, time_trig, amp_threshold=None, debugging=False):
     """
 
     :param trig_sig:
@@ -56,9 +56,9 @@ def detect_trig(trig_sig, time_trig, amp_threshold=None, ntrials=None, debugging
     rise_idx = np.array(filtered_rise_idx)
     rise_times = np.array([float(time_trig[idx]) for idx in rise_idx])
 
-    # Sanity check
-    if len(rise_idx) != ntrials:  # | (len(fall_idx) != Emg.ntrials):
-        raise ValueError(f"Wrong number of trials: {len(rise_idx)}")
+    # # Sanity check
+    # if len(rise_idx) != ntrials:  # | (len(fall_idx) != Emg.ntrials):
+    #     raise ValueError(f"Wrong number of trials: {len(rise_idx)}")
 
     return rise_times, rise_idx
 
@@ -120,7 +120,7 @@ def load_delsys(filepath, trigger_name=None, muscle_names=None):
                 muscle_columns[muscle] = c + 1
                 break
 
-    df_raw = pd.DataFrame(A[7:])  # get rid of header
+    df_raw = pd.DataFrame(A[8:])  # get rid of header
     df_out = pd.DataFrame()  # init final dataframe
 
     for muscle in muscle_columns:
@@ -176,7 +176,11 @@ def main(args):
 
     if args.what=='segment_emg':
         pinfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'participants.tsv'), sep='\t')
-        blocks = pinfo[pinfo.sn==args.sn].reset_index().blocks_emg[0].split('.')
+        blocks = pinfo[pinfo.sn==args.sn].reset_index().blocks_emg[0]
+        if type(blocks) is str:
+            blocks.split('.')
+        else:
+            blocks = [blocks]
         channels_emg = pinfo[pinfo.sn==args.sn].reset_index().channels_emg[0].split(',')
         dat = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'behavioural', f'subj{args.sn}',
                                        f'{args.experiment}_{args.sn}.dat'), sep='\t')
@@ -187,18 +191,18 @@ def main(args):
             filepath = os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}',
                                                  f'{args.experiment}_{args.sn}_{block}.csv')
             dat_tmp = dat[dat.BN==int(block)]
-            df_out = load_delsys(filepath, trigger_name='trigger', muscle_names=channels_emg)
-            trig_sig = df_out.trigger.to_numpy()
+            df_out = load_delsys(filepath, trigger_name='Trigger', muscle_names=channels_emg)[400000:]
+            trig_sig = df_out.Trigger.to_numpy()
             trig_time = df_out.time.to_numpy()
-            ntrials = dat_tmp.shape[0]
-            _, timestamp = detect_trig(trig_sig, trig_time, ntrials=ntrials, amp_threshold=2)
+            # ntrials = dat_tmp.shape[0]
+            _, timestamp = detect_trig(trig_sig, trig_time, amp_threshold=2)
 
-            for t, _ in enumerate(timestamp):
-                stimFinger = dat_tmp.iloc[t]['stimFinger']
-                if stimFinger==91999:
-                    timestamp[t] += int(.042 * 2148) # .046
-                elif stimFinger==99919:
-                    timestamp[t] += int(.05 * 2148) # .06
+            # for t, _ in enumerate(timestamp):
+            #     stimFinger = dat_tmp.iloc[t]['stimFinger']
+            #     if stimFinger==91999:
+            #         timestamp[t] += int(.042 * 2148) # .046
+            #     elif stimFinger==99919:
+            #         timestamp[t] += int(.05 * 2148) # .06
 
             emg.append(emg_segment(df_out.iloc[:, :-2], timestamp, prestim=1, poststim=2, fsample=2148))
 

@@ -30,106 +30,12 @@ import sys
 
 import Functional_Fusion.atlas_map as am
 
-def find_model(M, name):
-    if type(M) == str:
-        f = open(M, 'rb')
-        M = pickle.load(f)
-    if type(M) == list:
-        for m in M:
-            if m.name == name:
-                return m, M.index(m)
-        if m == M[-1]:
-            raise Exception(f'Model name not found')
-
-def normalize_G(G):
-    return (G - G.mean()) / G.std()
-
-def normalize_Ac(Ac):
-    for a in range(Ac.shape[0]):
-        tr = np.trace(Ac[a] @ Ac[a].T)
-        Ac[a] = Ac[a] / np.sqrt(tr)
-    return Ac
-
-def make_execution_models(centering=True, normalize=True):
-
-    C = pcm.centering(8)
-
-    if centering:
-        v_fingerID = C @ np.array([-1, -1, -1, -1, 1, 1, 1, 1])
-        v_cue = C @ np.array([-1, -.5, 0, .5, -.5, 0, .5, 1])
-        v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0.1875, .25, 0.1875, 0, ])  # variance of a Bernoulli distribution
-        v_surprise = C @ -np.log2(np.array([1, .75, .5, .25, .25, .5, .75, 1, ]))  # with Shannon information
-    else:
-        v_fingerID = np.array([-1, -1, -1, -1, 1, 1, 1, 1])
-        v_cue = np.array([-1, -.5, 0, .5, -.5, 0, .5, 1])
-        v_cert = np.array([0, 0.1875, .25, 0.1875, 0.1875, .25, 0.1875, 0, ])  # variance of a Bernoulli distribution
-        v_surprise = -np.log2(np.array([1, .75, .5, .25, .25, .5, .75, 1, ]))  # with Shannon information
-
-    Ac = np.zeros((5, 8, 4))
-    Ac[0, :, 0] = v_fingerID
-    Ac[1, :, 1] = v_cue
-    Ac[2, :, 0] = v_cue
-    Ac[3, :, 2] = v_cert
-    Ac[4, :, 3] = v_surprise
-
-    Ac = normalize_Ac(Ac)
-
-    G_fingerID = np.outer(v_fingerID, v_fingerID)
-    G_cue = np.outer(v_cue, v_cue)
-    G_cert = np.outer(v_cert, v_cert)
-    G_surprise = np.outer(v_surprise, v_surprise)
-    G_component = np.array([G_fingerID / np.trace(G_fingerID),
-                            G_cue / np.trace(G_cue),
-                            G_cert / np.trace(G_cert),
-                            G_surprise / np.trace(G_surprise)
-                            ])
-
-    M = []
-    M.append(pcm.FixedModel('null', np.eye(8)))  # 0
-    M.append(pcm.FixedModel('finger', G_fingerID))  # 1
-    M.append(pcm.FixedModel('cue', G_cue))  # 2
-    M.append(pcm.FixedModel('uncertainty', G_cert))  # 3
-    M.append(pcm.FixedModel('surprise', G_surprise))  # 4
-    M.append(pcm.ComponentModel('component', G_component))  # 5
-    M.append(pcm.FeatureModel('feature', Ac))  # 6
-    M.append(pcm.FreeModel('ceil', 8))  # 7
-
-    return M
-
-def make_planning_models(centering=True):
-    C = pcm.centering(5)
-
-    if centering:
-        v_cue = C @ np.array([-1, -.5, 0, .5, 1])
-        v_cert = C @ np.array([0, 0.1875, .25, 0.1875, 0])
-        # v_shift = C @ np.array([0, 1, 0, -1, 0])
-    else:
-        v_cue = np.array([-1, -.5, 0, .5, 1])
-        v_cert = np.array([0, 0.1875, .25, 0.1875, 0])
-
-    G_cue = np.outer(v_cue, v_cue)
-    G_cert = np.outer(v_cert, v_cert)
-    # G_shift = np.outer(v_shift, v_shift)
-
-    M = []
-    M.append(pcm.FixedModel('null', np.zeros((5, 5))))  # 0
-    M.append(pcm.FixedModel('cue', G_cue))  # 1
-    M.append(pcm.FixedModel('uncertainty', G_cert))  # 2
-    # M.append(pcm.FixedModel('shift probability', G_shift))
-    # M.append(pcm.FixedModel('equal distance', np.eye(5)))
-    M.append(pcm.ComponentModel('component', np.array([G_cue / np.trace(G_cue),
-                                                       G_cert / np.trace(G_cert),
-                                                       # G_shift / np.trace(G_shift),
-                                                       # np.eye(5) / 5
-                                                      ])))  # 4
-    M.append(pcm.FreeModel('ceil', 5))  # 5
-
-    return M
-
 
 class Tessellation():
-    def __init__(self, surf_path=None, glm_path=None, M=None, reg_interest=None, reg_mapping=None,
+    def __init__(self, snS=None, surf_path=None, glm_path=None, M=None, reg_interest=None, reg_mapping=None,
                  n_tessels=None, n_jobs=None):
+        self.snS = snS
+        self.surf_path = surf_path
         self.glm_path = glm_path
         self.M = M
         self.col_names = [m.name for m in self.M]
@@ -160,21 +66,21 @@ class Tessellation():
     def _make_individ_dataset(self, H, subatlas, sn):
 
         # define path to surfaces
-        surf_path = os.path.join(surf_path, f'subj{sn}')
+        surf_path = os.path.join(self.surf_path, f'subj{sn}')
 
         # retrieve surfaces
         white = os.path.join(surf_path, f'subj{sn}.{H}.white.32k.surf.gii')
         pial = os.path.join(surf_path, f'subj{sn}.{H}.pial.32k.surf.gii')
 
         # define glm mask
-        mask = os.path.join(self.glm_path, 'mask.nii')
+        mask = os.path.join(self.glm_path, f'subj{sn}', 'mask.nii')
 
         # Build atlas mapping
         amap = am.AtlasMapSurf(subatlas.vertex[0], white, pial, mask)
         amap.build()
 
         # load betas from cifti
-        cifti_img = nb.load(os.path.join(glm_path, f'subj{sn}', f'beta.dscalar.nii'))
+        cifti_img = nb.load(os.path.join(self.glm_path, f'subj{sn}', f'beta.dscalar.nii'))
 
         # extract betas
         beta_img = nt.volume_from_cifti(cifti_img, struct_names=['CortexLeft', 'CortexRight'])
@@ -197,7 +103,7 @@ class Tessellation():
                    'part_vec': part_vec[idx]}
 
         # load residuals
-        res = nb.load(os.path.join(glm_path, 'ResMS.nii'))
+        res = nb.load(os.path.join(self.glm_path, f'subj{sn}', 'ResMS.nii'))
 
         betas = amap.extract_data_native([beta_img])
         res = amap.extract_data_native([res]).squeeze()
@@ -219,37 +125,37 @@ class Tessellation():
     def _fit_model_in_tessel(self, H, subatlas):
         Y = list()
         n_voxels = list()
-        for s, sn in enumerate(self.participants_id):
+        for s, sn in enumerate(self.snS):
             Dataset = self._make_individ_dataset(H, subatlas, sn)
             n_voxels.append(Dataset.n_channel)
             Y.append(Dataset)
 
         try:
-            T_cv, theta_cv = pcm.fit_model_group_crossval(Y, self.M, fit_scale=True, verbose=True, fixed_effect='block')
+            # T_cv, theta_cv = pcm.fit_model_group_crossval(Y, self.M, fit_scale=True, verbose=True, fixed_effect='block')
             T_gr, theta_gr = pcm.fit_model_group(Y, self.M, fit_scale=False, verbose=True, fixed_effect='block')
 
             # for i in range(len(theta_cv)):
             #     n_param = self.M[i].n_param
             #     theta_cv[i] = theta_cv[i][:n_param] / np.linalg.norm(theta_cv[i][:n_param])
 
-            likelihood = T_cv.likelihood
+            likelihood = T_gr.likelihood
             baseline = likelihood.loc[:, 'null'].values
             likelihood = likelihood - baseline.reshape(-1, 1)
-            noise_upper = (T_gr.likelihood['ceil'] - baseline)
-            noise_lower = likelihood.ceil
+            # noise_upper = (T_gr.likelihood['ceil'] - baseline)
+            # noise_lower = likelihood.ceil
 
         except Exception as e:
             print(f"Error in tessel: {e}")
             n_cols = len(self.col_names)
-            n_subj = len(self.participants_id)
+            n_subj = len(self.snS)
             likelihood = {col: np.full(n_subj, np.nan) for col in self.col_names}
-            noise_upper = np.full(n_subj, np.nan)
-            noise_lower = np.full(n_subj, np.nan)
+            # noise_upper = np.full(n_subj, np.nan)
+            # noise_lower = np.full(n_subj, np.nan)
             baseline = np.full(n_subj, np.nan)
             # theta_cv = [np.full((m.n_param, n_subj), np.nan) for m in self.M]
             theta_gr = [np.full((m.n_param + n_subj), np.nan) for m in self.M]
 
-        return likelihood, noise_upper, noise_lower, baseline, theta_gr, n_voxels
+        return likelihood, baseline, theta_gr, n_voxels
 
 
     def make_subatlas_tessel(self, H, ntessel):
@@ -264,12 +170,12 @@ class Tessellation():
 
         T = {
             'likelihood': [],
-            'noise_upper': [],
-            'noise_lower': [],
+            # 'noise_upper': [],
+            # 'noise_lower': [],
             'baseline': [],
             'n_voxels': [],
             'col_names': [],
-            'sn': []
+            # 'sn': []
         }
 
         theta = {}
@@ -281,17 +187,17 @@ class Tessellation():
                     # 'sn': []
                 }
 
-        likelihood, noise_upper, noise_lower, baseline, theta_gr, n_voxels = self._fit_model_in_tessel(H, subatlas)
+        likelihood, baseline, theta_gr, n_voxels = self._fit_model_in_tessel(H, subatlas)
 
-        for s, sn in enumerate(self.participants_id):
-            for c, col in enumerate(self.col_names):
-                T['likelihood'].append(likelihood[col][s])
-                T['noise_upper'].append(noise_upper[s])
-                T['noise_lower'].append(noise_lower[s])
-                T['baseline'].append(baseline[s])
-                T['n_voxels'].append(n_voxels[s])
-                T['col_names'].append(col)
-                T['sn'].append(sn)
+        # for s, sn in enumerate(self.participants_id):
+        for c, col in enumerate(self.col_names):
+            T['likelihood'].append(likelihood[col])
+            # T['noise_upper'].append(noise_upper[s])
+            # T['noise_lower'].append(noise_lower[s])
+            T['baseline'].append(baseline)
+            T['n_voxels'].append(n_voxels)
+            T['col_names'].append(col)
+            # T['sn'].append(sn)
         for m, md in enumerate(self.M):
             if md.n_param > 0:
                 for c in range(md.n_param):
@@ -322,40 +228,40 @@ class Tessellation():
             #     self.results[H] = self._store_T_and_theta_from_tessel(H, ntessel)
 
 
-    def _extract_results_from_parallel_process(self, H, sn=None):
+    def _extract_results_from_parallel_process(self, H):
         results = self.results[H]
 
         # Aggregate results from parallel processes
-        T = np.full((32492, len(self.M) + 4), np.nan)
+        T = np.full((32492, len(self.M) + 2), np.nan)
         theta = {}
         for md in self.M:
             theta[md.name] = np.full((32492, md.n_param), np.nan)
 
-        if sn is not None:
-            for Tt, _, vertex_id in results:
-                if len(vertex_id)>0 :
-                    for c, col in enumerate(self.col_names):
-                        LL = Tt[(Tt['sn'] == sn) & (Tt['col_names'] == col)]['likelihood']
-                        T[vertex_id, c] = LL
-                    T[vertex_id, -4] = Tt[(Tt['sn'] == sn)]['noise_upper'].unique()
-                    T[vertex_id, -3] = Tt[(Tt['sn'] == sn)]['noise_lower'].unique()
-                    T[vertex_id, -2] = Tt[(Tt['sn'] == sn)]['baseline'].unique()
-                    T[vertex_id, -1] = Tt[(Tt['sn'] == sn)]['n_voxels'].unique()
-        else:
-            for _, th, vertex_id in results:
-                for md in self.M:
-                    for c in range(md.n_param):
-                        theta_tmp = th[md.name]
-                        theta[md.name][vertex_id, c] = theta_tmp['theta'][theta_tmp['#param'] == c]
+        # # if sn is not None:
+        # for Tt, _, vertex_id in results:
+        #     if len(vertex_id)>0 :
+        #         for c, col in enumerate(self.col_names):
+        #             LL = Tt[Tt['col_names'] == col]['likelihood']
+        #             T[vertex_id, c] = LL
+        #         # T[vertex_id, -4] = Tt[(Tt['sn'] == sn)]['noise_upper'].unique()
+        #         # T[vertex_id, -3] = Tt[(Tt['sn'] == sn)]['noise_lower'].unique()
+        #         T[vertex_id, -2] = Tt['baseline'].unique()
+        #         T[vertex_id, -1] = Tt['n_voxels'].unique()
+        # # else:
+        for _, th, vertex_id in results:
+            for md in self.M:
+                for c in range(md.n_param):
+                    theta_tmp = th[md.name]
+                    theta[md.name][vertex_id, c] = theta_tmp['theta'][theta_tmp['#param'] == c]
 
         return T, theta
 
     def make_group_giftis_likelihood(self, H):
         T = []
         column_names = self.col_names + ['noise_upper', 'noise_lower', 'baseline', 'n_voxels']
-        for sn in self.participants_id:
-            Tt, _ = self._extract_results_from_parallel_process(H, sn)
-            T.append(Tt)
+        # for sn in self.participants_id:
+        Tt, _ = self._extract_results_from_parallel_process(H)
+        T.append(Tt)
         T = np.array(T).mean(axis=0)
         gifti_img_T = nt.make_func_gifti(T,
                                          anatomical_struct=self.struct[self.Hem.index(H)],
@@ -394,14 +300,17 @@ class Tessellation():
         return nt.join_giftis_to_cifti(giftis)
 
 class Rois():
-    def __init__(self, snS, M, glm_path, cifti_img, roi_path, roi_imgs, regressor_mapping=None, regr_of_interest=None,
-                 n_jobs=16):
+    def __init__(self, snS=None, M=None, glm_path=None, cifti_img=None, res_img=None, roi_path=None,
+                 roi_imgs=None, regressor_mapping=None, struct_names=['CortexLeft', 'CortexRight'],
+                 regr_of_interest=None, n_jobs=16):
         self.snS = snS  # participants ids
         self.M = M  # pcm models to fit
-        self.glm_path = glm_path  # path to cifti_img
-        self.cifti_img = cifti_img  # name of cifti_img
+        self.glm_path = glm_path  # path to cifti_img (should be the folder containinting the betas...)
+        self.cifti_img = cifti_img  # name of cifti_img (e.g., beta.dscalar.nii)
+        self.res_img = res_img # name of res image for univariate prewhitening
         self.roi_path = roi_path  # path to individual roi masks, which must be named <atlas_name>.<H>.<roi>.nii
         self.roi_imgs = roi_imgs  # name of roi files to use as masks, e.g. ROI.L.M1.nii or cerebellum.L.nii
+        self.struct_names = struct_names
         self.regressor_mapping = regressor_mapping  # dict, maps name of regressors to numbers to control in which order conditions appear in the G matrix
         self.regr_of_interest = regr_of_interest  # indexes from regressor mapping of the regressors we want to include in the analysis
         self.n_jobs = n_jobs
@@ -415,14 +324,14 @@ class Rois():
             print(f'making dataset...subj{sn} - {roi_img}')
 
             cifti_img = nb.load(os.path.join(self.glm_path, f'subj{sn}',self.cifti_img))
-            beta_img = nt.volume_from_cifti(cifti_img, struct_names=['CortexLeft', 'CortexRight'])
+            beta_img = nt.volume_from_cifti(cifti_img, struct_names=self.struct_names)
 
             mask = nb.load(os.path.join(self.roi_path, f'subj{sn}', roi_img))
             coords = nt.get_mask_coords(mask)
 
             betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
 
-            res_img = nb.load(os.path.join(self.glm_path, f'subj{sn}','ResMS.nii'))
+            res_img = nb.load(os.path.join(self.glm_path, f'subj{sn}',self.res_img))
             res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
 
             # Replace near-zero values with np.nan
@@ -514,58 +423,43 @@ class Rois():
                 res_dict[key].append(value)
         return res_dict
 
+
+def pcm_tessel(M, epoch, args):
+    glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}')
+    surf_path = os.path.join(gl.baseDir, args.experiment, gl.wbDir)
+    Tess = Tessellation(args.snS,
+                        surf_path,
+                        glm_path,
+                        M,
+                        gl.reg_interest,
+                        gl.regressor_mapping,
+                        args.n_tessels,
+                        args.n_jobs)
+    Tess.run_parallel_pcm_across_tessels()
+    cifti_theta_component = Tess.make_group_cifti_theta('component')
+    nb.save(cifti_theta_component, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                                f'theta_component.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.{epoch}.dscalar.nii'))
+    cifti_theta_feature = Tess.make_group_cifti_theta('feature')
+    nb.save(cifti_theta_feature, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                              f'theta_feature.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.{epoch}.dscalar.nii'))
+
+def pcm_rois():
+    pass
+
+
 def main(args):
 
     if args.what == 'tessel_execution':
-
-        M = make_execution_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,  f'M.exec.glm{args.glm}.pkl'), "wb")
-        pickle.dump(M, f)
-        Tess = Tessellation(args.experiment,
-                            args.snS,
-                            args.glm,
-                            M,
-                            [5, 6, 7, 8, 9, 10, 11, 12],
-                            gl.regressor_mapping,
-                            args.n_tessels,
-                            args.n_jobs)
-        Tess.run_parallel_pcm_across_tessels()
-        cifti_T = Tess.make_group_cifti_likelihood()
-        nb.save(cifti_T, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                          f'ML.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.exec.dscalar.nii'))
-        cifti_theta_component = Tess.make_group_cifti_theta('component')
-        nb.save(cifti_theta_component, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                      f'theta_component.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.exec.dscalar.nii'))
-        cifti_theta_feature = Tess.make_group_cifti_theta('feature')
-        nb.save(cifti_theta_feature, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                      f'theta_feature.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.exec.dscalar.nii'))
-
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.glm{args.glm}.p'), "rb")
+        M = pickle.load(f)
+        pcm_tessel(M, 'exec', args)
     if args.what == 'tessel_planning':
-        M = make_planning_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.glm{args.glm}.p'), "wb")
-        pickle.dump(M, f)
-
-        Tess = Tessellation(args.experiment,
-                            args.snS,
-                            args.glm,
-                            M,
-                            [0, 1, 2, 3, 4],
-                            gl.regressor_mapping,
-                            args.n_tessels,
-                            args.n_jobs)
-        # subatlas = Tess.make_subatlas_tessel('L', 1)
-        # Tess._make_individ_dataset('L', subatlas, 102)
-        Tess.run_parallel_pcm_across_tessels()
-        cifti_T = Tess.make_group_cifti_likelihood()
-        nb.save(cifti_T, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                      f'ML.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.plan.dscalar.nii'))
-        cifti_theta_component = Tess.make_group_cifti_theta('component')
-        nb.save(cifti_theta_component, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                                                    f'theta_component.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.plan.dscalar.nii'))
-
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.glm{args.glm}.p'), "rb")
+        M = pickle.load(f)
+        pcm_tessel(M, 'plan', args)
     if args.what == 'rois_planning':
 
-        M = make_planning_models(args.experiment)
+        M = make_planning_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.glm{args.glm}.p'), "wb")
         pickle.dump(M, f)
 
@@ -602,7 +496,7 @@ def main(args):
                 pickle.dump(res['theta_gr'][r], f)
 
     if args.what == 'model_family_rois_planning':
-        M = make_planning_models(args.experiment)
+        M = make_planning_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.glm{args.glm}.p'), "wb")
         pickle.dump(M, f)
 
@@ -629,7 +523,7 @@ def main(args):
                 pickle.dump(res['theta'][r], f)
 
     if args.what == 'model_family_rois_execution':
-        M = make_execution_models(args.experiment)
+        M = make_execution_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.glm{args.glm}.p'), "wb")
         pickle.dump(M, f)
 
@@ -642,8 +536,8 @@ def main(args):
 
         R = Rois(args.snS, M, glm_path, cifti_img, roi_path, roi_imgs, regressor_mapping=gl.regressor_mapping,
                  regr_of_interest=[5, 6, 7, 8, 9, 10, 11, 12])
-        res = R.fit_model_family_across_rois('feature',
-                                             comp_names=['finger', 'cue', 'interaction', 'uncertainty', 'surprise'])
+        res = R.fit_model_family_across_rois('component',
+                                             comp_names=['finger', 'cue', 'surprise'])
 
         for H in Hem:
             for roi in rois:
@@ -695,152 +589,7 @@ def main(args):
                 f = open(os.path.join(path, f'theta_gr.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
                 pickle.dump(res['theta_gr'][r], f)
 
-    if args.what == 'cerebellum_planning':
 
-        M = make_planning_models(args.experiment)
-        f = open(os.path.join(gl.baseDir, args.experiment, 'SUIT', gl.pcmDir, f'M.plan.glm{args.glm}.p'), "wb")
-        pickle.dump(M, f)
-
-        Hem = ['L', 'R']
-        for H in Hem:
-
-            N = len(args.snS)
-
-            G_obs = np.zeros((N, 5, 5))
-            Y = list()
-            for s, sn in enumerate(args.snS):
-                glm_path = os.path.join(gl.baseDir, args.experiment, 'SUIT', f'{gl.glmDir}{args.glm}', f'subj{sn}')
-                cifti_img = nb.load(os.path.join(glm_path, f'beta.dscalar.nii'))
-                beta_img = nt.volume_from_cifti(cifti_img, struct_names=['Cerebellum'])
-
-                mask = nb.load(os.path.join(gl.baseDir, args.experiment, 'SUIT', gl.roiDir, f'subj{sn}', f'cerebellum.{H}.nii'))
-                coords = nt.get_mask_coords(mask)
-
-                betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
-
-                res_img = nb.load(os.path.join(glm_path, 'wdResMS.nii'))
-                res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
-
-                # Replace near-zero values with np.nan
-                tol = 1e-6
-                betas[:, np.isclose(res, 0, atol=tol)] = np.nan
-                res[np.isclose(res, 0, atol=tol)] = np.nan
-
-                betas_prewhitened = betas / np.sqrt(res)
-                betas_prewhitened = betas_prewhitened[:, np.all(~np.isnan(betas_prewhitened), axis=0)]
-
-                reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
-                cond_vec = np.array([gl.regressor_mapping[r[0].replace(' ', '')] for r in reginfo])
-                part_vec = np.array([int(r[1]) for r in reginfo])
-
-                idx = np.isin(cond_vec, [0, 1, 2, 3, 4])
-
-                obs_des = {'cond_vec': cond_vec[idx],
-                           'part_vec': part_vec[idx]}
-
-                Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
-
-                G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                                                 Y[s].obs_descriptors['part_vec'],
-                                                 X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
-
-            T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-            T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-            T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-
-            path = os.path.join(gl.baseDir, args.experiment,'SUIT',  gl.pcmDir)
-
-            os.makedirs(path, exist_ok=True)
-
-            T_in.to_pickle(os.path.join(path, f'T_in.plan.glm{args.glm}.cerebellum.{H}.p'))
-            T_cv.to_pickle(os.path.join(path, f'T_cv.plan.glm{args.glm}.cerebellum.{H}.p'))
-            T_gr.to_pickle(os.path.join(path, f'T_gr.plan.glm{args.glm}.cerebellum.{H}.p'))
-
-            np.save(os.path.join(path, f'G_obs.plan.glm{args.glm}.cerebellum.{H}.npy'), G_obs)
-
-            f = open(os.path.join(path, f'theta_in.plan.glm{args.glm}.cerebellum.{H}.p'), 'wb')
-            pickle.dump(theta_in, f)
-
-            f = open(os.path.join(path, f'theta_cv.plan.glm{args.glm}.cerebellum.{H}.p'), 'wb')
-            pickle.dump(theta_cv, f)
-
-            f = open(os.path.join(path, f'theta_gr.plan.glm{args.glm}.cerebellum.{H}.p'), 'wb')
-            pickle.dump(theta_gr, f)
-
-    if args.what == 'cerebellum_execution':
-
-        M = make_planning_models(args.experiment)
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.glm{args.glm}.pkl'), "wb")
-        pickle.dump(M, f)
-
-        Hem = ['L', 'R']
-        for H in Hem:
-
-            N = len(args.snS)
-
-            G_obs = np.zeros((N, 5, 5))
-            Y = list()
-            for s, sn in enumerate(args.snS):
-                glm_path = os.path.join(gl.baseDir, args.experiment, 'SUIT', f'{gl.glmDir}{args.glm}', f'subj{sn}')
-                cifti_img = nb.load(os.path.join(glm_path, f'beta.dscalar.nii'))
-                beta_img = nt.volume_from_cifti(cifti_img, struct_names=['Cerebellum'])
-
-                mask = nb.load(os.path.join(gl.baseDir, args.experiment, 'SUIT', gl.roiDir, f'subj{sn}', f'cerebellum.{H}.nii'))
-                coords = nt.get_mask_coords(mask)
-
-                betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
-
-                res_img = nb.load(os.path.join(glm_path, 'wdResMS.nii'))
-                res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
-
-                # Replace near-zero values with np.nan
-                tol = 1e-6
-                betas[np.isclose(betas, 0, atol=tol)] = np.nan
-                res[np.isclose(res, 0, atol=tol)] = np.nan
-
-                betas_prewhitened = betas / np.sqrt(res)
-                betas_prewhitened = betas_prewhitened[:, np.all(~np.isnan(betas_prewhitened), axis=0)]
-
-                reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
-                cond_vec = np.array([gl.regressor_mapping[r[0].replace(' ', '')] for r in reginfo])
-                part_vec = np.array([int(r[1]) for r in reginfo])
-
-                idx = np.isin(cond_vec, [0, 1, 2, 3, 4])
-
-                obs_des = {'cond_vec': cond_vec[idx],
-                           'part_vec': part_vec[idx]}
-
-                Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
-
-                G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                                                 Y[s].obs_descriptors['part_vec'],
-                                                 X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
-
-            T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-            T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-            T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-
-            path = os.path.join(gl.baseDir, args.experiment,'SUIT',  gl.pcmDir)
-
-            os.makedirs(path, exist_ok=True)
-
-            T_in.to_pickle(os.path.join(path, f'T_in.plan.glm{args.glm}.{H}.p'))
-            T_cv.to_pickle(os.path.join(path, f'T_cv.plan.glm{args.glm}.{H}.p'))
-            T_gr.to_pickle(os.path.join(path, f'T_gr.plan.glm{args.glm}.{H}.p'))
-
-            np.save(os.path.join(path, f'G_obs.plan.glm{args.glm}.cerebellum.{H}.npy'), G_obs)
-
-            f = open(os.path.join(gl.baseDir, args.experiment, 'SUIT',  gl.pcmDir,
-                                  f'theta_in.plan.glm{args.glm}.cerebellum.{H}.pkl'), 'wb')
-            pickle.dump(theta_in, f)
-
-            f = open(os.path.join(gl.baseDir, args.experiment, 'SUIT',  gl.pcmDir,
-                                   f'theta_cv.plan.glm{args.glm}.cerebellum.{H}.pkl'), 'wb')
-            pickle.dump(theta_cv, f)
-
-            f = open(os.path.join(gl.baseDir, args.experiment, 'SUIT',  gl.pcmDir,
-                                   f'theta_gr.plan.glm{args.glm}.cerebellum.{H}.pkl'), 'wb')
-            pickle.dump(theta_gr, f)
 
     if args.what == 'G_obs_rois_plan-exec':
 

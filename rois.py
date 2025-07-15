@@ -103,11 +103,11 @@ def main(args):
         atlas_path = os.path.join(gl.baseDir, args.experiment, 'SUIT', 'atl-NettekovenSym32_space-SUIT_dseg.nii')
         space = 'SUIT1'
         _, _, labels = nt.read_lut(os.path.join(gl.baseDir, args.experiment, 'SUIT', 'atl-NettekovenSym32.lut'))
-        crois = {'L': ['M3L', 'D3L'],
-                'R': [ 'M3R', 'D3R']}
+        crois = {'L': ['M2L', 'M3L', 'D3L'],
+                'R': [ 'M2R', 'M3R', 'D3R']}
         deform = os.path.join(gl.baseDir, args.experiment, 'SUIT', 'anatomicals', f'subj{args.sn}',
                               f'y_subj{args.sn}_anatomical_suitdef.nii')
-        mask = os.path.join(gl.baseDir, args.experiment, f'glm{args.glm}', f'subj{args.sn}', 'mask.nii')
+        mask = os.path.join(gl.baseDir, args.experiment, 'SUIT',f'glm{args.glm}',  f'subj{args.sn}', 'wdmask.nii')
         out_path = os.path.join(gl.baseDir, args.experiment, 'SUIT' ,gl.roiDir, f'subj{args.sn}', )
         os.makedirs(out_path, exist_ok=True)
         rois.make_cerebellum(atlas_path, space, labels, crois, None, mask, out_path)
@@ -147,7 +147,7 @@ if __name__ == '__main__':
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
     parser.add_argument('--atlas', type=str, default='ROI')
-    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 111, 112, 113, 114])
+    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114,])
     parser.add_argument('--glm', type=int, default=12)
 
     args = parser.parse_args()

@@ -41,6 +41,11 @@ Surface-based definition of cortical ROIs is implemented in the `rois` module us
 from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines), which in turn uses the functions and classes 
 from the `atlas_map` module from [Functional_Fusion](https://github.com/DiedrichsenLab/Functional_Fusion):
 
-- Save NIFTI files of ROI masks plus NIFTI hemisphere masks: `python rois.py make_cortical_rois --sn <subject number>`
+- Save NIFTI files of cortical ROI masks plus NIFTI hemisphere masks: 
+    `python rois.py make_cortical_rois --sn <subject number>`
+
+### Activation
+
+- 
 
 
