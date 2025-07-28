@@ -38,6 +38,8 @@ col_mov = {
              'thumb', 'index', 'middle', 'ring', 'pinkie', 'indexViz', 'ringViz'],
     'smp2': ['trialNum', 'state', 'timeReal', 'time', 'TotTime', 'TR', 'TRtime', 'currentSlice',
              'thumb', 'index', 'middle', 'ring', 'pinkie', 'indexViz', 'ringViz'],
+    'smp3': ['trialNum', 'state', 'timeReal', 'time', 'TotTime', 'TR', 'TRtime', 'currentSlice',
+             'thumb', 'index', 'middle', 'ring', 'pinkie', 'indexViz', 'ringViz'],
 }
 
 channels = {'mov': ['thumb', 'index', 'middle', 'ring', 'pinkie']}
@@ -51,7 +53,8 @@ fsample_emg = 2148
 planState = {
     'smp0': 2,
     'smp1': 3,
-    'smp2': 3
+    'smp2': 3,
+    'smp3': 3
 }
 
 cues = ['0%', '25%', '50%', '75%', '100%']
@@ -61,32 +64,34 @@ cue_code = [93, 12, 44, 21, 39]
 stimFinger_code = [91999, 99919]
 
 cue_mapping = {
-                93: '0-100',
-                12: '25-75',
-                44: '50-50',
-                21: '75-25',
-                39: '100-0'
+                93: '0-100%',
+                12: '25-75%',
+                44: '50-50%',
+                21: '75-25%',
+                39: '100-0%'
             }
 stimFinger_mapping = {91999: 'index',
                       99919: 'ring',
                       99999: 'nogo'}
 
 regressor_mapping = {
-    '100-0': 0,
-    '75-25': 1,
-    '50-50': 2,
-    '25-75': 3,
-    '0-100': 4,
-    '100-0,index': 5,
-    '75-25,index': 6,
-    '50-50,index': 7,
-    '25-75,index': 8,
-    '75-25,ring': 9,
-    '50-50,ring': 10,
-    '25-75,ring': 11,
-    '0-100,ring': 12,
-    'exec': 5
+    '100-0%': 0,
+    '75-25%': 1,
+    '50-50%': 2,
+    '25-75%': 3,
+    '0-100%': 4,
+    '100-0%,index': 5,
+    '75-25%,index': 6,
+    '50-50%,index': 7,
+    '25-75%,index': 8,
+    '75-25%,ring': 9,
+    '50-50%,ring': 10,
+    '25-75%,ring': 11,
+    '0-100%,ring': 12,
 }
+
+pert_dir = ['100-0%,flex', '75-25%,flex', '50-50%,flex', '25-75%,flex',
+            '75-25%,ext', '50-50%,ext', '25-75%,ext', '0-100%,ext',]
 
 ### colours ###
 cmap_plan = plt.get_cmap('Greys')
@@ -99,26 +104,26 @@ cmap_ring = plt.get_cmap('Oranges')
 col_ring = [cmap_ring(i) for i in np.linspace(.3, .9, 5)][1:]
 
 colour_mapping = {
-    '100-0': col_plan[0],
-    '75-25': col_plan[1],
-    '50-50': col_plan[2],
-    '25-75': col_plan[3],
-    '0-100': col_plan[4],
-    '100-0,index': col_index[0],
-    '75-25,index': col_index[1],
-    '50-50,index': col_index[2],
-    '25-75,index': col_index[3],
-    '75-25,ring': col_ring[0],
-    '50-50,ring': col_ring[1],
-    '25-75,ring': col_ring[2],
-    '0-100,ring': col_ring[3],
+    '100-0%': col_plan[0],
+    '75-25%': col_plan[1],
+    '50-50%': col_plan[2],
+    '25-75%': col_plan[3],
+    '0-100%': col_plan[4],
+    '100-0%,index': col_index[0],
+    '75-25%,index': col_index[1],
+    '50-50%,index': col_index[2],
+    '25-75%,index': col_index[3],
+    '75-25%,ring': col_ring[0],
+    '50-50%,ring': col_ring[1],
+    '25-75%,ring': col_ring[2],
+    '0-100%,ring': col_ring[3],
 }
 
 ###############
 
 reg_interest = {
     'exec': [5, 6, 7, 8, 9, 10, 11, 12],
-    'plan': [0,1, 2, 3, 4]
+    'plan': [0, 1, 2, 3, 4]
 }
 
 # make rdm masks for cue vs stimFinger effect (plus interaction)

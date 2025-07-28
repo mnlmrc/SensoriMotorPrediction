@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 import nibabel as nb
 import nitools as nt
@@ -6,15 +8,84 @@ import PcmPy as pcm
 from matplotlib.cm import ScalarMappable
 from matplotlib.patches import Rectangle, FancyBboxPatch
 import surfAnalysisPy as surf
+from matplotlib.lines import Line2D
 import os
 import globals as gl
 from scipy.stats import ttest_1samp
 import matplotlib.transforms as mtransforms
 import SUITPy.flatmap as flatmap
+import pandas as pd
+import mat73
+from pcm_lfp import make_freq_masks
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
-def plot_D_lfp(row, col, axs, G, ticklabels, vmin=None, vmax=None, sqrt=False):
-    ax = axs[row, col]
+def plot_force_response(fig, axs, force, descr):
+    tAx = np.linspace(-gl.prestim, gl.poststim, force.shape[-1])
+
+    space = [[0, 2, 18, 22, 35], [0, 2, 18, 22, 35]]
+    for f, finger in enumerate(descr.finger.unique()):
+        for s, stimFinger in enumerate(descr.stimFinger.unique()):
+            for c, cue in enumerate(descr.cue.unique()):
+                force_tmp = force[(descr.cue == cue) & (descr.stimFinger == stimFinger) & (descr.finger == finger)]
+
+                if stimFinger == 'index':
+                    ax = axs[0]
+                else:
+                    ax = axs[1]
+
+                y = force_tmp.mean(axis=0) + space[s][f]
+                yerr = force_tmp.std(axis=0) / np.sqrt(force_tmp.shape[0])
+
+                if ~np.isnan(y).any():
+                    ax.plot(tAx, y, color=gl.colour_mapping[f'{cue},{stimFinger}'])
+                    ax.fill_between(tAx, y - yerr, y + yerr, color=gl.colour_mapping[f'{cue},{stimFinger}'], lw=0,
+                                    alpha=.2)
+
+                if (s == 0) & (c == 1):
+                    ax.text(-.1, y[0], finger, va='center', ha='right', )
+
+    for ax in axs:
+        ax.set_xlim([-.1, .5])
+        ax.set_xticks([0, .2, .4])
+        ax.spines[['bottom']].set_bounds(0, .4)
+        ax.spines[['top', 'right', 'left']].set_visible(False)
+        ax.axvline(0, ls='-', color='k', lw=.8)
+        ax.set_yticks([])
+        # ax.axvspan(.2, .4, color='grey', alpha=.2, lw=0)
+
+    axs[0].text(0, ax.get_ylim()[1], 'index perturbation', va='bottom', ha='left')
+    axs[1].text(0, ax.get_ylim()[1], 'ring perturbation', va='bottom', ha='left')
+
+    make_yref(axs[1], reference_length=5, pos='right', color='k')
+
+    fig.suptitle('Force response to finger perturbation')
+    fig.supxlabel('time relative to perturbation (s)')
+
+    # Create legend entries as colored lines (matching plotted lines)
+    legend_elements = []
+    for k, v in gl.colour_mapping.items():
+        if 'ring' in k or 'index' in k:
+            legend_elements.append(Line2D([0], [0], color=v, lw=2, label=k))
+
+    # Add the legend to the figure, outside the right edge
+    fig.legend(handles=legend_elements,
+               loc='lower left',
+               bbox_to_anchor=(.9, .5),
+               fontsize=8,
+               frameon=False, )
+
+    fig.subplots_adjust(wspace=.3)
+
+    return fig, axs
+
+
+
+def plot_D_lfp(fig, axs, panel, G, ticklabels, vmin=None, vmax=None, sqrt=False, colorbar=False):
+    if axs.ndim==2:
+        ax = axs[panel[0], panel[1]]
+    else:
+        ax = axs[panel]
     D = pcm.G_to_dist(G)
     if sqrt:
         D = np.sign(D) * np.sqrt(np.abs(D))
@@ -27,32 +98,46 @@ def plot_D_lfp(row, col, axs, G, ticklabels, vmin=None, vmax=None, sqrt=False):
     return ax, h
 
 
-def plot_theta_lfp_mean(row, col, axs, tAx, theta, tr, n_params, range, color):
-    ax = axs[row, col]
-    var_expl = np.exp(theta[:, :n_params])
-    var_expl_pre = var_expl[range].mean(axis=0)
-    xbar = np.linspace(0, var_expl_pre.shape[0]-1, var_expl_pre.shape[0])
-    ax.bar(xbar, var_expl_pre, color=color, width=1)
-    ax.spines[['top', 'right', 'bottom', 'left']].set_visible(False)
-    ax.set_xticks([])
-    ax.tick_params(which='both', left=False, bottom=False)
+def plot_mesh_lfp(axs, tAx, foi, var_expl, components, vmin=0, vmax=.1):
+    for i in range(var_expl.shape[-1]):
+        ax = axs[i]
+        mesh = ax.pcolormesh(tAx, foi, var_expl[..., i], shading='auto', vmin=vmin, vmax=vmax)
+        ax.set_yscale('log')
+        ax.set_title(components[i])
+        ax.set_xticks([])
+        ax.axhline(3, color='w', lw=.8, ls='--')
+        ax.axhline(8, color='w', lw=.8, ls='--')
+        ax.axhline(13, color='w', lw=.8, ls='--')
+        ax.axhline(25, color='w', lw=.8, ls='--')
+        ax.axhline(100, color='w', lw=.8, ls='--')
+    return axs, mesh
 
+
+def plot_theta_lfp_mean(row, col, axs, var_expl_pre, var_expl_post, color):
+    if axs.ndim == 2:
+        ax = axs[row, col]
+    else:
+        ax = axs[col]
+    ax.tick_params(which='both', left=False, bottom=False)
+    ax.spines[['top', 'right', 'bottom', 'left']].set_visible(False)
+    ax.set_xlim([-.2, 1.2])
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(['Pre', 'Post'])
+    var_expl = np.stack([var_expl_pre, var_expl_post])
+    for i in range(var_expl_pre.shape[-1]):
+        ax.plot(var_expl[:, i], color=color[i], marker='s', ms=5, mfc=color[i])
     return ax
 
-def plot_theta_lfp(row, axs, tAx, theta, tr, n_params, color):
-    ax = axs[row, 0]
-    var_expl = np.exp(theta[:, :n_params])
-    for i in range(var_expl.shape[1]):
-        ax.plot(tAx, var_expl[:, i], color=color[i])
-    ax.plot(tAx, tr, ls='--', color='k')
-    ax.axhline(0, color='k', lw=.8)
-    ax.spines[['top', 'right', 'bottom']].set_visible(False)
-    ax.axvline(0, color='k', lw=.8)
-    if row == axs.shape[0] - 1:
-        ax.spines['bottom'].set_visible(True)
-        ax.spines['bottom'].set_bounds(-1, 1)
+def plot_theta_lfp(row, axs, var_expl, color):
+    if axs.ndim==2:
+        ax = axs[row, 0]
     else:
-        ax.tick_params(bottom=False)
+        ax = axs[0]
+    for i in range(var_expl.shape[1]):
+        ax.plot(var_expl[:, i], color=color[i])
+    ax.spines[['top', 'right', 'bottom']].set_visible(False)
+    ax.tick_params(bottom=False)
+    ax.axhline(0, color='k', lw=.8)
 
     return ax
 
@@ -469,36 +554,87 @@ def make_yref(ax, reference_length=5, pos='left', unit='N', custom_text=None, co
             color=color, ha=ha, va='center',
             zorder=100, clip_on=False)
 
-def save_figure_incremental(fig, base_name, ext='svg', overwrite=True):
+# Define the updated function and test it on the provided file
+def load_border_vertices_xml(filepath):
+    vertices = []
+    inside_vertices_block = False
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if "<Vertices>" in line:
+                inside_vertices_block = True
+                line = line.replace("<Vertices>", "")
+            if inside_vertices_block:
+                if "</Vertices>" in line:
+                    line = line.replace("</Vertices>", "")
+                    inside_vertices_block = False
+                if line:
+                    numbers = [int(x) for x in line.split()]
+                    vertices.extend(numbers)
+    return np.array(vertices)
+
+
+def add_significance_bars(ax, tAx, sig, color='black', position='top', height=0.02, alpha=.5):
     """
-    Save a figure without overwriting by auto-incrementing the filename.
+    Adds a thin horizontal significance bar above or below the signal.
 
     Parameters:
-        fig        : matplotlib figure object
-        base_name  : base name of the figure file (e.g., 'plot')
-        folder     : destination folder
-        ext        : file extension ('pdf', 'svg', etc.)
+    - ax: matplotlib axis
+    - tAx: time axis (1D)
+    - sig: boolean array (same shape as tAx) indicating significance
+    - color: bar color
+    - position: 'top' or 'bottom'
+    - height: bar height as fraction of axis height (0.02 = 2%)
     """
-    folder = os.path.join(gl.baseDir, 'figures')
-    os.makedirs(folder, exist_ok=True)
-    existing = [f for f in os.listdir(folder) if f.startswith(base_name) and f.endswith('.' + ext)]
+    from itertools import groupby
+    from operator import itemgetter
+    import matplotlib.pyplot as plt
 
-    if overwrite is False:
-        # Extract number suffixes and find the next available one
-        suffixes = []
-        for f in existing:
-            parts = f.replace(f'.{ext}', '').split('_')
-            if parts[-1].isdigit():
-                suffixes.append(int(parts[-1]))
-        next_suffix = max(suffixes, default=0) + 1
-        filename = f"{base_name}_{next_suffix}.{ext}"
-        filepath = os.path.join(folder, filename)
-    else:
-        filename = f"{base_name}.{ext}"
-        filepath = os.path.join(folder, filename)
+    # Use axis-relative coordinates for vertical placement
+    transform = ax.get_xaxis_transform()  # x in data, y in axes coords
 
-    fig.savefig(filepath, format=ext, dpi=600, bbox_inches='tight')
-    print(f"Figure saved to: {filepath}")
+    y = 1 - height if position == 'top' else 0
+
+    # Group significant regions
+    sig_regions = [(tAx[g[0][0]], tAx[g[-1][0]]) for k, g in groupby(enumerate(sig), key=itemgetter(1))
+                   if k for g in [list(g)]]
+
+    for start, end in sig_regions:
+        ax.add_patch(plt.Rectangle((start, y), end - start, height,
+                                   transform=transform,
+                                   color=color, alpha=alpha, linewidth=0, zorder=1e6))
+
+
+# def save_figure_incremental(fig, base_name, ext='svg', overwrite=True):
+#     """
+#     Save a figure without overwriting by auto-incrementing the filename.
+#
+#     Parameters:
+#         fig        : matplotlib figure object
+#         base_name  : base name of the figure file (e.g., 'plot')
+#         folder     : destination folder
+#         ext        : file extension ('pdf', 'svg', etc.)
+#     """
+#     folder = os.path.join(gl.baseDir, 'figures')
+#     os.makedirs(folder, exist_ok=True)
+#     existing = [f for f in os.listdir(folder) if f.startswith(base_name) and f.endswith('.' + ext)]
+#
+#     if overwrite is False:
+#         # Extract number suffixes and find the next available one
+#         suffixes = []
+#         for f in existing:
+#             parts = f.replace(f'.{ext}', '').split('_')
+#             if parts[-1].isdigit():
+#                 suffixes.append(int(parts[-1]))
+#         next_suffix = max(suffixes, default=0) + 1
+#         filename = f"{base_name}_{next_suffix}.{ext}"
+#         filepath = os.path.join(folder, filename)
+#     else:
+#         filename = f"{base_name}.{ext}"
+#         filepath = os.path.join(folder, filename)
+#
+#     fig.savefig(filepath, format=ext, dpi=600, bbox_inches='tight')
+#     print(f"Figure saved to: {filepath}")
 
 
 def make_axes_square(ax):
@@ -513,3 +649,246 @@ def make_axes_square(ax):
         size                  # new height
     ]
     ax.set_position(new_pos)
+
+
+def pcm_spike(fig, axs, roi, epoch, monkey, rec):
+    # temporal landmarks
+    cuePre = 0
+    cueIdx = 20
+    cuePost = 84
+    pertIdx = 114
+
+    xtick = cueIdx if epoch == 'plan' else pertIdx
+    xticklabel = 'Cue' if epoch == 'plan' else 'Pert'
+    xlim = [cuePre, cuePost] if epoch == 'plan' else [cuePost, 154]
+    rangePre = np.arange(cuePre, cueIdx) if epoch == 'plan' else np.arange(cuePost, pertIdx)
+    rangePost = np.arange(cueIdx, cuePost) if epoch == 'plan' else np.arange(pertIdx, 145)
+
+    # load data
+    G_obs, var_expl, cov = [], [], []
+    for r in rec:
+        path = os.path.join(gl.baseDir, 'smp2', 'spikes', gl.pcmDir)
+        G_obs.append(np.load(os.path.join(path, f'G_obs.spike.{monkey}.{roi}.aligned.{epoch}-{r}.npy')))
+
+        # calc variance
+        theta_c = np.load(os.path.join(path, f'theta_in.spike.component.{monkey}.{roi}.aligned.{epoch}-{r}.npy'))
+        n_param_c = theta_c.shape[-1] - 1
+        var_expl.append(np.sqrt(np.exp(theta_c[..., :n_param_c])))
+
+        if epoch == 'exec':
+            theta_f = np.load(os.path.join(path, f'theta_in.spike.feature.{monkey}.{roi}.aligned.{epoch}-{r}.npy'))
+            cov.append(theta_f[:, 1] * theta_f[:, 2])
+
+    var_expl = np.array(var_expl).mean(axis=0)
+    G_obs = np.array(G_obs).mean(axis=0)
+    cov = np.array(cov).mean(axis=0)
+
+    color = ['red', 'blue'] if epoch == 'plan' else ['#FFCC33', 'red', 'blue', 'magenta', 'cyan', 'k']
+    linestyle = ['-', '-', '-', '-', '-', '--']
+    components = ['cue', 'uncertainty'] if epoch == 'plan' else ['direction', 'cue', 'uncertainty', 'surprise', 'direction*cue', 'noise ceiling']
+    tr = np.sqrt(np.trace(G_obs, axis1=1, axis2=2))
+
+    ax = plot_theta_lfp(0, axs, var_expl, color=color)
+
+    extra_lines = []
+    extra_labels = []
+
+    # covariance
+    if epoch == 'exec':  # only execution models contain feature model
+        l_cov = ax.plot(cov, color='cyan')
+        extra_lines.append(l_cov)
+        extra_labels.append('covariance')
+
+    l_tr = ax.plot(tr, ls='--', color='k')
+    extra_lines.append(l_tr)
+    extra_labels.append('noise ceiling')
+
+    main_lines = [
+        plt.Line2D([], [], color=c, linestyle=ls)
+        for c, ls in zip(color, linestyle)
+    ]
+    labels = components + extra_labels
+    lines = main_lines + extra_lines
+
+    fig.legend(lines, labels, loc='center left', fontsize=9, ncol=1, bbox_to_anchor=(1, .5), frameon=False)
+
+    # ax.spines['left'].set_bounds(0, .5)
+    ax.axvline(xtick, color='k', lw=.8)
+    ax.set_xticks([xtick])
+    # ax.set_ylim([-.008, 3])
+    ax.set_xticklabels([xticklabel])
+    ax = plot_theta_lfp_mean(0, 1, axs, var_expl[rangePre].mean(axis=0),
+                             var_expl[rangePost].mean(axis=0), color=color)
+    axs[0].set_xlim(xlim)
+    fig.supylabel('variance (a.u.)', fontsize='medium')
+    fig.suptitle(f'Variance explained by component model (monkey {monkey[0]}, {roi})')
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=.1)
+
+    return fig, axs
+
+
+def main(args, **kwargs):
+    path_fig = 'figures'
+    if args.what=='force_response':
+        experiment = 'smp2'
+        npz = np.load(os.path.join(gl.baseDir, experiment, gl.behavDir, 'force.segmented.avg.npz'), allow_pickle=True)
+        force = npz['data_array']
+        descr = pd.DataFrame(npz['descriptor'].item())
+        force = force[descr.GoNogo == 'go']
+        descr = descr[descr.GoNogo == 'go']
+        fig, axs = plt.subplots(1, 2, figsize=(4, 5), sharey=True, sharex=True, constrained_layout=True)
+        fig, axs = plot_force_response(fig, axs, force, descr)
+        fig.tight_layout()
+        plt.savefig(os.path.join(path_fig, 'force_response.svg'))
+        plt.show()
+    if args.what=='lfp':
+        pass
+    if args.what=='pcm_lfp':
+        cuePre = 0
+        cueIdx = 20
+        cuePost = 84
+        pertIdx = 114
+        monkey = kwargs.get('monkey', 'Pert')
+        roi = kwargs.get('roi', 'PMd')
+        epoch = kwargs.get('epoch', 'plan')
+        xtick = cueIdx if epoch == 'plan' else pertIdx
+        xticklabel = 'Cue' if epoch == 'plan' else 'Pert'
+        xlim = [cuePre, cuePost] if epoch == 'plan' else [cuePost, 154]
+        rangePre = np.arange(cuePre, cueIdx) if epoch == 'plan' else np.arange(cuePost, pertIdx)
+        rangePost = np.arange(cueIdx, cuePost) if epoch == 'plan' else np.arange(pertIdx, 145)
+        path = os.path.join(gl.baseDir, 'smp2', 'LFPs', gl.pcmDir)
+        theta_in = np.load(os.path.join(path, f'theta_in.lfp.{monkey}.{roi}.aligned.{epoch}.npy'))
+        cfg = mat73.loadmat(os.path.join(gl.baseDir, 'smp2', 'LFPs', monkey, 'cfg.mat'))['cfg']
+        freq_mask = make_freq_masks(cfg)
+        G_obs = np.load(os.path.join(path, f'G_obs.lfp.{monkey}.{roi}.aligned.{epoch}.npy'))
+        n_param = theta_in.shape[-1] - 1
+        var_expl = np.sqrt(np.exp(theta_in[..., :n_param]))
+        color = ['red', 'blue'] if epoch == 'plan' else ['#FFCC33', 'red', 'blue', 'magenta']
+        components = ['cue', 'uncertainty'] if epoch == 'plan' else ['finger', 'cue', 'uncertainty', 'surprise']
+        freqs = ['delta', 'theta', 'alpha-beta', 'alpha', 'beta', 'gamma']
+        fig, axs = plt.subplots(len(freqs), 2, sharex='col', sharey=True, figsize=(5, 8),
+                                gridspec_kw={'width_ratios': [3, .5]})
+        for f, freq in enumerate(freqs):
+            tr = np.sqrt(np.trace(G_obs[freq_mask[freq]].mean(axis=0), axis1=1, axis2=2))
+            var_expl_tmp = var_expl[freq_mask[freq]].mean(axis=0)
+            ax = plot_theta_lfp(f, axs, var_expl_tmp, color=color)
+            ax.plot(tr, ls='--', color='k')
+            ax.set_title(freq)
+            ax.spines['left'].set_bounds(0, .5)
+            ax.axvline(xtick, color='k', lw=.8)
+            ax.set_xticks([xtick])
+            ax.set_ylim([-.008, .5])
+            ax.set_xticklabels([xticklabel])
+            ax = plot_theta_lfp_mean(f, 1, axs, var_expl_tmp[rangePre].mean(axis=0),
+                                     var_expl_tmp[rangePost].mean(axis=0), color=color)
+        axs[0, 0].set_xlim(xlim)
+        fig.supylabel('variance (a.u.)', fontsize='medium')
+        fig.legend(components, loc='lower right', fontsize=9, frameon=False, ncol=2)
+        fig.suptitle(f'Variance explained by component model (monkey {monkey[0]}, {roi})')
+        fig.tight_layout()
+        fig.subplots_adjust(bottom=.1)
+        plt.savefig(os.path.join(path_fig, f'pcm_lfp.{epoch}.{monkey}.{roi}.svg'))
+        plt.show()
+    if args.what == 'pcm_lfp_tf_plan':
+        cuePre = 0
+        cueIdx = 20
+        cuePost = 84
+        pertIdx = 114
+        monkey = kwargs.get('monkey', 'Pert')
+        roi = kwargs.get('roi', 'PMd')
+        components = ['cue', 'uncertainty']
+        epoch = 'plan'
+        figsize = kwargs.get('figsize', (4, 4))
+        path = os.path.join(gl.baseDir, 'smp2', 'LFPs', gl.pcmDir)
+        theta_in = np.load(os.path.join(path, f'theta_in.lfp.{monkey}.{roi}.aligned.{epoch}.npy'))
+        cfg = mat73.loadmat(os.path.join(gl.baseDir, 'smp2', 'LFPs', monkey, 'cfg.mat'))['cfg']
+        n_params = theta_in.shape[-1] - 1
+        var_expl = np.sqrt(np.exp(theta_in[..., :n_params]))
+        tAx = np.linspace(0, var_expl.shape[1], var_expl.shape[1])
+        fig, axs = plt.subplots(var_expl.shape[-1], sharex=True, sharey=True,
+                                figsize=(int(figsize[0]), int(figsize[1])), constrained_layout=True)
+        _, mesh = plot_mesh_lfp(axs, tAx, cfg['foi'], var_expl, components, vmin=0, vmax=.3)
+        for ax in axs:
+            ax.set_xlim([0, cuePost])
+            ax.set_xticks([cueIdx])
+            ax.set_xticklabels(['Cue'])
+            ax.axvline(cueIdx, color='w', lw=.8)
+        fig.supylabel('frequency (Hz)')
+        fig.suptitle(f'Variance explained\nby component model (Monkey {monkey[0]}, {roi})')
+        fig.tight_layout()
+        fig.subplots_adjust(right=0.8)
+        cbar = fig.colorbar(mesh, ax=axs, orientation='vertical', fraction=0.02, pad=0.02)
+        cbar.set_label('variance (a.u.)')
+        plt.savefig(os.path.join(path_fig, f'pcm_lfp_tf.{epoch}.{monkey}.{roi}.svg'))
+        plt.show()
+    if args.what == 'pcm_lfp_tf_exec':
+        cuePre = 0
+        cueIdx = 20
+        cuePost = 84
+        pertIdx = 114
+        monkey = kwargs.get('monkey', 'Pert')
+        roi = kwargs.get('roi', 'PMd')
+        epoch = 'exec'
+        components = kwargs.get('components', ['finger', 'cue', 'uncertainty', 'surprise'])
+        figsize = kwargs.get('figsize', (4, 8))
+        path = os.path.join(gl.baseDir, 'smp2', 'LFPs', gl.pcmDir)
+        theta_in = np.load(os.path.join(path, f'theta_in.lfp.{monkey}.{roi}.aligned.{epoch}.npy'))
+        cfg = mat73.loadmat(os.path.join(gl.baseDir, 'smp2', 'LFPs', monkey, 'cfg.mat'))['cfg']
+        n_params = theta_in.shape[-1] - 1
+        var_expl = np.sqrt(np.exp(theta_in[..., :n_params]))
+        tAx = np.linspace(0, var_expl.shape[1], var_expl.shape[1])
+        fig, axs = plt.subplots(var_expl.shape[-1], sharex=True, sharey=True,
+                                figsize=(int(figsize[0]), int(figsize[1])), constrained_layout=True)
+        _, mesh = plot_mesh_lfp(axs, tAx, cfg['foi'], var_expl, components, vmin=0, vmax=.3)
+        for ax in axs:
+            ax.set_xlim([cuePost, var_expl.shape[1]])
+            ax.set_xticks([pertIdx])
+            ax.set_xticklabels(['Pert'])
+            ax.axvline(pertIdx, color='w', lw=.8)
+        fig.supylabel('frequency (Hz)')
+        fig.suptitle(f'Variance explained\nby component model (Monkey {monkey[0]}, {roi})')
+        fig.tight_layout()
+        fig.subplots_adjust(right=0.8)
+        cbar = fig.colorbar(mesh, ax=axs, orientation='vertical', fraction=0.02, pad=0.02)
+        cbar.set_label('variance (a.u.)')
+        plt.savefig(os.path.join(path_fig, f'pcm_lfp_tf.{epoch}.{monkey}.{roi}.svg'))
+        plt.show()
+    if args.what == 'pcm_spike':
+        monkey = kwargs.get('monkey', 'Pert')
+        roi = kwargs.get('roi', 'PMd')
+        epoch = kwargs.get('epoch', 'plan')
+        fig, axs = plt.subplots(1, 2, sharex='col', sharey=True, figsize=(5, 3),
+                                gridspec_kw={'width_ratios': [3, .5]})
+        fig, axs = pcm_spike(roi, epoch, monkey)
+        fig.savefig(os.path.join(path_fig, f'pcm_spike.{epoch}.{monkey}.{roi}.svg'))
+        plt.show()
+
+
+def parse_unknown_args(args):
+    parsed = {}
+    key = None
+    for arg in args:
+        if arg.startswith('--'):
+            key = arg.lstrip('--')
+            parsed[key] = []  # Start a new list for this key
+        elif key:
+            parsed[key].append(arg)
+        else:
+            raise ValueError(f"Value {arg} has no associated flag.")
+
+    # Flatten any single-value lists for convenience
+    for k in parsed:
+        if len(parsed[k]) == 1:
+            parsed[k] = parsed[k][0]
+
+    return parsed
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('what', nargs='?', default=None)
+    args, unknown_args = parser.parse_known_args()
+
+    kwargs = parse_unknown_args(unknown_args)
+
+    main(args, **kwargs)
