@@ -77,16 +77,16 @@ def calc_prewhitened_betas(glm_path=None, cifti_img='beta.scalar.nii', res_img='
 
     # Optional: use different regressor name, e.g., a number for ordering purposes
     if reg_mapping is not None:
-        cond_vec = np.vectorize(self.reg_mapping.get)(cond_vec)
+        cond_vec = np.vectorize(reg_mapping.get)(cond_vec)
         obs_des['cond_vec'] = cond_vec
 
     # Optional: restrict to some regressors, use the new mapped names
     if reg_interest is not None:
-        idx = np.isin(cond_vec, self.reg_interest)
+        idx = np.isin(cond_vec, reg_interest)
         obs_des = {'cond_vec': cond_vec[idx],
                    'part_vec': part_vec[idx]}
 
-    return betas_prewhitened, obs_des
+    return betas_prewhitened[idx], obs_des
 
 
 class Tessellation():
@@ -376,55 +376,23 @@ class Rois():
     def _make_roi_dataset(self, roi_img):
         N = len(self.snS)
 
-        G_obs = np.zeros((N, len(self.regr_of_interest), len(self.regr_of_interest)))
+        G_obs = np.zeros((N, len(self.regr_interest), len(self.regr_interest)))
         Y = list()
         for s, sn in enumerate(self.snS):
             print(f'making dataset...subj{sn} - {roi_img}')
-
-            cifti_img = nb.load(os.path.join(self.glm_path, f'subj{sn}',self.cifti_img))
-            beta_img = nt.volume_from_cifti(cifti_img, struct_names=self.struct_names)
-
-            mask = nb.load(os.path.join(self.roi_path, f'subj{sn}', roi_img))
-            coords = nt.get_mask_coords(mask)
-
-            betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
-
-            res_img = nb.load(os.path.join(self.glm_path, f'subj{sn}',self.res_img))
-            res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
-
-            # Replace near-zero values with np.nan
-            tol = 1e-6
-            print(f'{np.isclose(res, 0, atol=tol).sum()}')
-            betas[:, np.isclose(res, 0, atol=tol)] = np.nan
-            res[np.isclose(res, 0, atol=tol)] = np.nan
-
-            betas_prewhitened = betas / np.sqrt(res)
-            betas_prewhitened = betas_prewhitened[:, np.all(~np.isnan(betas_prewhitened), axis=0)]
-
-            reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
-            cond_vec = np.array([r[0] for r in reginfo])
-            part_vec = np.array([int(r[1]) for r in reginfo])
-
-            # Optional: use different regressor name, e.g., a number for ordering purposes
-            if self.reg_mapping is not None:
-                cond_vec = np.vectorize(self.reg_mapping.get)(cond_vec)
-
-            # Optional: restrict to some regressors, use the new mapped names
-            if self.reg_interest is not None:
-                idx = np.isin(cond_vec, self.reg_interest)
-
-            obs_des = {'cond_vec': cond_vec[idx],
-                       'part_vec': part_vec[idx]}
-
-            Y.append(pcm.dataset.Dataset(betas_prewhitened[idx], obs_descriptors=obs_des))
-
+            betas_prewhitened, obs_des = calc_prewhitened_betas(glm_path=self.glm_path + '/' + f'subj{sn}',
+                                                                cifti_img='beta.dscalar.nii',
+                                                                res_img='ResMS.nii',
+                                                                roi_path=self.roi_path,
+                                                                roi_img=f'subj{sn}' + '/' + roi_img,
+                                                                struct_names=['CortexLeft', 'CortexRight'],
+                                                                reg_mapping=self.regressor_mapping,
+                                                                reg_interest=self.regr_interest,)
+            Y.append(pcm.dataset.Dataset(betas_prewhitened, obs_descriptors=obs_des))
             G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements,
                                              Y[s].obs_descriptors['cond_vec'],
                                              Y[s].obs_descriptors['part_vec'],
                                              X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
-
-            # tr = np.trace(pcm.make_pd(G_obs[s]))
-            # Y[s].measurements = Y[s].measurements / np.sqrt(tr)
 
         return Y, G_obs
 
@@ -507,8 +475,41 @@ def pcm_tessel(M, epoch, args):
     nb.save(cifti_theta_feature, os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
                                               f'theta_feature.Icosahedron{args.n_tessels}.glm{args.glm}.pcm.{epoch}.dscalar.nii'))
 
-def pcm_rois():
-    pass
+def pcm_rois(M, epoch, args):
+    Hem = ['L', 'R']
+    rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+    roi_imgs = [f'ROI.{H}.{roi}.nii' for H in Hem for roi in rois]
+    glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}')
+    cifti_img = 'beta.dscalar.nii'
+    roi_path = os.path.join(gl.baseDir, args.experiment, gl.roiDir)
+
+    R = Rois(args.sns, M, glm_path, cifti_img,
+             roi_path=roi_path,
+             roi_imgs=roi_imgs,
+             regressor_mapping=gl.regressor_mapping,
+             regr_interest=[0, 1, 2, 3, 4] if epoch == 'plan' else [5, 6, 7, 8, 9, 10, 11, 12,]
+             )
+    res = R.run_parallel_pcm_across_rois()
+
+    for H in Hem:
+        for roi in rois:
+            r = res['roi_img'].index(f'ROI.{H}.{roi}.nii')
+
+            path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
+            os.makedirs(path, exist_ok=True)
+
+            res['T_in'][r].to_pickle(os.path.join(path, f'T_in.{epoch}.glm{args.glm}.{H}.{roi}.p'))
+            res['T_cv'][r].to_pickle(os.path.join(path, f'T_cv.{epoch}.glm{args.glm}.{H}.{roi}.p'))
+            res['T_gr'][r].to_pickle(os.path.join(path, f'T_gr.{epoch}.glm{args.glm}.{H}.{roi}.p'))
+
+            np.save(os.path.join(path, f'G_obs.{epoch}.glm{args.glm}.{H}.{roi}.npy'), res['G_obs'][r])
+
+            f = open(os.path.join(path, f'theta_in.{epoch}.glm{args.glm}.{H}.{roi}.p'), 'wb')
+            pickle.dump(res['theta_in'][r], f)
+            f = open(os.path.join(path, f'theta_cv.{epoch}.glm{args.glm}.{H}.{roi}.p'), 'wb')
+            pickle.dump(res['theta_cv'][r], f)
+            f = open(os.path.join(path, f'theta_gr.{epoch}.glm{args.glm}.{H}.{roi}.p'), 'wb')
+            pickle.dump(res['theta_gr'][r], f)
 
 
 def main(args):
@@ -531,38 +532,11 @@ def main(args):
     if args.what == 'rois_planning':
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.p'), "rb")
         M = pickle.load(f)
-
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
-        roi_imgs = [f'ROI.{H}.{roi}.nii' for H in Hem for roi in rois]
-        glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}')
-        cifti_img = 'beta.dscalar.nii'
-        roi_path = os.path.join(gl.baseDir, args.experiment, gl.roiDir)
-
-        R = Rois(args.snS, M, glm_path, cifti_img, roi_path, roi_imgs, regressor_mapping=gl.regressor_mapping,
-                 regr_of_interest=[0, 1, 2, 3, 4])
-        # res = R.run_pcm_in_roi(roi_imgs[0])
-        res = R.run_parallel_pcm_across_rois()
-
-        for H in Hem:
-            for roi in rois:
-                r = res['roi_img'].index(f'ROI.{H}.{roi}.nii')
-
-                path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
-                os.makedirs(path, exist_ok=True)
-
-                res['T_in'][r].to_pickle(os.path.join(path, f'T_in.plan.glm{args.glm}.{H}.{roi}.p'))
-                res['T_cv'][r].to_pickle(os.path.join(path, f'T_cv.plan.glm{args.glm}.{H}.{roi}.p'))
-                res['T_gr'][r].to_pickle(os.path.join(path, f'T_gr.plan.glm{args.glm}.{H}.{roi}.p'))
-
-                np.save(os.path.join(path, f'G_obs.plan.glm{args.glm}.{H}.{roi}.npy'), res['G_obs'][r])
-
-                f = open(os.path.join(path, f'theta_in.plan.glm{args.glm}.{H}.{roi}.p'), 'wb')
-                pickle.dump(res['theta_in'][r], f)
-                f = open(os.path.join(path, f'theta_cv.plan.glm{args.glm}.{H}.{roi}.p'), 'wb')
-                pickle.dump(res['theta_cv'][r], f)
-                f = open(os.path.join(path, f'theta_gr.plan.glm{args.glm}.{H}.{roi}.p'), 'wb')
-                pickle.dump(res['theta_gr'][r], f)
+        pcm_rois(M, 'plan', args)
+    if args.what == 'rois_execution':
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.p'), "rb")
+        M = pickle.load(f)
+        pcm_rois(M, 'exec', args)
 
     if args.what == 'model_family_rois_planning':
         M = make_planning_models()
@@ -618,37 +592,6 @@ def main(args):
                 res['T'][r].to_pickle(os.path.join(path, f'T.model_family.exec.glm{args.glm}.{H}.{roi}.p'))
                 f = open(os.path.join(path, f'theta.model_family.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
                 pickle.dump(res['theta'][r], f)
-
-    if args.what == 'rois_execution':
-        M = make_execution_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.glm{args.glm}.p'), "wb")
-        pickle.dump(M, f)
-
-        R = Rois(args.snS, M, glm_path, cifti_img, roi_path, roi_imgs, regressor_mapping=gl.regressor_mapping,
-                 regr_of_interest=[5, 6, 7, 8, 9, 10, 11, 12])
-        # for roi_img in roi_imgs:
-        #     R._make_roi_dataset(roi_img)
-        res = R.run_parallel_pcm_across_rois()
-
-        for H in Hem:
-            for roi in rois:
-                r = res['roi_img'].index(f'ROI.{H}.{roi}.nii')
-
-                path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
-                os.makedirs(path, exist_ok=True)
-
-                res['T_in'][r].to_pickle(os.path.join(path, f'T_in.exec.glm{args.glm}.{H}.{roi}.p'))
-                res['T_cv'][r].to_pickle(os.path.join(path, f'T_cv.exec.glm{args.glm}.{H}.{roi}.p'))
-                res['T_gr'][r].to_pickle(os.path.join(path, f'T_gr.exec.glm{args.glm}.{H}.{roi}.p'))
-
-                np.save(os.path.join(path, f'G_obs.exec.glm{args.glm}.{H}.{roi}.npy'), res['G_obs'][r])
-
-                f = open(os.path.join(path, f'theta_in.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
-                pickle.dump(res['theta_in'][r], f)
-                f = open(os.path.join(path, f'theta_cv.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
-                pickle.dump(res['theta_cv'][r], f)
-                f = open(os.path.join(path, f'theta_gr.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
-                pickle.dump(res['theta_gr'][r], f)
 
     if args.what == 'G_obs_rois_plan-exec':
 
