@@ -118,7 +118,15 @@ def main(args):
         M = make_execution_models()
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.p'), "wb")
         pickle.dump(M, f)
-
+    if args.what=='plan-exec_flex':
+        nsteps = 10
+        M = []
+        for r in np.linspace(0, 1, nsteps):
+            M.append(pcm.CorrelationModel(f"{r:0.2f}", num_items=1, corr=r, cond_effect=False))
+        Mflex = pcm.CorrelationModel("flex", num_items=1, corr=None, cond_effect=False)
+        M.append(Mflex)
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan-exec.p'), "wb")
+        pickle.dump(M, f)
 
 if __name__ == '__main__':
     start = time.time()

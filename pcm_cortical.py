@@ -17,7 +17,7 @@ import PcmPy as pcm
 from pathlib import Path
 
 from joblib import Parallel, delayed, parallel_backend
-
+from pcm_models import find_model
 import globals as gl
 import pandas as pd
 import numpy as np
@@ -417,9 +417,6 @@ class Rois():
                 for roi in self.roi_imgs
             )
 
-        # for roi in self.roi_imgs:
-        #     self.run_pcm_in_roi(roi)
-
         results = self._extract_results_from_parallel_process(results,
                                       field_names=['G_obs', 'T_in', 'theta_in', 'T_cv', 'theta_cv', 'T_gr', 'theta_gr'])
         return results
@@ -537,51 +534,27 @@ def main(args):
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.p'), "rb")
         M = pickle.load(f)
         pcm_rois(M, 'exec', args)
-
     if args.what == 'model_family_rois_planning':
-        M = make_planning_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.glm{args.glm}.p'), "wb")
-        pickle.dump(M, f)
-
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
-        roi_imgs = [f'ROI.{H}.{roi}.nii' for H in Hem for roi in rois]
-        glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}')
-        cifti_img = 'beta.dscalar.nii'
-        roi_path = os.path.join(gl.baseDir, args.experiment, gl.roiDir)
-
-        R = Rois(args.snS, M, glm_path, cifti_img, roi_path, roi_imgs, regressor_mapping=gl.regressor_mapping,
-                 regr_of_interest=[0, 1, 2, 3, 4])
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.p'), "rb")
+        M = pickle.load(f)
+        R = Rois(args.sns, M, glm_path, cifti_img, roi_path=roi_path, roi_imgs=roi_imgs,
+                 regressor_mapping=gl.regressor_mapping, regr_interest=[0, 1, 2, 3, 4])
         res = R.fit_model_family_across_rois('component', comp_names=['cue', 'uncertainty'])
-
         for H in Hem:
             for roi in rois:
                 r = res['roi_img'].index(f'ROI.{H}.{roi}.nii')
-
                 path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
                 os.makedirs(path, exist_ok=True)
-
                 res['T'][r].to_pickle(os.path.join(path, f'T.model_family.plan.glm{args.glm}.{H}.{roi}.p'))
                 f = open(os.path.join(path, f'theta.model_family.plan.glm{args.glm}.{H}.{roi}.p'), 'wb')
                 pickle.dump(res['theta'][r], f)
-
     if args.what == 'model_family_rois_execution':
-        M = make_execution_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.glm{args.glm}.p'), "wb")
-        pickle.dump(M, f)
-
-        Hem = ['L', 'R']
-        rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
-        roi_imgs = [f'ROI.{H}.{roi}.nii' for H in Hem for roi in rois]
-        glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}')
-        cifti_img = 'beta.dscalar.nii'
-        roi_path = os.path.join(gl.baseDir, args.experiment, gl.roiDir)
-
-        R = Rois(args.snS, M, glm_path, cifti_img, roi_path, roi_imgs, regressor_mapping=gl.regressor_mapping,
-                 regr_of_interest=[5, 6, 7, 8, 9, 10, 11, 12])
-        res = R.fit_model_family_across_rois('component',
-                                             comp_names=['finger', 'cue', 'surprise'])
-
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.p'), "rb")
+        M = pickle.load(f)
+        R = Rois(args.sns, M, glm_path, cifti_img, roi_path=roi_path, roi_imgs=roi_imgs,
+                 regressor_mapping=gl.regressor_mapping, regr_interest=[5, 6, 7, 8, 9, 10, 11, 12])
+        res = R.fit_model_family_across_rois('component', comp_names=['finger', 'cue', 'surprise'],
+                                             basecomp=np.eye(8)[None, :, :])
         for H in Hem:
             for roi in rois:
                 r = res['roi_img'].index(f'ROI.{H}.{roi}.nii')
@@ -592,7 +565,6 @@ def main(args):
                 res['T'][r].to_pickle(os.path.join(path, f'T.model_family.exec.glm{args.glm}.{H}.{roi}.p'))
                 f = open(os.path.join(path, f'theta.model_family.exec.glm{args.glm}.{H}.{roi}.p'), 'wb')
                 pickle.dump(res['theta'][r], f)
-
     if args.what == 'G_obs_rois_plan-exec':
 
         Hem = ['L', 'R']
@@ -644,7 +616,6 @@ def main(args):
                 os.makedirs(path, exist_ok=True)
 
                 np.save(os.path.join(path, f'G_obs.plan-exec.glm{args.glm}.{H}.{roi}.npy'), G_obs)
-
     if args.what == 'correlation_plan-exec':
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan-exec.p'), "rb")
         Mflex = pickle.load(f)
@@ -697,7 +668,6 @@ def main(args):
 
                 # f = open(os.path.join(pcm_path, f'theta_cv.corr.glm{args.glm}.{H}.{roi}.p'), 'wb')
                 # pickle.dump(theta_cv, f)
-
     if args.what == 'correlation_plan-exec_within_finger':
 
         Mflex = pcm.CorrelationModel("flex", num_items=1, corr=None, cond_effect=False)

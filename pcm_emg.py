@@ -23,7 +23,7 @@ import pandas as pd
 import numpy as np
 import os
 
-from pcm_cortical import make_execution_models, make_planning_models, find_model
+# from pcm_cortical import make_execution_models, make_planning_models, find_model
 
 import sys
 
@@ -396,10 +396,8 @@ def main(args):
 
     if args.what == 'force_planning':
 
-        M = make_planning_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
-                               f'M.force.plan.p'), "wb")
-        pickle.dump(M, f)
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.p'), "rb")
+        M = pickle.load(f)
 
         N = len(args.snS)
 
