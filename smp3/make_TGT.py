@@ -2,11 +2,17 @@ import pandas as pd
 import numpy as np
 
 experiment = 'smp3'
-sn = 100
+sn = 101
 nruns = 10
 
-for run in range(nruns):
+df_no_tms = pd.read_csv("target/smp3_template_no_tms.tgt", sep="\t")
+df_no_tms_shuffled = df_no_tms.sample(frac=1).reset_index(drop=True)
 
+batch_size = 4
+
+b = 0
+
+for run in range(nruns):
     # Load the file
     df = pd.read_csv("target/smp3_template.tgt", sep="\t")
 
@@ -19,14 +25,21 @@ for run in range(nruns):
 
     # Shuffle the rest of the fields together
     shuffled_group2 = df[['subNum', 'cueID', 'stimFinger', 'execMaxTime', 'feedbackTime', 'trialLabel', 'TrigExec',
-                          'TrigPlan', 'stimTrigExec', 'stimTrigPlan']].sample(frac=1).reset_index(drop=True)
+                          'TrigPlan', 'stimTrigExec']].sample(frac=1).reset_index(drop=True)
     df[['subNum', 'cueID', 'stimFinger', 'execMaxTime', 'feedbackTime', 'trialLabel', 'TrigExec',
-                          'TrigPlan', 'stimTrigExec', 'stimTrigPlan']] = shuffled_group2
+                          'TrigPlan', 'stimTrigExec']] = shuffled_group2
+    df['stimTrigPlan'] = df['planTime'] - 100
+
+    df_no_tms_batch = df_no_tms_shuffled[b:b + batch_size]
+    b = + batch_size
+
+    df = pd.concat([df, df_no_tms_batch])
+    df = df.sample(frac=1).reset_index(drop=True)
 
     # Compute startTime
     start_times = [10000]
     for i in range(1, len(df)):
-        prev = df.loc[i-1]
+        prev = df.iloc[i-1]
         prev_sum = prev['planTime'] + prev['execMaxTime'] + prev['feedbackTime'] + prev['iti']
         start_times.append(start_times[-1] + prev_sum + 500)
     df['startTime'] = start_times
