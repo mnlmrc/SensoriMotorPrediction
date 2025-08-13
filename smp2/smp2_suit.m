@@ -142,6 +142,9 @@ function varargout = smp2_suit(what, varargin)
                 images = 'mask';
                 source=dir(fullfile(glmSubjDir,'mask.nii')); % images to be resliced
                 cd(glmSubjDir)
+            case 'residual'
+                source=dir(fullfile(glmSubjDir,'residual.nii')); % images to be resliced
+                cd(glmSubjDir)
         end
         job.subj.affineTr = {fullfile(baseDir,'SUIT/anatomicals',subj_id,['Affine_c_',subj_id ,'_anatomical_seg1.mat'])};
         job.subj.flowfield= {fullfile(baseDir,'SUIT/anatomicals',subj_id,['u_a_c_',subj_id, '_anatomical_seg1.nii'])};
