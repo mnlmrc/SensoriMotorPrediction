@@ -58,19 +58,21 @@ def make_execution_models(centering=True):
 
 
 def load_lfp(file_path):
-    lfp = mat73.loadmat(file_path)
-    return lfp['lfp']
+    mat = mat73.loadmat(file_path)
+    return mat['lfp']
 
-def align_to_perturbation(lfp, trial_info, pre=100, post=100):
+def align_lfp(lfp, trial_info, preProb=20, postProb=64, prePert=30, postPert=40,):
+    cueTime = trial_info.probTime.to_numpy()
     pertTime = trial_info.pertTime.to_numpy()
-    lfp_aligned = np.zeros((pre+post+1, lfp.shape[1], lfp.shape[2], lfp.shape[3]))
-    for t, pT in enumerate(pertTime):
-        lfp_aligned[...,t] = lfp[pT-pre:pT+post+1,...,t]
-
+    lfp_aligned = np.zeros((preProb + postProb + prePert + postPert, lfp.shape[1], lfp.shape[2], lfp.shape[3]))
+    for t, (cT, pT) in enumerate(zip(cueTime, pertTime)):
+        probRange = np.arange(cT - preProb, cT + postProb)
+        pertRange = np.arange(pT - prePert, pT + postPert)
+        fullRange = np.concatenate([probRange, pertRange])
+        lfp_aligned[...,t] = lfp[fullRange,...,t]
     return lfp_aligned
 
 def make_freq_masks(cfg):
-
     foi = cfg['foi']
     delta = (foi >= 1) & (foi < 3)
     theta = (foi >= 3) & (foi < 8)
@@ -92,7 +94,7 @@ def make_freq_masks(cfg):
 
 
 class LFPs:
-    def __init__(self, M, lfp, err, freq_masks, cond_vec, part_vec, t_axis=1, n_jobs=16):
+    def __init__(self, M, lfp, err, freq_masks=None, cond_vec=None, part_vec=None, t_axis=1, n_jobs=16):
         self.M = M
         self.lfp = lfp
         self.err = err # for prewhitening
@@ -113,9 +115,13 @@ class LFPs:
         Returns:
 
         """
-        freq_mask = self.freq_masks[freq]
-        lfp = self.lfp[:, t, freq_mask].mean(axis=1)
-        err = self.err[:, t, freq_mask].mean(axis=1)
+        if isinstance(freq, str):
+            freq_mask = self.freq_masks[freq]
+            lfp = self.lfp[:, t, freq_mask].mean(axis=1)
+            err = self.err[:, t, freq_mask].mean(axis=1)
+        elif isinstance(freq, int):
+            lfp = self.lfp[:, t, freq]
+            err = self.err[:, t, freq]
 
         cov = err.T @ err
 
@@ -186,7 +192,7 @@ def save_lfp_aligned(monkey='Malfoy'):
     lfp = lfp[..., (trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
     trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
 
-    lfp_aligned = align_to_perturbation(lfp, trial_info)
+    lfp_aligned = align_lfp(lfp, trial_info)
 
     np.save(os.path.join(path, f'lfp_aligned.PMd.npy'), lfp_aligned)
 
@@ -225,7 +231,7 @@ def save_trial_info(monkey='Malfoy'):
     trial_info.to_csv(os.path.join(path, 'trial_info.tsv'), sep='\t')
 
 
-def run_pcm(epoch='plan', monkey='Malfoy', M=None, model='component', datatype='aligned'):
+def run_pcm_in_freq_bands(epoch='plan', monkey='Malfoy', M=None, model='component', datatype='aligned'):
 
     _, idx = find_model(M, model)
 
@@ -275,15 +281,69 @@ def run_pcm(epoch='plan', monkey='Malfoy', M=None, model='component', datatype='
         np.save(os.path.join(gl.baseDir, args.experiment, 'LFPs', gl.pcmDir,
                              f'G_obs.lfp.{monkey}.PMd.{freq}.{datatype}.{epoch}.npy'), G_obs, )
 
+def run_pcm_across_freqs(epoch='plan', monkey='Malfoy', M=None, model='component', datatype='aligned'):
+
+    _, idx = find_model(M, model)
+    n_param = M[idx].n_param
+
+    print('loading lfps...')
+    path = os.path.join(gl.baseDir, args.experiment, 'LFPs', monkey)
+
+    lfp = np.load(os.path.join(path, f'lfp_{datatype}.PMd.npy'))
+    trial_info = pd.read_csv(os.path.join(path, 'trial_info.tsv'), sep='\t')
+
+    print('grouping by condition...')
+    if epoch=='plan':
+        lfp_grouped, cond_vec, part_vec = pcm.group_by_condition(lfp, trial_info.prob, trial_info.block, axis=-1)
+    elif epoch=='exec':
+        lfp_grouped, cond_vec, part_vec = pcm.group_by_condition(lfp, trial_info.cond, trial_info.block, axis=-1)
+
+    print('doing prewhitening...')
+    lfp_grouped_shape = lfp_grouped.shape
+    if epoch == 'plan':
+        n_cond = trial_info.prob.unique().size
+    if epoch == 'exec':
+        n_cond = trial_info.cond.unique().size
+    lfp_grouped_reshaped = lfp_grouped.reshape(n_cond, int(lfp_grouped.shape[0] / n_cond),
+                                               lfp_grouped.shape[1], lfp_grouped.shape[2], lfp_grouped.shape[3])
+    lfp_grouped_avg = lfp_grouped_reshaped.mean(axis=0, keepdims=True)
+    lfp_err = lfp_grouped_reshaped - lfp_grouped_avg
+    lfp_err = lfp_err.reshape(lfp_grouped_shape)
+
+    print('doing pcm...')
+    Lfp = LFPs(M, lfp_grouped, lfp_err, cond_vec=cond_vec, part_vec=part_vec)
+    theta_in = np.zeros((lfp.shape[1], lfp.shape[0], n_param + 1,))
+    G_obs = np.zeros((lfp.shape[1], lfp.shape[0], n_cond, n_cond))
+    for freq in range(lfp.shape[1]):
+        res_dict = Lfp.run_parallel_pcm_across_timepoints(freq)
+        theta_in_tmp = []
+        for t in range(lfp.shape[0]):
+            th = res_dict['theta_in'][t][idx].squeeze()
+            theta_in_tmp.append(th)
+        theta_in[freq] = np.array(theta_in_tmp)
+        G_obs[freq] = np.array(res_dict['G_obs'])
+
+    np.save(os.path.join(gl.baseDir, args.experiment, 'LFPs', gl.pcmDir,
+                         f'theta_in.lfp.{monkey}.PMd.{datatype}.{epoch}.npy'), theta_in, )
+    np.save(os.path.join(gl.baseDir, args.experiment, 'LFPs', gl.pcmDir,
+                         f'G_obs.lfp.{monkey}.PMd.{datatype}.{epoch}.npy'), G_obs, )
+
 
 def main(args):
-    if args.what == 'continuous_plan':
+    if args.what == 'continuous_plan_freq_bands':
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.p'), "rb")
         M = pickle.load(f)
-        run_pcm('plan', args.monkey, M=M, model='component')
-    if args.what=='continuous_exec':
+        run_pcm_in_freq_bands('plan', args.monkey, M=M, model='component')
+    if args.what=='continuous_exec_freq_bands':
         M = make_execution_models()
-        run_pcm('exec', args.monkey, M=M, model='component')
+        run_pcm_in_freq_bands('exec', args.monkey, M=M, model='component')
+    if args.what == 'continuous_plan_spectrum':
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.p'), "rb")
+        M = pickle.load(f)
+        run_pcm_across_freqs('plan', args.monkey, M=M, model='component')
+    if args.what=='continuous_exec_spectrum':
+        M = make_execution_models()
+        run_pcm_across_freqs('exec', args.monkey, M=M, model='component')
     if args.what == 'binned_plan':
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.p'), "rb")
         M = pickle.load(f)

@@ -43,7 +43,7 @@ def make_execution_models(centering=True):
         v_cert = np.array([0, 0.1875, .25, 0.1875, 0.1875, .25, 0.1875, 0, ])  # variance of a Bernoulli distribution
         v_surprise = -np.log2(np.array([1, .75, .5, .25, .25, .5, .75, 1, ]))  # with Shannon information
 
-    Ac = np.zeros((3, 8, 3))
+    Ac = np.zeros((3, 8, 2))
     Ac[0, :, 0] = v_finger
     Ac[1, :, 1] = v_finger
     Ac[2, :, 1] = v_cue
@@ -119,14 +119,14 @@ def main(args):
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.p'), "wb")
         pickle.dump(M, f)
     if args.what=='plan-exec_flex':
-        nsteps = 10
-        M = []
-        for r in np.linspace(0, 1, nsteps):
-            M.append(pcm.CorrelationModel(f"{r:0.2f}", num_items=1, corr=r, cond_effect=False))
+        # nsteps = 10
+        # M = []
+        # for r in np.linspace(0, 1, nsteps):
+        #     M.append(pcm.CorrelationModel(f"{r:0.2f}", num_items=1, corr=r, cond_effect=False))
         Mflex = pcm.CorrelationModel("flex", num_items=1, corr=None, cond_effect=False)
-        M.append(Mflex)
+        # M.append(Mflex)
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan-exec.p'), "wb")
-        pickle.dump(M, f)
+        pickle.dump(Mflex, f)
 
 if __name__ == '__main__':
     start = time.time()

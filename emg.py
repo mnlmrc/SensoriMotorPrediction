@@ -167,7 +167,7 @@ def main(args):
         emg = []
         for block in blocks:
             print(f'subj{args.sn} - block {block}')
-            filepath = os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', f'{args.datatype}_{block}.csv')
+            filepath = os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', f'{args.datatype}_{int(block)-1}.csv')
             dat_tmp = dat[dat.BN == int(block)]
             df_out = load_delsys(filepath, trigger_name='Trigger', muscle_names=channels_emg)
             trig_sig = df_out.Trigger.to_numpy()
@@ -195,14 +195,14 @@ def main(args):
         dat = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'behavioural', f'subj{args.sn}',
                                        f'{args.experiment}_{args.sn}.dat'), sep='\t')
 
-        # add trigs info to be removed after adding to dat file from c++
-        tgt = pd.DataFrame()
-        blocks = pinfo[pinfo.sn == args.sn].reset_index().blocks_emg_task[0].split(',')
-        for block in blocks:
-            tgt_tmp = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'target',
-                             f'{args.experiment}_{args.sn}_{int(block):02d}.tgt'), sep='\t')
-            tgt = pd.concat([tgt, tgt_tmp], ignore_index=True)
-        dat = pd.concat([dat, tgt[['TrigPlan', 'TrigExec', 'TrigBaseline']]], axis=1)
+        # # add trigs info to be removed after adding to dat file from c++
+        # tgt = pd.DataFrame()
+        # blocks = pinfo[pinfo.sn == args.sn].reset_index().blocks_emg_task[0].split(',')
+        # for block in blocks:
+        #     tgt_tmp = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'target',
+        #                      f'{args.experiment}_{args.sn}_{int(block):02d}.tgt'), sep='\t')
+        #     tgt = pd.concat([tgt, tgt_tmp], ignore_index=True)
+        # dat = pd.concat([dat, tgt[['TrigPlan', 'TrigExec', 'TrigBaseline']]], axis=1)
 
         # filter dat file exclude no tms trials
         dat.cue = dat.cue.map(gl.cue_mapping)
@@ -256,7 +256,7 @@ def main(args):
         emg = []
         for block in blocks:
             print(f'subj{args.sn} - block {block}')
-            filepath = os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', f'task_{block}.csv')
+            filepath = os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', f'block_{block}.csv')
             dat_tmp = dat[dat.BN==int(block)]
             df_out = load_delsys(filepath, trigger_name='Trigger', muscle_names=channels_emg)
             trig_sig = df_out.Trigger.to_numpy()
@@ -369,7 +369,7 @@ if __name__ == '__main__':
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--sn', type=int, default=None)
     parser.add_argument('--snS', nargs='+', type=int, default=[100, 101, 102, 104, 105, 106, 107, 108, 109, 110])
-    parser.add_argument('--experiment', type=str, default='smp0')
+    parser.add_argument('--experiment', type=str, default='smp3')
     parser.add_argument('--datatype', type=str, default='task')
     parser.add_argument('--edge', type=str, default='rising')
     parser.add_argument('--thresh', type=float, default=2)

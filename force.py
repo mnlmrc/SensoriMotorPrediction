@@ -100,6 +100,7 @@ def calc_md(X):
 
     return MD, d
 
+
 def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1.5, 0), (.2, .4), ]):
     ch_idx = [col in gl.channels['mov'] for col in gl.col_mov[experiment]]
 
@@ -156,7 +157,8 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
             force_dict['cue'].append(dat_tmp.iloc[ons]['cue'])
             force_dict['BN'].append(dat_tmp.iloc[ons]['BN'])
             force_dict['TN'].append(dat_tmp.iloc[ons]['TN'])
-            force_dict['GoNogo'].append(dat_tmp.iloc[ons]['GoNogo'])
+            if 'GoNogo' in dat:
+                force_dict['GoNogo'].append(dat_tmp.iloc[ons]['GoNogo'])
 
     force_df = pd.DataFrame(force_dict)
 
@@ -170,7 +172,10 @@ def main(args):
         if args.session == 'training':
             blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).runsTraining[0].split('.')
         elif args.session == 'behavioural':
-            blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).FuncRuns[0].split('.')
+            if 'FuncRuns' in pinfo.columns:
+                blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).FuncRuns[0].split('.')
+            elif 'blocks_emg_task' in pinfo.columns:
+                blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).blocks_emg_task[0].split(',')
         force_segmented, descr = segment_mov(experiment=args.experiment,
                                              sn=args.sn,
                                              session=args.session,
@@ -189,11 +194,13 @@ def main(args):
                                       session=args.session,)
             main(args)
     if args.what == 'single_trial':
-
         if args.session == 'training':
             blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).runsTraining[0].split('.')
         elif args.session == 'behavioural':
-            blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).FuncRuns[0].split('.')
+            if 'FuncRuns' in pinfo.columns:
+                blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).FuncRuns[0].split('.')
+            elif 'blocks_emg_task' in pinfo.columns:
+                blocks = pinfo[pinfo.sn == args.sn].reset_index(drop=True).blocks_emg_task[0].split(',')
 
         force_df = calc_avg_force(experiment=args.experiment,
                                   sn=args.sn,
@@ -201,7 +208,28 @@ def main(args):
                                   blocks=blocks, )
         force_df.to_csv(os.path.join(gl.baseDir, args.experiment, args.session, f'subj{args.sn}',
                                      f'{args.experiment}_{args.sn}_force_single_trial.tsv'), sep='\t', index=False)
-    if args.what == 'avg_continuous':
+    if args.what == 'single_trial_all':
+        for sn in args.snS:
+            args = argparse.Namespace(
+                what='single_trial',
+                experiment=args.experiment,
+                sn=sn,
+                session=args.session,
+            )
+            main(args)
+    if args.what == 'pool_single_trial':
+        dat = pd.DataFrame()
+        for sn in args.snS:
+            dat_tmp = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
+                                               f'{args.experiment}_{sn}_force_single_trial.tsv'), sep='\t')
+            dat_tmp['sn'] = sn
+            dat_tmp['stimFinger'] = dat_tmp['stimFinger'].map(gl.stimFinger_mapping)
+            dat_tmp['cue'] = dat_tmp['cue'].map(gl.cue_mapping)
+            # dat_tmp = dat_tmp[dat_tmp['GoNogo'] == 'go']
+            dat = pd.concat([dat, dat_tmp], ignore_index=True)
+        dat.to_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir,
+                                f'{args.experiment}_force_single_trial.tsv'), sep='\t', index=False)
+    if args.what == 'avg_aligned':
 
         force_avg = list()
         descr = {
@@ -223,7 +251,6 @@ def main(args):
             npz = np.load(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
                                        f'{args.experiment}_{sn}_force_segmented.npz'))
             force = npz['data_array']
-            pass
             for c, cue in enumerate(gl.cue_code):
 
                 for f in range(force.shape[1]):
@@ -254,15 +281,6 @@ def main(args):
 
         np.savez(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'force.segmented.avg.npz'),
                  data_array=np.stack(force_avg, axis=0), descriptor=descr, allow_pickle=True)
-    if args.what == 'single_trial_all':
-        for sn in args.snS:
-            args = argparse.Namespace(
-                what='single_trial',
-                experiment=args.experiment,
-                sn=sn,
-                session=args.session,
-            )
-            main(args)
     if args.what == 'corr_xval':
         within_block, between_block = [], []
         for sn in args.snS:

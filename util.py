@@ -25,6 +25,20 @@ def hp_filter(data, n_ord=None, cutoff=None, fsample=None):
     return filtered_data
 
 
+def get_clamp_lat():
+    """
+    Just get the latency of push initiation on the ring and index finger
+    Returns:
+        latency (tuple): latency_index, latency_ring
+
+    """
+    latency = pd.read_csv(os.path.join(gl.baseDir, 'smp0', 'clamped', 'smp0_clamped_latency.tsv'), sep='\t')
+    latency = latency['index'][0], latency['ring'][0]
+
+    return latency
+
+
+
 def corr_xval(X, Y, cond_vec, part_vec):
 
     cond_vec = cond_vec - cond_vec.min()
