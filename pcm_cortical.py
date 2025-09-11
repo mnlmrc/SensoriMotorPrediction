@@ -30,8 +30,51 @@ import sys
 
 import Functional_Fusion.atlas_map as am
 
+def prewhiten(betas, res, lam=0.1, eps=1e-8):
+    """
+    betas: (n_cond, V)
+    res:   (V,) ResMS  OR  residuals as (T, V) or (V, T)
+    Returns: betas_wh, keep_mask
+    """
+    n_cond, V = betas.shape
+    keep = np.ones(V, dtype=bool)
 
-def calc_prewhitened_betas(glm_path=None, cifti_img='beta.scalar.nii', res_img='ResMS.nii', roi_path=None, roi_img=None,
+    if res.ndim == 1:
+        r = res.astype(float)
+        bad = ~np.isfinite(r) | np.isclose(r, 0.0, atol=1e-6) | np.isnan(betas).all(axis=0)
+        keep &= ~bad
+        scale = np.sqrt(np.clip(r[keep], eps, None))
+        return betas[:, keep] / scale, keep
+
+    # 2-D residuals
+    R = res
+    if R.shape == (V, R.shape[1]):     # (V, T)
+        R = R.T                        # -> (T, V)
+    if R.shape[1] != V:
+        raise ValueError("Residuals do not match number of voxels in betas.")
+
+    # drop bad voxels
+    bad = ~np.isfinite(R).all(axis=0) | np.isclose(R.var(axis=0), 0.0, atol=1e-10) | np.isnan(betas).all(axis=0)
+    keep &= ~bad
+    R = R[:, keep]
+    B = betas[:, keep]
+
+    T = R.shape[0] - 1
+    Sigma = (R.T @ R) / T
+
+    # regularisation
+    if lam and lam > 0:
+        mu = np.mean(np.diag(Sigma))
+        Sigma = (1 - lam) * Sigma + lam * mu * np.eye(Sigma.shape[0])
+
+    w, U = np.linalg.eigh(Sigma)
+    w = np.clip(w, eps, None)
+    W = (U * (1.0 / np.sqrt(w))) @ U.T   # Σ^{-1/2}
+
+    return B @ W
+
+
+def calc_prewhitened_betas(glm_path=None, cifti_img='beta.dscalar.nii', res_img='ResMS.nii', roi_path=None, roi_img=None,
                            struct_names=['CortexLeft', 'CortexRight'], reg_mapping=None, reg_interest=None):
     """
     Get pre-whitened betas from ROI to submit to RSA/PCM
@@ -57,16 +100,12 @@ def calc_prewhitened_betas(glm_path=None, cifti_img='beta.scalar.nii', res_img='
     betas = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
 
     res_img = nb.load(os.path.join(glm_path, res_img))
-    res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
+    if isinstance(res_img, nb.Cifti2Image):
+        res_img = nt.volume_from_cifti(res_img, struct_names=struct_names)
+    if isinstance(res_img, nb.nifti1.Nifti1Image):
+        res = nt.sample_image(res_img, coords[0], coords[1], coords[2], interpolation=0)
 
-    # Replace near-zero values with np.nan
-    tol = 1e-6
-    print(f'{np.isclose(res, 0, atol=tol).sum()}')
-    betas[:, np.isclose(res, 0, atol=tol)] = np.nan
-    res[np.isclose(res, 0, atol=tol)] = np.nan
-
-    betas_prewhitened = betas / np.sqrt(res)
-    betas_prewhitened = betas_prewhitened[:, np.all(~np.isnan(betas_prewhitened), axis=0)]
+    betas_prewhitened = prewhiten(betas, res, lam=0.1, eps=1e-8)
 
     reginfo = np.char.split(cifti_img.header.get_axis(0).name, sep='.')
     cond_vec = np.array([r[0] for r in reginfo])
@@ -83,10 +122,68 @@ def calc_prewhitened_betas(glm_path=None, cifti_img='beta.scalar.nii', res_img='
     # Optional: restrict to some regressors, use the new mapped names
     if reg_interest is not None:
         idx = np.isin(cond_vec, reg_interest)
+        betas_prewhitened = betas_prewhitened[idx]
         obs_des = {'cond_vec': cond_vec[idx],
                    'part_vec': part_vec[idx]}
 
-    return betas_prewhitened[idx], obs_des
+    return betas_prewhitened, obs_des
+
+
+def bootstrap_correlation(idx, Y, Mflex, sigma_floor=1e-4):
+    """
+
+    Args:
+        Y:
+        Mflex:
+        sigma_floor:
+
+    Returns:
+
+    """
+
+    S = len(Y)
+    y = [Y[i] for i in idx]
+
+    _, theta_gr = pcm.fit_model_group(y, Mflex, fixed_effect=None, fit_scale=True, verbose=False)
+
+    theta_gr, _ = pcm.group_to_individ_param(theta_gr[0], Mflex, S)
+
+    sigma2_1 = np.exp(theta_gr[0, 0])
+    sigma2_2 = np.exp(theta_gr[1, 0])
+    sigma2_e = np.exp(theta_gr[-1])
+    r = Mflex.get_correlation(theta_gr)
+
+    sd = np.sqrt(sigma2_1 * sigma2_2)
+    if sd < sigma_floor * np.sqrt(sigma2_e).max():
+        print(f'No reliable signal, discarding bootstrap resample')
+        return None
+    else:
+        return r[0]
+
+
+def bootstrap_summary(r_bootstrap, alpha=0.05):
+    """
+    Given the retained bootstrap correlations, return:
+      - central (1-2*alpha) CI (so for alpha=.05 -> 90% CI)
+      - functions for one-sided tests: r < x and r > x
+    """
+    r_bootstrap = np.asarray(r_bootstrap)
+    if r_bootstrap.size == 0:
+        raise ValueError("No valid bootstrap replicates retained.")
+
+    lo = np.quantile(r_bootstrap, alpha)        # lower bound of central CI
+    hi = np.quantile(r_bootstrap, 1 - alpha)    # upper bound of central CI
+
+    def pval_r_less_than(x):
+        # p ≈ proportion of bootstrap >= x  (upper tail)
+        return float(np.mean(r_bootstrap >= x))
+
+    def pval_r_greater_than(x):
+        # p ≈ proportion of bootstrap <= x  (lower tail)
+        # NOTE: tends to be liberal in the paper (lower bound too high)
+        return float(np.mean(r_bootstrap <= x))
+
+    return (lo, hi), pval_r_less_than, pval_r_greater_than
 
 
 class Tessellation():
@@ -358,7 +455,7 @@ class Tessellation():
         return nt.join_giftis_to_cifti(giftis)
 
 class Rois():
-    def __init__(self, snS=None, M=None, glm_path=None, cifti_img=None, res_img=None, roi_path=None,
+    def __init__(self, snS=None, M=None, glm_path=None, cifti_img=None, res_img='ResMS.nii', roi_path=None,
                  roi_imgs=None, regressor_mapping=None, struct_names=['CortexLeft', 'CortexRight'],
                  regr_interest=None, n_jobs=16):
         self.snS = snS  # participants ids
@@ -382,10 +479,10 @@ class Rois():
             print(f'making dataset...subj{sn} - {roi_img}')
             betas_prewhitened, obs_des = calc_prewhitened_betas(glm_path=self.glm_path + '/' + f'subj{sn}',
                                                                 cifti_img='beta.dscalar.nii',
-                                                                res_img='ResMS.nii',
+                                                                res_img=self.res_img,
                                                                 roi_path=self.roi_path,
                                                                 roi_img=f'subj{sn}' + '/' + roi_img,
-                                                                struct_names=['CortexLeft', 'CortexRight'],
+                                                                struct_names=self.struct_names,
                                                                 reg_mapping=self.regressor_mapping,
                                                                 reg_interest=self.regr_interest,)
             Y.append(pcm.dataset.Dataset(betas_prewhitened, obs_descriptors=obs_des))
@@ -479,12 +576,13 @@ def pcm_rois(M, epoch, args):
     glm_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}')
     cifti_img = 'beta.dscalar.nii'
     roi_path = os.path.join(gl.baseDir, args.experiment, gl.roiDir)
-
     R = Rois(args.sns, M, glm_path, cifti_img,
              roi_path=roi_path,
              roi_imgs=roi_imgs,
              regressor_mapping=gl.regressor_mapping,
-             regr_interest=[0, 1, 2, 3, 4] if epoch == 'plan' else [5, 6, 7, 8, 9, 10, 11, 12,]
+             regr_interest=[0, 1, 2, 3, 4] if epoch == 'plan' else [5, 6, 7, 8, 9, 10, 11, 12,],
+             res_img='residual.dtseries.nii',
+             n_jobs=args.n_jobs
              )
     res = R.run_parallel_pcm_across_rois()
 
@@ -537,8 +635,8 @@ def main(args):
     if args.what == 'model_family_rois_planning':
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.p'), "rb")
         M = pickle.load(f)
-        R = Rois(args.sns, M, glm_path, cifti_img, roi_path=roi_path, roi_imgs=roi_imgs,
-                 regressor_mapping=gl.regressor_mapping, regr_interest=[0, 1, 2, 3, 4])
+        R = Rois(args.sns, M, glm_path, cifti_img, roi_path=roi_path, roi_imgs=roi_imgs, n_jobs=args.n_jobs,
+                 regressor_mapping=gl.regressor_mapping, regr_interest=[0, 1, 2, 3, 4], res_img='residual.dtseries.nii')
         res = R.fit_model_family_across_rois('component', comp_names=['cue', 'uncertainty'])
         for H in Hem:
             for roi in rois:
@@ -551,8 +649,8 @@ def main(args):
     if args.what == 'model_family_rois_execution':
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.exec.p'), "rb")
         M = pickle.load(f)
-        R = Rois(args.sns, M, glm_path, cifti_img, roi_path=roi_path, roi_imgs=roi_imgs,
-                 regressor_mapping=gl.regressor_mapping, regr_interest=[5, 6, 7, 8, 9, 10, 11, 12])
+        R = Rois(args.sns, M, glm_path, cifti_img, roi_path=roi_path, roi_imgs=roi_imgs, n_jobs=args.n_jobs,
+                 regressor_mapping=gl.regressor_mapping, regr_interest=[5, 6, 7, 8, 9, 10, 11, 12], res_img='residual.dtseries.nii')
         res = R.fit_model_family_across_rois('component', comp_names=['finger', 'cue', 'surprise'],
                                              basecomp=np.eye(8)[None, :, :])
         for H in Hem:
@@ -617,6 +715,7 @@ def main(args):
 
                 np.save(os.path.join(path, f'G_obs.plan-exec.glm{args.glm}.{H}.{roi}.npy'), G_obs)
     if args.what == 'correlation_plan-exec':
+        rng = np.random.default_rng(0) # seed for reprodocibility
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan-exec.p'), "rb")
         Mflex = pickle.load(f)
         for H in Hem:
@@ -628,7 +727,7 @@ def main(args):
                 for s, sn in enumerate(args.sns):
                     betas_prewhitened, obs_des = calc_prewhitened_betas(glm_path=os.path.join(glm_path, f'subj{sn}'),
                                                                cifti_img='beta.dscalar.nii',
-                                                               res_img='ResMS.nii',
+                                                               res_img='residual.dtseries.nii',
                                                                roi_path=os.path.join(roi_path, f'subj{sn}'),
                                                                roi_img=roi_imgs[r])
                     cond_vec, part_vec = obs_des['cond_vec'], obs_des['part_vec']
@@ -652,22 +751,33 @@ def main(args):
 
                     Y.append(pcm.dataset.Dataset(np.array(betas_reduced), obs_descriptors=obs_des_reduced))
 
-                T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False)
-                T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True)
-                # T_cv, theta_cv = pcm.fit_model_group_crossval(Y, Mflex, fixed_effect=None, fit_scale=True)
-
+                T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False, verbose=False)
+                T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True, verbose=False)
                 T_in.to_pickle(os.path.join(pcm_path, f'T_in.corr.glm{args.glm}.{H}.{roi}.p'))
                 T_gr.to_pickle(os.path.join(pcm_path, f'T_gr.corr.glm{args.glm}.{H}.{roi}.p'))
-                # T_cv.to_pickle(os.path.join(pcm_path, f'T_cv.corr.glm{args.glm}.{H}.{roi}.p'))
 
                 f = open(os.path.join(pcm_path, f'theta_in.corr.glm{args.glm}.{H}.{roi}.p'), 'wb')
                 pickle.dump(theta_in, f)
-
                 f = open(os.path.join(pcm_path, f'theta_gr.corr.glm{args.glm}.{H}.{roi}.p'), 'wb')
                 pickle.dump(theta_gr, f)
 
-                # f = open(os.path.join(pcm_path, f'theta_cv.corr.glm{args.glm}.{H}.{roi}.p'), 'wb')
-                # pickle.dump(theta_cv, f)
+                # do bootstrap
+                B = 1000
+                S = len(Y)
+                indeces = rng.integers(0, S, size=(B, S))
+                results = Parallel(n_jobs=16, backend='loky')(
+                    delayed(bootstrap_correlation)(idx, Y, Mflex) for idx in indeces
+                )
+                r_bootstrap = np.array([r for r in results if r is not None])
+                n_disc = len(results) - len(r_bootstrap)
+                print(f'ROI.{H}.{roi}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
+
+                np.save(os.path.join(pcm_path, f'r_bootstrap.{H}.{roi}.npy'), r_bootstrap)
+
+
+
+
+
     if args.what == 'correlation_plan-exec_within_finger':
 
         Mflex = pcm.CorrelationModel("flex", num_items=1, corr=None, cond_effect=False)

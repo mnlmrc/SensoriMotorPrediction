@@ -37,18 +37,27 @@ def main(args=None):
                 glm=args.glm
             )
             main(args)
-    # if args.what == 'save_betas_cifti_cerebellum':
-    #     path_rois = os.path.join(gl.baseDir, args.experiment, 'SUIT', gl.roiDir)
-    #     path_glm = os.path.join(gl.baseDir, args.experiment, 'SUIT', f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
-    #     reginfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
-    #                                        f'subj{args.sn}_reginfo.tsv'), sep="\t")
-    #     reginfo['name'] = reginfo['name'].str.strip().map(regr_new)
-    #     betas = [f'{path_glm}' + '/' + f'wdbeta_{i+1:04d}.nii' for i in range(reginfo.shape[0])]
-    #     masks = [os.path.join(path_rois, f'subj{args.sn}', f'cerebellum.{H}.nii') for H in Hem]
-    #     print(f'mask: {masks}')
-    #     row_axis = nb.cifti2.ScalarAxis(reginfo['name'] + '.' + reginfo['run'].astype(str))
-    #     cifti = bt.make_cifti_betas(path_glm, masks, struct=['Cerebellum', 'Cerebellum'], betas=betas, row_axis=row_axis)
-    #     nb.save(cifti, path_glm + '/' + 'beta.dscalar.nii')
+    if args.what == 'make_betas_cifti_cerebellum':
+        path_rois = os.path.join(gl.baseDir, args.experiment, 'SUIT', gl.roiDir)
+        path_glm = os.path.join(gl.baseDir, args.experiment, 'SUIT', f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+        reginfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}',
+                                           f'subj{args.sn}_reginfo.tsv'), sep="\t")
+        betas = [f'{path_glm}' + '/' + f'wdbeta_{i+1:04d}.nii' for i in range(reginfo.shape[0])]
+        masks = [os.path.join(path_rois, f'subj{args.sn}', f'cerebellum.{H}.nii') for H in Hem]
+        print(f'mask: {masks}')
+        row_axis = nb.cifti2.ScalarAxis(reginfo['name'].str.strip() + '.' + reginfo['run'].astype(str).str.strip())
+        cifti = bt.make_cifti_betas(path_glm, masks, struct=['Cerebellum', 'Cerebellum'], betas=betas, row_axis=row_axis)
+        nb.save(cifti, path_glm + '/' + 'beta.dscalar.nii')
+    if args.what == 'make_betas_cifti_cerebellum_all':
+        for sn in args.snS:
+            print(f'doing participant {sn}')
+            args = argparse.Namespace(
+                what='make_betas_cifti_cerebellum',
+                experiment=args.experiment,
+                sn=sn,
+                glm=args.glm
+            )
+            main(args)
     if args.what == 'make_contrasts_cifti':
         path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
         masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
@@ -72,7 +81,8 @@ def main(args=None):
             'condition': [],
             'sn': [],
             'roi': [],
-            'Hem': []
+            'Hem': [],
+            'epoch': []
         }
         for sn in args.snS:
             print(f'Processing subj{sn}')
@@ -89,50 +99,31 @@ def main(args=None):
                     for i, c in enumerate(con):
                         con_dict['con'].append(c)
                         con_dict['condition'].append(regr[i])
-                        con_dict['sn'].append(sn)
+                        con_dict['sn'].append(str(sn))
                         con_dict['roi'].append(roi)
                         con_dict['Hem'].append(H)
-    # if args.what == 'save_residuals_cifti':
-    #     SPM = spm.SpmGlm(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}'))  #
-    #     SPM.get_info_from_spm_mat()
-    #     for i, (s, H) in enumerate(zip(struct, Hem)):
-    #         mask = os.path.join(gl.baseDir, args.experiment, gl.roiDir, f'subj{args.sn}', f'Hem.{H}.nii')
-    #         atlas = am.AtlasVolumetric(H, mask, structure=s)
-    #         if i == 0:
-    #             brain_axis = atlas.get_brain_model_axis()
-    #             coords = nt.get_mask_coords(mask)
-    #         else:
-    #             brain_axis += atlas.get_brain_model_axis()
-    #             coords = np.concatenate((coords, nt.get_mask_coords(mask)), axis=1)
-    #     res, _, info = SPM.get_residuals(coords)
-    #     row_axis = nb.cifti2.SeriesAxis(1, 1, res.shape[0], 'second')
-    #     save_path = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
-    #     header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
-    #     cifti = nb.Cifti2Image(
-    #         dataobj=res,  # Stack them along the rows (adjust as needed)
-    #         header=header,  # Use one of the headers (may need to modify)
-    #     )
-    #     nb.save(cifti, save_path + '/' + 'residual.dtseries.nii')
-    if args.what == 'save_betas_cifti_cerebellum_all':
-        for sn in args.snS:
-            args = argparse.Namespace(
-                what='save_betas_cifti_cerebellum',
-                experiment=args.experiment,
-                sn=sn,
-                glm=args.glm
-            )
-            main(args)
+                        epoch = 'exec' if ('index' in regr[i]) or ('ring' in regr[i]) else 'plan'
+                        con_dict['epoch'].append(epoch)
+        con = pd.DataFrame.from_dict(con_dict)
+        con.to_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', 'ROI.con.avg.tsv'),
+                   sep='\t', index=False)
+    if args.what == 'make_residuals_cifti':
+        path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+        masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
+        residuals = bt.make_cifti_residuals(path_glm, masks, struct)
+        nb.save(residuals, path_glm + '/' + 'residual.dtseries.nii')
+    if args.what == 'make_4D_residuals_nifti':
+        path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+        cifti = nb.load(path_glm + '/' + 'residual.dtseries.nii')
+        nifti = nt.volume_from_cifti(cifti, struct_names=struct)
+        nb.save(nifti, path_glm + '/' + 'residual.nii')
+        pass
 
-
-        con_df = pd.DataFrame(con_dict)
-        con_df.to_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', 'ROI.con.avg.tsv'),
-                      sep='\t',index=False)
-
-    if args.what == 'save_residuals_cifti_all':
+    if args.what == 'make_residuals_cifti_all':
         for sn in args.snS:
             print(f'Processing subj{sn}...')
             arg = argparse.Namespace(
-                what='save_residuals_cifti',
+                what='make_residuals_cifti',
                 experiment=args.experiment,
                 sn=sn,
                 glm=args.glm

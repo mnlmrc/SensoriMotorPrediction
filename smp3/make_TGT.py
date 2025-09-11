@@ -2,10 +2,10 @@ import pandas as pd
 import numpy as np
 
 experiment = 'smp3'
-sn = 101
+sn = 102
 nruns = 10
 
-df_no_tms = pd.read_csv("target/smp3_template_no_tms.tgt", sep="\t")
+df_no_tms = pd.read_csv("/cifs/diedrichsen/data/SensoriMotorPrediction/smp3/target/smp3_template_no_tms.tgt", sep="\t")
 df_no_tms_shuffled = df_no_tms.sample(frac=1).reset_index(drop=True)
 
 batch_size = 4
@@ -14,7 +14,7 @@ b = 0
 
 for run in range(nruns):
     # Load the file
-    df = pd.read_csv("target/smp3_template.tgt", sep="\t")
+    df = pd.read_csv("/cifs/diedrichsen/data/SensoriMotorPrediction/smp3/target/smp3_template.tgt", sep="\t")
 
     # Shuffle planTime independently
     df['planTime'] = np.random.permutation(df['planTime'].values)
@@ -45,4 +45,5 @@ for run in range(nruns):
     df['startTime'] = start_times
 
     # Save result
-    df.to_csv(f"target/{experiment}_{sn}_{run+1:02}.tgt", sep="\t", index=False)
+    df.to_csv(f"/cifs/diedrichsen/data/SensoriMotorPrediction/smp3/target/{experiment}_{sn}_{run+1:02}.tgt",
+              sep="\t", index=False)
