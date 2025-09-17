@@ -361,7 +361,7 @@ for m = 1:length(monkeys)
             end
         
             %% ---------- Prepare output .mat and batching ----------
-            outPath = fullfile(outDir, ['Recording-' num2str(num_recording) '.mat']);
+            outPath = fullfile(outDir, sprintf('recording.%s-%d.mat',region, num_recording));
             mf = matfile(outPath, 'Writable', true);
             
             Tr = numSuccess;
