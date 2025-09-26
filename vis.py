@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 import PcmPy as pcm
 from pcm_models import find_model
+from sklearn.preprocessing import MinMaxScaler
 from matplotlib.cm import ScalarMappable
 from matplotlib.patches import Rectangle, FancyBboxPatch, Patch
 import surfAnalysisPy as surf
@@ -16,15 +17,13 @@ import os
 from pcm_cortical import bootstrap_summary
 import globals as gl
 from scipy.stats import ttest_1samp, ttest_rel
-import matplotlib.transforms as mtransforms
 import SUITPy.flatmap as flatmap
 import seaborn as sb
 import pandas as pd
 import mat73
-from pcm_lfp import make_freq_masks
+from depreciated.pcm_lfp import make_freq_masks
 from scipy.stats import linregress, t
 from util import concat_hrf
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from itertools import combinations
 import warnings
 
@@ -326,42 +325,53 @@ def plot_bold(fig, axs, T, H, rois):
 
     return fig, axs
 
-def plot_surf(fig, ax, cifti, H, vmin=-10, vmax=10, cmap='viridis', col=0, thresh=.01, title=None):
+def plot_surf(fig, ax, surf_data, H, vmin=-10, vmax=10, cmap='viridis', col=0, thresh=.01, title=None,
+              overlay='overlay'):
 
     Hem = ['L', 'R']
     h = Hem.index(H)
 
-    column_names = cifti.header.get_axis(0).name
-    giftis = nt.split_cifti_to_giftis(cifti, type='func', column_names=column_names)
-
     surf = nb.load(f'/cifs/diedrichsen/data/Atlas_templates/fs_LR_32/fs_LR.32k.{H}.very_inflated.surf.gii')
     coords = surf.darrays[0].data
     faces = surf.darrays[1].data.astype(np.uint32)  # pyvista requires uint32
-    data = nt.get_gifti_data_matrix(giftis[h])[:, col]
-    mask = (data > thresh) | (data < -thresh)
     faces = np.hstack([np.full((faces.shape[0], 1), 3), faces]).astype(np.int32).flatten()
-
     sulc = nt.get_gifti_data_matrix(
         nb.load(f'/cifs/diedrichsen/data/Atlas_templates/fs_LR_32/fs_LR.32k.LR.sulc.dscalar.gii'))
+
+    if isinstance(surf_data, nb.Cifti2Image):
+        column_names = surf_data.header.get_axis(0).name
+        giftis = nt.split_cifti_to_giftis(surf_data, type='func', column_names=column_names)
+        data = nt.get_gifti_data_matrix(giftis[h])[:, col]
+    elif isinstance(surf_data, nb.GiftiImage):
+        data = nt.get_gifti_data_matrix(surf_data)[:, col]
+    if isinstance(surf_data, np.ndarray):
+        data = surf_data
+
     if H == 'L':
         sulc = sulc[:len(data)]
     else:
         sulc = sulc[len(data):]
 
     if thresh is not None:
+        mask = (data > thresh) | (data < -thresh)
         data[~mask] = np.nan
 
     mesh = pv.PolyData(coords, faces)
-    mesh.point_data["overlay"] = data
-
     mesh.point_data["sulc"] = sulc
+    mesh.point_data[overlay] = data
 
     border_verts = load_border_vertices_xml(
         f'/home/UWO/memanue5/Documents/GitHub/surfAnalysisPy/standard_mesh/fs_{H}/fs_LR.32k.{H}.border')
     border = coords[border_verts]
     p = pv.Plotter(window_size=(600, 600), off_screen=True)
     p.add_mesh(mesh, scalars="sulc", cmap="Greys", clim=[-2, 2], lighting=True, show_scalar_bar=False)
-    p.add_mesh(mesh, scalars="overlay", cmap=cmap, clim=[vmin, vmax], lighting=True, show_scalar_bar=False)
+    p.add_mesh(mesh,
+               scalars=overlay,
+               cmap=cmap if overlay=='overlay' else None,
+               rgb=overlay=='rgb',
+               clim=[vmin, vmax],
+               lighting=True,
+               show_scalar_bar=False)
     p.add_points(border[::3], color='w', point_size=6, render_points_as_spheres=True)
     p.set_background("white")
     if H == 'L':
@@ -380,6 +390,24 @@ def plot_surf(fig, ax, cifti, H, vmin=-10, vmax=10, cmap='viridis', col=0, thres
     ax.set_title(title, fontsize=20, pad=18)
 
     return fig, ax
+
+def load_border_vertices_xml(filepath):
+    vertices = []
+    inside_vertices_block = False
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if "<Vertices>" in line:
+                inside_vertices_block = True
+                line = line.replace("<Vertices>", "")
+            if inside_vertices_block:
+                if "</Vertices>" in line:
+                    line = line.replace("</Vertices>", "")
+                    inside_vertices_block = False
+                if line:
+                    numbers = [int(x) for x in line.split()]
+                    vertices.extend(numbers)
+    return np.array(vertices)
 
 def plot_surf_label(fig, ax, gifti, H, cmap='viridis', view='lateral'):
     Hem = ['L', 'R']
@@ -460,26 +488,24 @@ def plot_avg_activation(fig, axs, con, H, rois):
 
     return fig, axs
 
-def plot_dissimilarities(fig, axs, panel, G, ticklabels, vmin=None, vmax=None, sqrt=False, source=None):
+def plot_dissimilarities(fig, axs, panel, D, ticklabels, vmin=None, vmax=None, sqrt=False, source=None):
     if panel is not None:
         ax = axs[panel]
     else:
         ax = axs
-    D = pcm.G_to_dist(G.mean(axis=0))
+
+    mask = np.tri(D.shape[1], k=-1, dtype=bool)
+    Dd = D[:, mask].mean(axis=-1)
+
     if sqrt:
         D = np.sign(D) * np.sqrt(np.abs(D))
-    h = ax.imshow(D,vmin=vmin,vmax=vmax)
-    ax.set_xticks(np.linspace(0, G.shape[1] - 1, G.shape[1]))
-    ax.set_yticks(np.linspace(0, G.shape[1] - 1, G.shape[1]))
+    h = ax.imshow(D.mean(axis=0),vmin=vmin,vmax=vmax)
+    ax.set_xticks(np.linspace(0, D.shape[1] - 1, D.shape[1]))
+    ax.set_yticks(np.linspace(0, D.shape[1] - 1, D.shape[1]))
     ax.set_xticklabels(ticklabels, rotation=90)
     ax.set_yticklabels(ticklabels)
 
-    D = np.zeros(G.shape[0])
-    for g, Gg in enumerate(G):
-        mask = np.tri(Gg.shape[0], k=-1, dtype=bool)
-        D[g] = pcm.G_to_dist(Gg)[mask].mean()
-
-    tval, pval = ttest_1samp(D, 0)
+    tval, pval = ttest_1samp(Dd, 0)
     print(f'{source}: tval={tval}, pval={pval}')
 
     return fig, axs
@@ -521,10 +547,10 @@ def plot_likelihood(fig, axs, likelihood, x='roi', color='k', width=.8):
 
     return fig, axs
 
-def plot_var_expl(fig, axs, panel, G, param_c, param_f=None, components=['finger', 'cue', 'surprise'],
+def plot_var_expl(fig, axs, panel, param_c, components=['finger', 'cue', 'surprise'],
                   palette=['#D4AF37', 'red', 'magenta']):
 
-    tr = np.array([np.trace(Gg) for Gg in G]) # trace of observed G matrix
+    # tr = np.array([np.trace(Gg) for Gg in G]) # trace of observed G matrix
 
     # variance explained
     var_expl = np.exp(param_c)
@@ -533,9 +559,9 @@ def plot_var_expl(fig, axs, panel, G, param_c, param_f=None, components=['finger
 
     sb.barplot(data=var_expl.T, ax=ax, palette=palette, errorbar='se', width=1)
     ax.set_xticks(ax.get_xticks())
-    ax.axhline(tr.mean(), color='grey', lw=2, ls=':')
-    ax.axhspan(tr.mean() - tr.std() / np.sqrt(len(tr)), tr.mean() + tr.std() / np.sqrt(len(tr)), color='grey', alpha=.2,
-               lw=0)
+    # ax.axhline(tr.mean(), color='grey', lw=2, ls=':')
+    # ax.axhspan(tr.mean() - tr.std() / np.sqrt(len(tr)), tr.mean() + tr.std() / np.sqrt(len(tr)), color='grey', alpha=.2,
+    #            lw=0)
     ax.spines[['top', 'right', 'bottom']].set_visible(False)
     if panel>0:
         ax.spines['left'].set_visible(False)
@@ -689,7 +715,7 @@ def plot_comp_bayes(fig, axs, panel, c_bf, components=['finger', 'cue', 'surpris
 
     return fig, axs
 
-def plot_pcm_corr(fig, axs, panel, Mflex, theta, theta_g, r_bootstrap):
+def plot_pcm_corr(fig, axs, panel, Mflex, theta, theta_g, r_bootstrap=None):
     ax = axs[panel]
 
     N = theta.shape[1]
@@ -707,18 +733,18 @@ def plot_pcm_corr(fig, axs, panel, Mflex, theta, theta_g, r_bootstrap):
     ax.axhline(0, color='k', linestyle='-', lw=.8)
 
     ax.set_ylim(-1.2, 1.2)
-    # ax.set_xlim(-.05, .5)
 
     ax.spines[['top', 'right', 'left']].set_visible(False)
 
     if panel == 0:
         ax.spines[['left']].set_visible(True)
     else:
-        ax.set_yticks([])
+        ax.tick_params(left=False)
 
-    (ci_lo, ci_hi), _, _ = bootstrap_summary(r_bootstrap, alpha=0.05)
-    print(f"group estimate:{r_group[0]} central 90% CI for r: [{ci_lo:.3f}, {ci_hi:.3f}]")
-    ax.axhspan(ci_lo, ci_hi, lw=0, color='lightgrey', zorder=0)
+    if r_bootstrap is not None:
+        (ci_lo, ci_hi), _, _ = bootstrap_summary(r_bootstrap, alpha=0.05)
+        print(f"group estimate:{r_group[0]} central 90% CI for r: [{ci_lo:.3f}, {ci_hi:.3f}]")
+        ax.axhspan(ci_lo, ci_hi, lw=0, color='lightgrey', zorder=0)
 
     sigma_g_2_1 = np.exp(theta_g[0, 0])
     sigma_g_2_2 = np.exp(theta_g[1, 0])
@@ -882,79 +908,79 @@ def plot_theta_lfp(row, axs, var_expl, color):
 
     return ax
 
-def pcm_spike(fig, axs, roi, epoch, monkey, rec):
-    # temporal landmarks
-    cuePre = 0
-    cueIdx = 20
-    cuePost = 84
-    pertIdx = 114
-
-    xtick = cueIdx if epoch == 'plan' else pertIdx
-    xticklabel = 'Cue' if epoch == 'plan' else 'Pert'
-    xlim = [cuePre, cuePost] if epoch == 'plan' else [cuePost, 154]
-    rangePre = np.arange(cuePre, cueIdx) if epoch == 'plan' else np.arange(cuePost, pertIdx)
-    rangePost = np.arange(cueIdx, cuePost) if epoch == 'plan' else np.arange(pertIdx, 145)
-
-    # load data
-    G_obs, var_expl, cov, stds = [], [], [], []
-    for r in rec:
-        path = os.path.join(gl.baseDir, 'smp2', 'spikes', gl.pcmDir)
-        G_obs.append(np.load(os.path.join(path, f'G_obs.spike.{monkey}.{roi}.aligned.{epoch}-{r}.npy')))
-
-        # calc variance
-        theta_c = np.load(os.path.join(path, f'theta_in.spike.component.{monkey}.{roi}.aligned.{epoch}-{r}.npy'))
-        n_param_c = theta_c.shape[-1] - 1
-        var_expl.append(np.sqrt(np.exp(theta_c[..., :n_param_c])))
-
-        if epoch == 'exec':
-            theta_f = np.load(os.path.join(path, f'theta_in.spike.feature.{monkey}.{roi}.aligned.{epoch}-{r}.npy'))
-            cov.append(theta_f[:, 1] * theta_f[:, 2])
-            stds.append(np.sqrt((theta_f[:, 0]**2 + theta_f[:, 1]**2) * theta_f[:, 2]**2))
-
-    var_expl = np.array(var_expl).mean(axis=0)
-    G_obs = np.array(G_obs).mean(axis=0)
-    cov = np.array(cov)
-    stds = np.array(stds)
-    correlation = (cov / stds).mean(axis=0)
-
-    color = ['red', 'blue'] if epoch == 'plan' else ['#FFCC33', 'red', 'blue', 'magenta', 'k']
-    linestyle = ['-', '-', '-', '-', '--']
-    components = ['cue', 'uncertainty'] if epoch == 'plan' else ['direction', 'cue', 'uncertainty', 'surprise', 'noise ceiling']
-    tr = np.sqrt(np.trace(G_obs, axis1=1, axis2=2))
-
-    ax = plot_theta_lfp(0, axs, var_expl, color=color)
-
-    # covariance
-    if epoch == 'exec':  # only execution models contain feature model
-        inset = ax.inset_axes([0.12, 0.6, 0.3, 0.5], transform=ax.transAxes)
-        inset.plot(correlation, color='cyan')
-        inset.axvline(xtick, color='k', lw=.8)
-        inset.axhline(0, color='k', lw=.8)
-        inset.set_xticks([xtick])
-        inset.set_ylim((-1, 1))
-        # inset.spines[['bottom', 'right', 'top']].set_visible(False)
-        inset.spines['left'].set_bounds(-1, 1)
-        inset.set_xticklabels([xticklabel])
-        inset.set_xlim(xlim)
-        inset.set_title('correlation', fontsize=10)
-
-    ax.plot(tr, ls='--', color='k')
-
-    lines = [plt.Line2D([], [], color=c, linestyle=ls) for c, ls in zip(color, linestyle)]
-    fig.legend(lines, components, loc='center left', fontsize=9, ncol=1, bbox_to_anchor=(1, .5), frameon=False)
-
-    ax.axvline(xtick, color='k', lw=.8)
-    ax.set_xticks([xtick])
-    ax.set_xticklabels([xticklabel])
-    ax = plot_theta_lfp_mean(0, 1, axs, var_expl[rangePre].mean(axis=0),
-                             var_expl[rangePost].mean(axis=0), color=color)
-    axs[0].set_xlim(xlim)
-    fig.supylabel('variance (a.u.)', fontsize='medium')
-    fig.suptitle(f'Variance explained by component model (monkey {monkey[0]}, {roi})')
-    fig.tight_layout()
-    fig.subplots_adjust(bottom=.1)
-
-    return fig, axs
+# def pcm_spike(fig, axs, roi, epoch, monkey, rec):
+#     # temporal landmarks
+#     cuePre = 0
+#     cueIdx = 20
+#     cuePost = 84
+#     pertIdx = 114
+#
+#     xtick = cueIdx if epoch == 'plan' else pertIdx
+#     xticklabel = 'Cue' if epoch == 'plan' else 'Pert'
+#     xlim = [cuePre, cuePost] if epoch == 'plan' else [cuePost, 154]
+#     rangePre = np.arange(cuePre, cueIdx) if epoch == 'plan' else np.arange(cuePost, pertIdx)
+#     rangePost = np.arange(cueIdx, cuePost) if epoch == 'plan' else np.arange(pertIdx, 145)
+#
+#     # load data
+#     G_obs, var_expl, cov, stds = [], [], [], []
+#     for r in rec:
+#         path = os.path.join('/cifs/pruszynski/Marco/SensoriMotorPrediction', 'spikes', gl.pcmDir)
+#         G_obs.append(np.load(os.path.join(path, f'G_obs.spike.{monkey}.{roi}.aligned.{epoch}-{r}.npy')))
+#
+#         # calc variance
+#         theta_c = np.load(os.path.join(path, f'theta_in.spike.component.{monkey}.{roi}.aligned.{epoch}-{r}.npy'))
+#         n_param_c = theta_c.shape[-1] - 1
+#         var_expl.append(np.sqrt(np.exp(theta_c[..., :n_param_c])))
+#
+#         if epoch == 'exec':
+#             theta_f = np.load(os.path.join(path, f'theta_in.spike.feature.{monkey}.{roi}.aligned.{epoch}-{r}.npy'))
+#             cov.append(theta_f[:, 1] * theta_f[:, 2])
+#             stds.append(np.sqrt((theta_f[:, 0]**2 + theta_f[:, 1]**2) * theta_f[:, 2]**2))
+#
+#     var_expl = np.array(var_expl).mean(axis=0)
+#     G_obs = np.array(G_obs).mean(axis=0)
+#     cov = np.array(cov)
+#     stds = np.array(stds)
+#     correlation = (cov / stds).mean(axis=0)
+#
+#     color = ['red', 'blue'] if epoch == 'plan' else ['#FFCC33', 'red', 'blue', 'magenta', 'k']
+#     linestyle = ['-', '-', '-', '-', '--']
+#     components = ['cue', 'uncertainty'] if epoch == 'plan' else ['direction', 'cue', 'uncertainty', 'surprise', 'noise ceiling']
+#     tr = np.sqrt(np.trace(G_obs, axis1=1, axis2=2))
+#
+#     ax = plot_theta_lfp(0, axs, var_expl, color=color)
+#
+#     # covariance
+#     if epoch == 'exec':  # only execution models contain feature model
+#         inset = ax.inset_axes([0.12, 0.6, 0.3, 0.5], transform=ax.transAxes)
+#         inset.plot(correlation, color='cyan')
+#         inset.axvline(xtick, color='k', lw=.8)
+#         inset.axhline(0, color='k', lw=.8)
+#         inset.set_xticks([xtick])
+#         inset.set_ylim((-1, 1))
+#         # inset.spines[['bottom', 'right', 'top']].set_visible(False)
+#         inset.spines['left'].set_bounds(-1, 1)
+#         inset.set_xticklabels([xticklabel])
+#         inset.set_xlim(xlim)
+#         inset.set_title('correlation', fontsize=10)
+#
+#     ax.plot(tr, ls='--', color='k')
+#
+#     lines = [plt.Line2D([], [], color=c, linestyle=ls) for c, ls in zip(color, linestyle)]
+#     fig.legend(lines, components, loc='center left', fontsize=9, ncol=1, bbox_to_anchor=(1, .5), frameon=False)
+#
+#     ax.axvline(xtick, color='k', lw=.8)
+#     ax.set_xticks([xtick])
+#     ax.set_xticklabels([xticklabel])
+#     ax = plot_theta_lfp_mean(0, 1, axs, var_expl[rangePre].mean(axis=0),
+#                              var_expl[rangePost].mean(axis=0), color=color)
+#     axs[0].set_xlim(xlim)
+#     fig.supylabel('variance (a.u.)', fontsize='medium')
+#     fig.suptitle(f'Variance explained by component model (monkey {monkey[0]}, {roi})')
+#     fig.tight_layout()
+#     fig.subplots_adjust(bottom=.1)
+#
+#     return fig, axs
 
 
 def plot_flatmap_cortical_activation(img, vmin=-20, vmax=20, xlim=None, ylim=None, figsize=(5, 6),
@@ -1273,14 +1299,12 @@ def main(args, **kwargs):
     if args.what=='surf_activation':
         thresh = 1
         vmin, vmax = tuple(map(float, kwargs.get('vlim', (-15, 15))))
-
         cold_colors = [(0, 0, 0), (0, 0, 1), (0, 1, 1), (1, 1, 1)]  # RGB tuples
         cold = LinearSegmentedColormap.from_list('cold_custom', cold_colors, N=128)
         hot = plt.cm.hot(np.linspace(0, 1, 128))
         cold_vals = cold(np.linspace(1, 0, 128))  # reversed
         combined = np.vstack((cold_vals, hot))
         cmap = LinearSegmentedColormap.from_list('coldhot', combined)
-
         cifti = nb.load(
             os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'glm{args.glm}.con.plan-exec.smooth.dscalar.nii'))
         fig, ax = plt.subplots()
@@ -1313,8 +1337,6 @@ def main(args, **kwargs):
 
         plt.show()
     if args.what=='dissimilarities_cortical':
-        experiment = 'smp2'
-        H = 'L'
         figsize = tuple(map(float, kwargs.get('figsize', (8, 2))))
         vmin, vmax = tuple(map(float, kwargs.get('vlim', (-.01, 1))))
         if args.epoch == 'plan':
@@ -1325,14 +1347,41 @@ def main(args, **kwargs):
             suptitle = 'Crossnobis dissimilarities during response execution'
         fig, axs = plt.subplots(1, len(args.rois), figsize=figsize, sharex=True, sharey=True,)
         for r, roi in enumerate(args.rois):
-            G = np.load(os.path.join(gl.baseDir, experiment, gl.pcmDir, f'G_obs.{args.epoch}.glm{args.glm}.{args.H}.{roi}.npy'))
-            fig, axs = plot_dissimilarities(fig, axs, r, G, ticklabels, vmin=vmin, vmax=vmax, sqrt=True)
+            G = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'G_obs.{args.epoch}.glm{args.glm}.{args.H}.{roi}.npy'))
+            D = pcm.G_to_dist(G)
+            fig, axs = plot_dissimilarities(fig, axs, r, D, ticklabels, vmin=vmin, vmax=vmax, sqrt=True)
             axs[r].set_title(roi)
         cax = axs[-1].get_images()[0]
         cbar = fig.colorbar(cax, ax=axs, orientation='vertical', fraction=.008)
         cbar.set_label('dissimilarity (a.u.)')
         fig.suptitle(suptitle)
         plt.savefig(os.path.join(path_fig, f'dissimilarity.{args.epoch}.{args.H}.svg'))
+        plt.show()
+    if args.what=='mds_cortical':
+        figsize = tuple(map(float, kwargs.get('figsize', (12, 3))))
+        xlim = tuple(map(float, kwargs.get('vlim', (-.2, .2))))
+        color = list(gl.colour_mapping.values())[:5] if args.epoch=='plan' else list(gl.colour_mapping.values())[5:13]
+        fig, axs = plt.subplots(1, len(args.rois), figsize=figsize, sharex=True, sharey=True, constrained_layout=True)
+        for r, roi in enumerate(args.rois):
+            ax = axs[r]
+            G = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'G_obs.{args.epoch}.glm{args.glm}.{args.H}.{roi}.npy'))
+            mds, _ = pcm.classical_mds(G.mean(axis=0))
+            ax.scatter(mds[:, 0], mds[:, 1], color=color)
+            ax.set_aspect('equal')
+            ax.set_ylim(ax.get_xlim())
+            ax.set_xlabel('PC1')
+            ax.set_title(roi)
+            ax.set_xticks(xlim)
+            ax.set_yticks(ax.get_xticks())
+            ax.spines[['left', 'top', 'right']].set_visible(False)
+            ax.spines[['left', 'bottom']].set_bounds(xlim)
+            if r == 0:
+                ax.spines['left'].set_visible(True)
+                ax.set_ylabel('PC2')
+            else:
+                ax.tick_params(axis='y', left=False)
+            fig.suptitle('Multidimensional scaling')
+            plt.savefig(os.path.join(path_fig, f'mds.{args.epoch}.{args.H}.svg'))
         plt.show()
     if args.what=='representational_models':
         vmin, vmax = tuple(map(float, kwargs.get('vlim', (0, 1))))
@@ -1365,7 +1414,7 @@ def main(args, **kwargs):
         components = kwargs.get('components', ['finger', 'cue', 'surprise'])
         basecomponents = None if args.epoch == 'plan' else np.eye(Mc.Gc.shape[1])[None, :, :]
         MF = pcm.model.ModelFamily(Mc.Gc, comp_names=components, basecomponents=basecomponents)
-        palette = kwargs.get('palette', ['#D4AF37', 'red', 'magenta'])
+        palette = kwargs.get('palette', ['#FFFF00', 'red', 'cyan'])
         figsize = tuple(map(float, kwargs.get('figsize', (8, 4))))
         pcm_path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
         fig, axs = plt.subplots(1, len(args.rois), figsize=figsize, sharey=True, )
@@ -1373,8 +1422,7 @@ def main(args, **kwargs):
             f = open(os.path.join(pcm_path, f'theta_in.{args.epoch}.glm{args.glm}.{args.H}.{roi}.p'), "rb")
             param = pickle.load(f)
             param_c = param[idxc][:n_param_c]
-            G = np.load(os.path.join(pcm_path, f'G_obs.{args.epoch}.glm{args.glm}.{args.H}.{roi}.npy'))
-            fig, axs = plot_var_expl(fig, axs, r, G, param_c, components=components, palette=palette)
+            fig, axs = plot_var_expl(fig, axs, r, param_c, components=components, palette=palette)
         for r, roi in enumerate(args.rois):
             f = open(os.path.join(pcm_path, f'theta_in.{args.epoch}.glm{args.glm}.{args.H}.{roi}.p'), "rb")
             param = pickle.load(f)
@@ -1391,6 +1439,103 @@ def main(args, **kwargs):
         fig.subplots_adjust(bottom=.2, top=.8)
         axs[0].spines['left'].set_bounds(axs[0].get_yticks()[0], axs[0].get_yticks()[-2])
         fig.savefig(os.path.join(path_fig, f'var_expl.{args.epoch}.glm{args.glm}.{args.H}.svg'))
+        plt.show()
+    if args.what=='%variance':
+        rois_prim = ['M1', 'S1']
+        rois_high = ['PMd', 'SPLa', 'SPLp']
+        Mc, idxc = find_model(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.{args.epoch}.p'), 'component')
+        n_param_c = Mc.n_param
+        var_expl_prim = []
+        for roi in rois_prim:
+            f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'theta_in.{args.epoch}.glm{args.glm}.{args.H}.{roi}.p'), "rb")
+            param = pickle.load(f)
+            param_c = param[idxc][:n_param_c]
+            var_expl_prim.append(np.exp(param_c))
+
+        var_expl_high = []
+        for roi in rois_high:
+            f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'theta_in.{args.epoch}.glm{args.glm}.{args.H}.{roi}.p'), "rb")
+            param = pickle.load(f)
+            param_c = param[idxc][:n_param_c]
+            var_expl_high.append(np.exp(param_c))
+
+        var_expl_prim = np.array(var_expl_prim).mean(axis=0)
+        var_expl_high = np.array(var_expl_high).mean(axis=0)
+        ratio_prim = var_expl_prim[0] / (var_expl_prim[-1] + var_expl_prim[0])
+        ratio_high = var_expl_high[0] / (var_expl_high[-1] + var_expl_high[0])
+        ratio = np.c_[ratio_prim, ratio_high]
+        ratio_avg = ratio.mean(axis=0)
+        ratio_err = ratio.std(axis=0) / np.sqrt(ratio.shape[0])
+
+        fig, ax = plt.subplots(figsize=(1, 2))
+
+        ax.bar(['M1-S1', 'PMd-SPL'], ratio_avg, yerr=ratio_err, facecolor='k')
+        ax.spines[['top', 'right']].set_visible(False)
+        ax.set_xticklabels(labels=['M1-S1', 'PMd-SPL'], rotation=90)
+        ax.set_ylabel(f"% variance explained by {'cue' if args.epoch=='plan' else 'finger'}")
+
+        tval, pval = ttest_rel(ratio[:, 0], ratio[:, 1], alternative='two-sided')
+        print(f"M1-S1/prem-pariet ratio, tval={tval}, pval={pval}")
+        if pval < 0.001:
+            stars = '***'
+        elif pval < 0.01:
+            stars = '**'
+        elif pval < 0.05:
+            stars = '*'
+        else:
+            stars = None
+        if stars:
+            y_max = ratio.mean(axis=0).max()
+            y_argmax = ratio.mean(axis=0).argmax()
+            se = ratio[y_argmax].std() / np.sqrt(ratio.shape[0])
+            y_max += se
+            y_max0 = y_max
+            center = .5
+            x1 = center - .4
+            x2 = center + .4
+            offset = .1 * ax.get_ylim()[1]
+            ax.plot([x1, x2], [y_max + offset, y_max + offset], lw=1.5, c='k')
+            ax.text(center, y_max + offset, stars, ha='center', va='bottom', fontsize=10)
+        fig.savefig(os.path.join(path_fig, f'%var_expl.{args.epoch}.glm{args.glm}.{args.H}.svg'))
+        plt.show()
+    if args.what=='searchlight':
+        mclip = .3
+        threshold = .1 / mclip
+        scaler = MinMaxScaler()
+        gifti = nb.load(os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'searchlight.var_expl.{args.epoch}.{args.H}.func.gii'))
+        data = nt.get_gifti_data_matrix(gifti)
+        raw_min, raw_max = np.nanmin(data), np.nanmax(data)
+        data = scaler.fit_transform(data)
+        data = np.clip(data / mclip, 0, 1)
+        sulc = nt.get_gifti_data_matrix(
+            nb.load(f'/cifs/diedrichsen/data/Atlas_templates/fs_LR_32/fs_LR.32k.LR.sulc.dscalar.gii'))
+        sulc = sulc[:len(data)]
+        sulc_norm = MinMaxScaler((0.3, 0.7)).fit_transform(sulc.reshape(-1, 1)).flatten()
+        rgba = np.zeros((len(sulc_norm), 4))
+        rgba[:, 0] = sulc_norm  # red = grey
+        rgba[:, 1] = sulc_norm  # green = grey
+        rgba[:, 2] = sulc_norm  # blue = grey
+        rgba[:, 3] = 1.0  # opaque background
+        overlay_mask = (data[:, 0] >= threshold) | (data[:, 1] >= threshold)
+        rgba[overlay_mask, 0] = data[overlay_mask, 0]  # red
+        rgba[overlay_mask, 1] = 0  # green stays off for 2-color blend
+        rgba[overlay_mask, 2] = data[overlay_mask, 1]  # blue
+        rgba[overlay_mask, 3] = 1.0  # alpha: opaque overlay
+        rgba[~overlay_mask, 3] = 1.0  # still show grey background
+        fig, ax = plt.subplots()
+        fig, ax = plot_surf(fig, ax, rgba, args.H, cmap=None, vmin=None, vmax=None, overlay='rgb')
+        blue_half = LinearSegmentedColormap.from_list("blue_half", ["black", "blue"])
+        neg_norm = Normalize(vmin=raw_min, vmax=raw_max)
+        sm_neg = ScalarMappable(norm=neg_norm, cmap=blue_half)
+        red_half = LinearSegmentedColormap.from_list("red_half", ["black", "red"])
+        pos_norm = Normalize(vmin=raw_min, vmax=raw_max)
+        sm_pos = ScalarMappable(norm=pos_norm, cmap=red_half)
+        cax_neg = fig.add_axes([0.20, 0.10, 0.28, 0.025])  # left (blue)
+        cax_pos = fig.add_axes([0.52, 0.10, 0.28, 0.025])  # right (red)
+        cbar_neg = fig.colorbar(sm_neg, cax=cax_neg, orientation='horizontal')
+        cbar_pos = fig.colorbar(sm_pos, cax=cax_pos, orientation='horizontal')
+        cbar_neg.set_label('variance (a.u.)')
+        fig.savefig(os.path.join(path_fig, f'searchlight.var_expl.{args.epoch}.glm{args.glm}.{args.H}.svg'))
         plt.show()
     if args.what=='interaction_cortical':
         Mf, idxf = find_model(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'M.exec.p'), 'feature')
@@ -1465,17 +1610,16 @@ def main(args, **kwargs):
         for s, sn in enumerate(args.sns):
             dat = pd.read_csv(
                 os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}', f'{args.experiment}_{sn}.dat'), sep='\t')
+            dat = dat[(dat['cue'] == 93) | (dat['cue'] == 39)]
             diff[s] = dat['forceDiff'].mean()
 
         fig, axs = plt.subplots(1, len(rois), sharex=True, sharey=True, figsize=(4, 3))
 
         for r, roi in enumerate(rois):
-            f = open(os.path.join(pcm_path, f'theta_in.plan.glm{args.glm}.{args.H}.{roi}.p'), "rb")
-            param = pickle.load(f)
-            param_c = param[3][:2]
-            var_expl = np.exp(param_c)
+            G = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'G_obs.plan.glm{args.glm}.{args.H}.{roi}.npy'))
+            D = pcm.G_to_dist(G)
             x = diff
-            y = var_expl[0]
+            y = D.mean(axis=(1, 2))
             fig, axs = plot_correlation(fig, axs, r, x, y, alternative_slope='two-sided',
                                         alternative_intercept='two-sided')
             axs[r].set_title(roi)
@@ -1483,11 +1627,12 @@ def main(args, **kwargs):
         for ax in axs:
             yticks = ax.get_yticks()
             xticks = ax.get_xticks()
-            ax.spines['left'].set_bounds(yticks[2], yticks[-2])
+            ax.spines['left'].set_bounds(yticks[1], yticks[-2])
             ax.spines['bottom'].set_bounds(xticks[1], xticks[-2])
 
-        axs[0].set_ylabel('variance explained\nby probability cue (a.u.)', fontsize=10)
+        axs[0].set_ylabel('dissimilarity (a.u.)', fontsize=10)
         axs[1].tick_params('y', left=False)
+        fig.suptitle('Finger pre-activation vs. average dissimilarity')
         fig.supxlabel('finger pre-activation (N)', fontsize=10)
 
         # fig.suptitle('Finger pre-activation\nvs. variance explained by cue')
@@ -1591,7 +1736,7 @@ def main(args, **kwargs):
         components = kwargs.get('components', ['finger', 'cue', 'surprise'])
         basecomponents = np.eye(Mc.Gc.shape[1])[None, :, :]
         MF = pcm.model.ModelFamily(Mc.Gc, comp_names=components, basecomponents=basecomponents)
-        palette = kwargs.get('palette', ['#D4AF37', 'red', 'magenta'])
+        palette = kwargs.get('palette', ['#FFFF00', 'red', 'cyan'])
         figsize = tuple(map(float, kwargs.get('figsize', (4, 3))))
         pcm_path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
         fig, axs = plt.subplots(1, len(epochs), figsize=figsize, sharey=True, )
@@ -1599,8 +1744,7 @@ def main(args, **kwargs):
             f = open(os.path.join(pcm_path, f'theta_in.emg.{epoch}.p'), "rb")
             param = pickle.load(f)
             param_c = param[idxc][:n_param_c]
-            G = np.load(os.path.join(pcm_path, f'G_obs.emg.{epoch}.npy'))
-            fig, axs = plot_var_expl(fig, axs, e, G, param_c, components=components, palette=palette)
+            fig, axs = plot_var_expl(fig, axs, e, param_c, components=components, palette=palette)
         for e, epoch in enumerate(epochs):
             f = open(os.path.join(pcm_path, f'theta_in.emg.{epoch}.p'), "rb")
             param = pickle.load(f)
@@ -1616,6 +1760,33 @@ def main(args, **kwargs):
         fig.subplots_adjust(bottom=.2, top=.8)
         axs[0].spines['left'].set_bounds(axs[0].get_yticks()[0], axs[0].get_yticks()[-2])
         fig.savefig(os.path.join(path_fig, f'var_expl.emg.svg'))
+        plt.show()
+    if args.what=='mds_emg':
+        figsize = tuple(map(float, kwargs.get('figsize', (6, 3))))
+        xlim = tuple(map(float, kwargs.get('vlim', (-.1, .1))))
+        epochs = ['Pre', 'SLR', 'LLR', 'Vol']
+        color = list(gl.colour_mapping.values())[5:13]
+        fig, axs = plt.subplots(1, len(epochs), figsize=figsize, sharex=True, sharey=True, constrained_layout=True)
+        for e, epoch in enumerate(epochs):
+            ax = axs[e]
+            G = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'G_obs.emg.{epoch}.npy'))
+            mds, _ = pcm.classical_mds(G.mean(axis=0))
+            ax.scatter(mds[:, 0], mds[:, 1], color=color)
+            ax.set_aspect('equal')
+            ax.set_ylim(ax.get_xlim())
+            ax.set_xlabel('PC1')
+            ax.set_title(epoch)
+            ax.set_xticks(xlim)
+            ax.set_yticks(ax.get_xticks())
+            ax.spines[['left', 'top', 'right']].set_visible(False)
+            ax.spines[['left', 'bottom']].set_bounds(xlim)
+            if e == 0:
+                ax.spines['left'].set_visible(True)
+                ax.set_ylabel('PC2')
+            else:
+                ax.tick_params(axis='y', left=False)
+            fig.suptitle('Multidimensional scaling')
+            plt.savefig(os.path.join(path_fig, f'mds.emg.svg'))
         plt.show()
     if args.what=='interaction_emg':
         Mf, idxf = find_model(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, 'M.exec.p'), 'feature')

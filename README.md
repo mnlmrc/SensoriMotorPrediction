@@ -30,7 +30,7 @@ More on surface reconstruction pipelines [here](https://diedrichsenlab.github.io
 
 ### ROI definition
 
-Surface-based definition of cortical ROIs is implemented in the `rois` module using the `Rois` class 
+Surface-based definition of cortical ROIs is implemented in the `rois.py` module using the `Rois` class 
 from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines), which uses the `atlas_map` module from [Functional_Fusion](https://github.com/DiedrichsenLab/Functional_Fusion):
 
 - Save ROI and hemisphere masks to NIFTI files: 
@@ -38,12 +38,19 @@ from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines), which use
 
 ### Univariate activation
 
-The beta coefficients estimated in 1st level GLM 
-are stored in a single CIFTI file using the make_cifti_betas function from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines):
+The beta coefficients estimated in 1st level GLM, univariate contrasts vs. baseline and residuals timeseries
+are stored in a single CIFTI file using the `make_cifti_betas` function from [imaging_pipelines](https://github.com/mnlmrc/imaging_pipelines):
 
-- Save cortical beta coefficients to single CIFTI file: `python betas.py make_betas_cifti --sn <subject number>`
-- Save cortical contrasts to single CIFTI file: `python betas.py save_contrasts_cifti --sn <subject number>`
+- Save cortical beta coefficients to CIFTI file: `python betas.py make_betas_cifti --sn <subject number>`
+- Save cortical contrasts to CIFTI file: `python betas.py make_contrasts_cifti --sn <subject number>`
+- Save residuals timeseries to CIFTI file: `python betas.py make_residuals_cifti --sn <subject number>`
 - Save average contrasts across participants for each ROI to .tsv file: `python betas.py avg_roi_contrasts`
+
+The univariate contrasts vs. baseline projected to the cortical surface are stored in gifti files. For better 
+visualisation, gifti files are converted to cifti and smoothed using the `surface.py` module:
+
+- Convert gifti to cifti: `python surface.py gifti2cifti --sn <subject number>`
+- Smooth cifti: `python surface.py smooth_cifti`
 
 ### PCM
 

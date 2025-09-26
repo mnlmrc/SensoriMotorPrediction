@@ -28,7 +28,7 @@ def main(args=None):
         cifti = bt.make_cifti_betas(path_glm, masks, struct)
         nb.save(cifti, path_glm + '/' + 'beta.dscalar.nii')
     if args.what == 'make_betas_cifti_all':
-        for sn in args.snS:
+        for sn in args.sns:
             print(f'doing participant {sn}')
             args = argparse.Namespace(
                 what='make_betas_cifti',
@@ -49,7 +49,7 @@ def main(args=None):
         cifti = bt.make_cifti_betas(path_glm, masks, struct=['Cerebellum', 'Cerebellum'], betas=betas, row_axis=row_axis)
         nb.save(cifti, path_glm + '/' + 'beta.dscalar.nii')
     if args.what == 'make_betas_cifti_cerebellum_all':
-        for sn in args.snS:
+        for sn in args.sns:
             print(f'doing participant {sn}')
             args = argparse.Namespace(
                 what='make_betas_cifti_cerebellum',
@@ -67,7 +67,7 @@ def main(args=None):
         cifti = bt.make_cifti_contrasts(path_glm, masks, struct, regressors=regressors)
         nb.save(cifti, path_glm + '/' + 'contrast.dscalar.nii')
     if args.what == 'make_contrasts_cifti_all':
-        for sn in args.snS:
+        for sn in args.sns:
             args = argparse.Namespace(
                 what='make_contrasts_cifti',
                 experiment=args.experiment,
@@ -75,7 +75,7 @@ def main(args=None):
                 glm=args.glm
             )
             main(args)
-    if args.what == 'avg_roi_contrasts':
+    if args.what == 'roi_contrasts':
         con_dict = {
             'con': [],
             'condition': [],
@@ -84,7 +84,7 @@ def main(args=None):
             'Hem': [],
             'epoch': []
         }
-        for sn in args.snS:
+        for sn in args.sns:
             print(f'Processing subj{sn}')
             path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{sn}')
             cifti = nb.load(path_glm + '/' + 'contrast.dscalar.nii')
@@ -112,15 +112,13 @@ def main(args=None):
         masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
         residuals = bt.make_cifti_residuals(path_glm, masks, struct)
         nb.save(residuals, path_glm + '/' + 'residual.dtseries.nii')
-    if args.what == 'make_4D_residuals_nifti':
-        path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
-        cifti = nb.load(path_glm + '/' + 'residual.dtseries.nii')
-        nifti = nt.volume_from_cifti(cifti, struct_names=struct)
-        nb.save(nifti, path_glm + '/' + 'residual.nii')
-        pass
-
+    # if args.what == 'make_4D_residuals_nifti':
+    #     path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
+    #     cifti = nb.load(path_glm + '/' + 'residual.dtseries.nii')
+    #     nifti = nt.volume_from_cifti(cifti, struct_names=struct)
+    #     nb.save(nifti, path_glm + '/' + 'residual.nii')
     if args.what == 'make_residuals_cifti_all':
-        for sn in args.snS:
+        for sn in args.sns:
             print(f'Processing subj{sn}...')
             arg = argparse.Namespace(
                 what='make_residuals_cifti',
@@ -138,27 +136,10 @@ if __name__ == "__main__":
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115])
+    parser.add_argument('--sns', nargs='+', default=[102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115])
     parser.add_argument('--atlas', type=str, default='ROI')
     parser.add_argument('--roi', type=str, default=None)
     parser.add_argument('--glm', type=int, default=12)
-
-    # temporary until we re-run glm with new labels
-    regr_new = {
-        '0%': '100-0',
-        '25%': '75-25',
-        '50%': '50-50',
-        '75%': '25-75',
-        '100%': '0-100',
-        '0%,index': '100-0,index',
-        '25%,index': '75-25,index',
-        '50%,index': '50-50,index',
-        '75%,index': '25-75,index',
-        '25%,ring': '75-25,ring',
-        '50%,ring': '50-50,ring',
-        '75%,ring': '25-75,ring',
-        '100%,ring': '0-100,ring',
-    }
 
     args = parser.parse_args()
 

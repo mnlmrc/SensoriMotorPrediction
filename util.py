@@ -263,3 +263,57 @@ def pairwise_permutation_tests(data=None, dv=None, within=None, subject=None, n_
 
     return pd.DataFrame(results)
 
+def hedges_g(x1, x2):
+    """
+    Compute Hedges' g (PMd − S1) for two independent samples, plus SE and 95% CI.
+    Returns a dict with keys: g, se, var_g, ci_low, ci_high, d, J, sp, n1, n2.
+
+    x1, x2: array-like (will be converted to np.array and NaNs dropped)
+    """
+    x1 = np.asarray(x1, dtype=float)
+    x2 = np.asarray(x2, dtype=float)
+    x1 = x1[np.isfinite(x1)]
+    x2 = x2[np.isfinite(x2)]
+
+    n1, n2 = len(x1), len(x2)
+    out = {"g": np.nan, "se": np.nan, "var_g": np.nan,
+           "ci_low": np.nan, "ci_high": np.nan,
+           "d": np.nan, "J": np.nan, "sp": np.nan,
+           "n1": n1, "n2": n2}
+
+    if n1 < 2 or n2 < 2:
+        return out
+
+    m1, m2 = np.mean(x1), np.mean(x2)
+    s1v, s2v = np.var(x1, ddof=1), np.var(x2, ddof=1)
+
+    sp_num = (n1 - 1) * s1v + (n2 - 1) * s2v
+    sp_den = (n1 + n2 - 2)
+    if sp_den <= 0 or sp_num <= 0:
+        return out
+
+    sp = np.sqrt(sp_num / sp_den)
+    d = (m1 - m2) / sp
+    if not np.isfinite(d):
+        return out
+
+    J = 1 - 3 / (4 * (n1 + n2) - 9) if (n1 + n2) > 2 else 1.0
+    g = J * d
+
+    # sampling variance (approx) and SE
+    if (n1 + n2 - 2) <= 0:
+        return out
+    var_d = (n1 + n2) / (n1 * n2) + (d ** 2) / (2 * (n1 + n2 - 2))
+    var_g = (J ** 2) * var_d
+    if not np.isfinite(var_g) or var_g < 0:
+        return out
+    se = np.sqrt(var_g)
+
+    ci_low = g - 1.96 * se
+    ci_high = g + 1.96 * se
+
+    out.update({"g": g, "se": se, "var_g": var_g,
+                "ci_low": ci_low, "ci_high": ci_high,
+                "d": d, "J": J, "sp": sp})
+    return out
+
