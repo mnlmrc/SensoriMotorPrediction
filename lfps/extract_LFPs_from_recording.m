@@ -32,7 +32,7 @@ for m = 1:length(monkeys)
         row = getrow(rows, rows.RecordingID==num_recording);
         session = datestr(row.Session, 'mmddyy');
         loadDir = fullfile(baseDir, monkey, session); %'/local/scratch';     % contains .kinarm, config.yaml, kilosort dir, sync.mat, *lf.bin
-        outDir = fullfile(baseDir, 'Marco/SensoriMotorPrediction/LFPs/', monkey);
+        outDir = fullfile(baseDir, 'Marco/SensoriMotorPrediction/Recordings/', monkey);
         if ~isfolder(outDir)
             mkdir(outDir);
         end
@@ -74,31 +74,110 @@ for m = 1:length(monkeys)
             
             numTrials = numel(data.c3d);
             
+            data = KINARM_add_hand_kinematics(data);						% Add hand velocity, acceleration and commanded forces to the data structure
+            data = KINARM_add_sho_elb(data);
+            data_f = filter_double_pass(data, 'enhanced', 'fc', 20);
+            
             %% --- Simple success / pre-move flags + block positions ---
             visualPresentationDelay = 58;  % ms
+
             successInd  = [];
             preMoveInd  = [];
+            badInd      = [];
+            
+            % Block rows and position_in_block (unchanged)
             all_block_row = zeros(1, numTrials);
-            for i = 1:numTrials, all_block_row(i) = data.c3d(i).TRIAL.BLOCK_ROW; end
+            for i = 1:numTrials
+                all_block_row(i) = data.c3d(i).TRIAL.BLOCK_ROW;
+            end
             position_in_block = zeros(1, numTrials);
             cnt = 1;
             for i = 2:numTrials
                 position_in_block(i-1) = cnt;
-                if all_block_row(i) - all_block_row(i-1) > 0, cnt = 1; else, cnt = cnt + 1; end
+                if all_block_row(i) - all_block_row(i-1) > 0
+                    cnt = 1;
+                else
+                    cnt = cnt + 1;
+                end
             end
             position_in_block(end) = cnt;
             
+            % Threshold for early movement (matches old code)
+            if strcmp(monkey,'Pert')
+                delayThresh = 0.005;
+            else
+                delayThresh = 0.01;
+            end
+            
+            delayVel     = zeros(1, numTrials);   % peak hand speed during delay
+            movementTime = zeros(1, numTrials);   % ms from Pert to Reward
+            
             for i = 1:numTrials
-                hasPert = false; hasRew = false; endMoved = false;
+                cueTime = []; pertTime = []; rewardTime = [];
+            
+                % Parse events in ms
                 for j = 1:length(data.c3d(i).EVENTS.LABELS)
                     lab = data.c3d(i).EVENTS.LABELS{j};
-                    if strncmp(lab,'Pert',4), hasPert = true; end
-                    if strncmp(lab,'Rew', 3), hasRew  = true; end
-                    if j == length(data.c3d(i).EVENTS.LABELS) && strncmp(lab,'Moved',5), endMoved = true; end
+                    if strncmp(lab,'Cue',3)
+                        cueTime   = round(data.c3d(i).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
+                    elseif strncmp(lab,'Pert',4)
+                        pertTime  = round(data.c3d(i).EVENTS.TIMES(j)*1000);
+                    elseif strncmp(lab,'Rew',3) || strncmp(lab,'Rewa',4)
+                        rewardTime= round(data.c3d(i).EVENTS.TIMES(j)*1000);
+                    end
                 end
-                if hasPert && hasRew && ~endMoved, successInd(end+1) = i; end %#ok<AGROW>
-                if endMoved, preMoveInd(end+1) = i; end %#ok<AGROW>
+            
+                % Early-movement metric (max speed) between Cue+100 and Pert-50
+                if ~isempty(pertTime) && ~isempty(cueTime)
+                    tRange = (cueTime+100) : (pertTime-50);
+                    if ~isempty(tRange)
+                        % Use filtered velocities if you have data_f; otherwise raw
+                        % if exist('data_f','var') && ~isempty(data_f)
+                        %     vx = data_f.c3d(i).Right_HandXVel(tRange);
+                        %     vy = data_f.c3d(i).Right_HandYVel(tRange);
+                        % else
+                        vx = data.c3d(i).Right_HandXVel(tRange);
+                        vy = data.c3d(i).Right_HandYVel(tRange);
+                        % end
+                        delayVel(i) = max(sqrt(vx.^2 + vy.^2));
+                    else
+                        delayVel(i) = 0;
+                    end
+                else
+                    delayVel(i) = 0;
+                end
+            
+                % Movement duration (Pert -> Reward)
+                if ~isempty(pertTime) && ~isempty(rewardTime)
+                    movementTime(i) = rewardTime - pertTime;   % ms
+                else
+                    movementTime(i) = 0;
+                end
+            
+                % Old-code conditions
+                lastLabelIsMoved = strncmp(data.c3d(i).EVENTS.LABELS{end}, 'Moved', 5);
+                tooFewEvents     = (length(data.c3d(i).EVENTS.TIMES) < 3);
+                earlyMove        = (delayVel(i) > delayThresh);
+                tooLong          = (movementTime(i) > 1200);
+            
+                if lastLabelIsMoved || tooFewEvents || earlyMove || tooLong
+                    badInd(end+1) = i; %#ok<AGROW>
+                else
+                    hasPert = ~isempty(pertTime);
+                    hasRew  = ~isempty(rewardTime);
+                    if hasPert && hasRew
+                        successInd(end+1) = i; %#ok<AGROW>
+                    else
+                        badInd(end+1) = i; %#ok<AGROW>
+                    end
+                end
+            
+                % Keep pre-move flag like old code
+                if lastLabelIsMoved || earlyMove
+                    preMoveInd(end+1) = i; %#ok<AGROW>
+                end
             end
+            
             numPreMove = numel(preMoveInd);
             numSuccess = numel(successInd);
             
@@ -181,68 +260,6 @@ for m = 1:length(monkeys)
             
             clear t probTime pertTime rewardTime TP i ii j lab
             
-            % %% --- Minimal brain area / coords from Kilosort (kept light) ---
-            % brainID = []; brainCoords = [];
-            % 
-            % if ~isempty(ks_dir)
-            %     T  = readNPY([ks_dir '/spike_times.npy']);
-            %     I  = readNPY([ks_dir '/spike_clusters.npy']);
-            %     TT = readNPY([ks_dir '/templates.npy']);
-            %     INV= readNPY([ks_dir '/whitening_mat_inv.npy']);
-            %     st = readNPY([ks_dir '/spike_templates.npy']);
-            %     grp= tdfread([ks_dir '/cluster_KSLabel.tsv']);
-            % 
-            %     [nTemplates, ~, ~] = size(TT);
-            %     C_maxChannel = zeros(1,nTemplates);
-            %     for j = 1:nTemplates
-            %         template = reshape(TT(j,:,:), [], size(INV,1));
-            %         template_unw = template * INV;
-            %         V = max(abs(template_unw), [], 1);
-            %         [~, C_maxChannel(j)] = max(V);
-            %     end
-            %     keep = false(size(I));
-            %     uniqC = unique(I);
-            %     for k = 1:numel(uniqC)
-            %         cid = uniqC(k);
-            %         idxLab = find(grp.cluster_id == cid, 1);
-            %         if ~isempty(idxLab) && strncmp(grp.KSLabel(idxLab,1:3),'goo',3)
-            %             keep = keep | (I == cid);
-            %         end
-            %     end
-            %     I  = I(keep);
-            %     st = st(keep);
-            % 
-            %     goodClusters = unique(I);
-            %     maxChanPerCluster = zeros(numel(goodClusters),1);
-            %     for k = 1:numel(goodClusters)
-            %         cid = goodClusters(k);
-            %         tmplIdx = mode(st(I == cid)) + 1;
-            %         maxChanPerCluster(k) = C_maxChannel(tmplIdx);
-            %     end
-            % 
-            %     for rr = 1:max(1, numel(brain_area_list))
-            %         if iscell(brain_area_list{rr})
-            %             this_ranges = brain_channel_list{rr};
-            %             for k = 1:numel(maxChanPerCluster)
-            %                 ch = maxChanPerCluster(k);
-            %                 match = [];
-            %                 for r = 1:numel(this_ranges)
-            %                     ir = this_ranges{r}{1} : this_ranges{r}{2};
-            %                     if ismember(ch, ir), match = r; break; end
-            %                 end
-            %                 if ~isempty(match)
-            %                     brainID     = [brainID; brain_area_list{rr}{match}]; %#ok<AGROW>
-            %                     brainCoords = [brainCoords; cell2mat(brain_coord_list{rr})]; %#ok<AGROW>
-            %                 end
-            %             end
-            %         else
-            %             brainID     = [brainID; repmat(brain_area_list{rr}, numel(maxChanPerCluster), 1)]; %#ok<AGROW>
-            %             brainCoords = [brainCoords; repmat(cell2mat(brain_coord_list{rr}), numel(maxChanPerCluster), 1)]; %#ok<AGROW>
-            %         end
-            %     end
-            %     clear T I TT INV st grp C_maxChannel maxChanPerCluster uniqC cid tmplIdx template template_unw V
-            % end
-            
             %% --- Restore sync -> neuralSync{1} minimally (for LFP alignment) ---
             neuralSync = cell(1,2);
             neuralSync{2} = []; % no myo
@@ -266,6 +283,242 @@ for m = 1:length(monkeys)
             end
             neuralSync{1} = trialStart;
             clear trialSignal ii dd temp bitPoints trialStart trialNum
+
+            %% === Add spikes, spikes_s, kinematics, stability (memory-efficient) ===
+
+            % ---------- PARAMETERS ----------
+            stability_threshold = 2;   % same as your original
+            minimumRate         = 0.1; % Hz for neural units
+            % nBack   = 600;             % ms (matches your trial building)
+            nForward= 300;             % ms
+            % tSample = 10;              % ms binning for kinematics & spikes
+            % visualPresentationDelay = 58; % ms (already used above)
+
+            % ---------- GAUSSIAN KERNELS for spikes_s ----------
+            % Wide kernel (causal-ish, like original R)
+            sd = 20; L = 601; s = (L-1)/(2*sd);
+            g1 = gausswin(L,s);
+            sd = 80; L = 601; s = (L-1)/(2*sd);
+            g  = gausswin(L,s);
+            g(1:floor(L/2)) = g1(1:floor(L/2));
+            R  = g/sum(g);                 % causal-ish, ~80ms SD tail
+            % Narrow kernel (R2)
+            sd = 3; L = 101; s = (L-1)/(2*sd);
+            g  = gausswin(L,s);
+            R2 = g/sum(g);
+            
+            % ---------- Locate Kilosort directory for this imec ----------
+            ks_dir = fullfile(fileparts(fn), 'kilosort4');  % e.g. .../imec0/kilosort4
+            if ~isfolder(ks_dir)
+                ks_dir = fullfile(fileparts(fn), 'sorted'); % fallback
+            end
+            if ~isfolder(ks_dir)
+                error('No kilosort dir found for %s', fn);
+            end
+            
+            % ---------- Load basic Kilosort outputs ----------
+            T  = readNPY(fullfile(ks_dir,'spike_times.npy'));        % int64 sample idx @30 kHz
+            I  = readNPY(fullfile(ks_dir,'spike_clusters.npy'));     % cluster id per spike
+            st = readNPY(fullfile(ks_dir,'spike_templates.npy'));    % template id per spike
+            labT = tdfread(fullfile(ks_dir,'cluster_KSLabel.tsv'));  % has cluster_id & KSLabel
+            
+            % Keep only "good" clusters
+            clusterIDs = unique(I);
+            goodMask = false(size(clusterIDs));
+            for k = 1:numel(clusterIDs)
+                cid = clusterIDs(k);
+                idx = find(labT.cluster_id == cid, 1);
+                if ~isempty(idx) && strncmp(labT.KSLabel(idx,1:3), 'goo', 3)
+                    goodMask(k) = true;
+                end
+            end
+            goodClusters = clusterIDs(goodMask);
+            
+            % Subselect spikes from good clusters
+            keep = ismember(I, goodClusters);
+            I = I(keep); T = T(keep); st = st(keep);
+            
+            % Build SPK cell {unit} of spike times (double samples @30 kHz)
+            C = unique(I);
+            SPK = cell(1, numel(C));
+            for iiU = 1:numel(C)
+                c = C(iiU);
+                SPK{iiU} = double(T(I==c));     % 30 kHz sample indices
+            end
+            
+            % ---------- Stability computation (same logic, light memory) ----------
+            if isempty(neuralSync{1})
+                warning('No neuralSync{1}; skipping stability filter.');
+                stability = [];
+            else
+                lastSpike = double(max(T));
+                consRange = [neuralSync{1}(min(2, numel(neuralSync{1}))) lastSpike];  % start near 2nd trial
+                chunkSec  = 30;                                     % seconds
+                fs30      = 30000;
+                p = floor((consRange(2)-consRange(1)) / fs30 / chunkSec);
+                if p < 1, p = 1; end
+                bounds = round(linspace(consRange(1), consRange(2), p+1));
+            
+                spkInside = zeros(numel(SPK), p);
+                for iiU = 1:numel(SPK)
+                    t = SPK{iiU};
+                    for j = 1:p
+                        sel = (t >= bounds(j) & t < bounds(j+1));
+                        spkInside(iiU,j) = sum(sel) / ((bounds(j+1)-bounds(j))/fs30);
+                    end
+                end
+                stability = var(spkInside, [], 2) ./ max(mean(spkInside,2), eps);
+            end
+            
+            % Filter units by min rate & stability
+            Lrec_sec = double(max(T))/30000;
+            delIdx = false(1, numel(SPK));
+            for iiU = 1:numel(SPK)
+                rate = numel(SPK{iiU}) / max(Lrec_sec, eps);
+                if rate < minimumRate || (~isempty(stability) && stability(iiU) > stability_threshold)
+                    delIdx(iiU) = true;
+                end
+            end
+            SPK(delIdx) = [];
+            if ~isempty(stability), stability(delIdx) = []; end
+            C = C(~delIdx);                 %#ok<NASGU>  % (kept only for reference)
+            
+            % ---------- Per-trial spikes & spikes_s (10 ms bins) ----------
+            spikes   = cell(numSuccess, 2);   % {trial, type=1 neural ; 2 myo(not used)}
+            spikes_s = cell(numSuccess, 2);   % smoothed (using R on 1ms grid then downsample)
+            type = 1; % only neural here
+            
+            for iiTr = 1:numSuccess
+                trIdx  = successInd(iiTr);
+                % trial window in ms relative to probTime
+                probTime = NaN; pertTime = NaN; rewardTime = NaN;
+                for j = 1:length(data.c3d(trIdx).EVENTS.LABELS)
+                    lab = data.c3d(trIdx).EVENTS.LABELS{j};
+                    if strncmp(lab,'Cue',3)
+                        probTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
+                    elseif strncmp(lab,'Pert',4)
+                        pertTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
+                    elseif strncmp(lab,'Rew',3)
+                        rewardTime= round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
+                    end
+                end
+                if isnan(probTime) || isnan(rewardTime) || isempty(neuralSync{1})
+                    spikes{iiTr,type}   = [];
+                    spikes_s{iiTr,type} = [];
+                    continue
+                end
+            
+                tRangeNeural = (probTime - nBack + 1) : (rewardTime + nForward); % ms
+                flanks = 300;                                                    % ms for conv edges
+                tRange = (tRangeNeural(1) - flanks) : (tRangeNeural(end) + flanks);
+                tSteps = [1 tSample:tSample:length(tRangeNeural)];
+            
+                % Build binary spike trains on 1 ms grid (logical T x Nunits)
+                innerSpikes   = false(length(tRange)-2*flanks, numel(SPK));
+                innerSpikes_s = zeros(length(tRange)-2*flanks, numel(SPK), 'single');
+            
+                % anchor this trial in 30 kHz samples
+                thisT_30k = neuralSync{1}(trIdx);
+            
+                for u = 1:numel(SPK)
+                    % spike times in ms relative to trial anchor
+                    tt_ms = round((SPK{u}(SPK{u} >= thisT_30k & SPK{u} <= thisT_30k + (tRange(end)*30 + 60000)) - thisT_30k) / 30);
+                    tt_ms = tt_ms - tRange(1);
+                    tt_ms(tt_ms <= 0 | tt_ms > (tRange(end)-tRange(1)+1)) = [];
+                    v = zeros(1, length(tRange), 'single');
+                    v(tt_ms) = 1;
+            
+                    % trim flanks
+                    innerSpikes(:,u) = v(flanks+1:end-flanks) > 0;
+            
+                    % smoothed (Hz): conv on 1ms grid, then trim
+                    vv = conv(v, R, 'same') * 1000;    % Hz
+                    innerSpikes_s(:,u) = single(vv(flanks+1:end-flanks));
+                end
+            
+                % Downsample to 10ms bins (counts) and 10ms samples (smoothed)
+                sp = zeros(length(tSteps)-1, numel(SPK), 'single');
+                sps= zeros(length(tSteps)-1, numel(SPK), 'single');
+                for k = 1:length(tSteps)-1
+                    seg = tSteps(k):tSteps(k+1)-1;
+                    sp(k,:)  = sum(innerSpikes(seg,:),1,'native');
+                    sps(k,:) = mean(innerSpikes_s(seg,:),1,'native');
+                end
+                spikes{iiTr,type}   = sp;
+                spikes_s{iiTr,type} = sps;
+            end
+            
+            % ---------- Kinematics (10 ms bins) ----------
+            elbKin = cell(1,numSuccess); elbVel = cell(1,numSuccess);
+            shoKin = cell(1,numSuccess); shoVel = cell(1,numSuccess);
+            handKin= cell(1,numSuccess);
+            jointTor = cell(1,numSuccess);   % keep as empty [] unless you compute torques
+            
+            for iiTr = 1:numSuccess
+                trIdx  = successInd(iiTr);
+                % get times again
+                probTime = NaN; pertTime=NaN; rewardTime=NaN;
+                for j = 1:length(data.c3d(trIdx).EVENTS.LABELS)
+                    lab = data.c3d(trIdx).EVENTS.LABELS{j};
+                    if strncmp(lab,'Cue',3)
+                        probTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
+                    elseif strncmp(lab,'Pert',4)
+                        pertTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
+                    elseif strncmp(lab,'Rew',3)
+                        rewardTime= round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
+                    end
+                end
+                if isnan(probTime) || isnan(rewardTime)
+                    elbKin{iiTr}=[]; elbVel{iiTr}=[]; shoKin{iiTr}=[]; shoVel{iiTr}=[]; handKin{iiTr}=[];
+                    continue
+                end
+            
+                tRangeNeural = (probTime - nBack + 1) : (rewardTime + nForward);
+                tSteps = [1 tSample:tSample:length(tRangeNeural)];
+            
+                % pull from filtered KINARM signals (rad->deg; pos in whatever units you used)
+                tmpElbKin = rad2deg(data.c3d(trIdx).Right_ElbAng(tRangeNeural));
+                tmpElbVel = rad2deg(data.c3d(trIdx).Right_ElbVel(tRangeNeural));
+                tmpShoKin = rad2deg(data.c3d(trIdx).Right_ShoAng(tRangeNeural));
+                tmpShoVel = rad2deg(data.c3d(trIdx).Right_ShoVel(tRangeNeural));
+            
+                tmpHand   = [data.c3d(trIdx).Right_HandX(tRangeNeural), ...
+                             data.c3d(trIdx).Right_HandY(tRangeNeural)];
+            
+                eK = zeros(length(tSteps)-1,1,'single');
+                eV = zeros(length(tSteps)-1,1,'single');
+                sK = zeros(length(tSteps)-1,1,'single');
+                sV = zeros(length(tSteps)-1,1,'single');
+                hK = zeros(length(tSteps)-1,2,'single');
+            
+                for k = 1:length(tSteps)-1
+                    seg = tSteps(k):tSteps(k+1)-1;
+                    eK(k)   = mean(tmpElbKin(seg));
+                    eV(k)   = mean(tmpElbVel(seg));
+                    sK(k)   = mean(tmpShoKin(seg));
+                    sV(k)   = mean(tmpShoVel(seg));
+                    hK(k,:) = mean(tmpHand(seg,:),1);
+                end
+                elbKin{iiTr} = eK; elbVel{iiTr} = eV;
+                shoKin{iiTr} = sK; shoVel{iiTr} = sV;
+                handKin{iiTr}= hK;
+                jointTor{iiTr}= [];   % fill if you compute torques later
+            end
+
+            %% --- Extra trial selection criterium
+            keepTrial = true(1, numel(successInd));   % start with all true
+
+            if ~isempty(neuralSync{1}) && ~isempty(T)
+                lastSpike30k = double(T(end));        % last spike timestamp in samples (30 kHz)
+            
+                % Find first trial whose sync starts AFTER the last spike
+                ix = find(neuralSync{1} > lastSpike30k, 1);
+            
+                if ~isempty(ix)
+                    cutoff = ix - 1;                  % last trial fully within spike window
+                    keepTrial(successInd >= cutoff) = false;
+                end
+            end
             
             %% --- Low-memory LFP -> time–freq power (batched, streaming to disk) ---
             % Writes lfp to the same output .mat on disk; you will -append the other vars later.
@@ -281,22 +534,6 @@ for m = 1:length(monkeys)
             % -----------------------------------------------------------
             
             lfp = [];  % keep symbol in workspace; real data lives on disk
-            
-            % % Find *lf.bin from ks_dir; fall back one level up if needed
-            % lfp_parent = fileparts(ks_dir);
-            % if isempty(lfp_parent), lfp_parent = loadDir; end
-            % ff = dir(fullfile(lfp_parent, '*lf.bin'));
-            % if isempty(ff) 
-            %     ff = dir(fullfile(fileparts(lfp_parent), '*lf.bin')); 
-            % end
-            % 
-            % if isempty(ff)
-            %     warning('No *lf.bin found; lfp will be empty.');
-            % else
-            % ---------- Memory-map raw file (no full fread) ----------
-            % fn = fullfile(ff(1).folder, ff(1).name);
-            % fn = fullfile(loadDir, sprintf('/%s_g0/%s_g0_imec%d/%s_g0_t0.imec%d.lf.bin',...
-            %     session, session, num_elec, session, num_elec));
             info = dir(fn);
             bytesPerInt16 = 2;
             nChRaw = 385;
@@ -465,9 +702,14 @@ for m = 1:length(monkeys)
             mf.trial       = trial;
             mf.numSuccess  = numSuccess;
             mf.numTrials   = numTrials;
+            mf.shoKin      = shoKin;
+            mf.elbKin      = elbKin;
+            mf.shoVel      = shoVel;
+            mf.elbVel      = elbVel;
+            mf.spike       = spikes;
+            mf.spike_s     = spikes_s;
             % mf.targPos     = targPos;
             mf.date        = date;
-            mf.brainCoords = brainCoords;
             mf.brainID     = brain_area_list{num_elec + 1};
             mf.numPreMove  = numPreMove;
             mf.cfg = cfg;

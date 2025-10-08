@@ -11,7 +11,7 @@ import globals as gl
 from sklearn.preprocessing import MinMaxScaler
 import pickle
 from pcm_models import find_model
-from pcm_cortical import bootstrap_correlation
+from imaging_pipelines.util import bootstrap_correlation
 from lfp import make_freq_masks
 from joblib import Parallel, delayed, parallel_backend
 
@@ -219,7 +219,7 @@ def main(args):
                                 out_dict['datatype'].append('lfp')
         out = pd.DataFrame(out_dict)
         out.to_csv(os.path.join(baseDir, pcmDir, 'var_expl.plan.lfp.tsv'), sep='\t', index=False)
-    if args.what == 'correlation_plan-exec':
+    if args.what=='correlation_plan-exec':
             rng = np.random.default_rng(0)  # seed for reprodocibility
             f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
             Mflex = pickle.load(f)
@@ -241,6 +241,9 @@ def main(args):
                     lfp_grouped_plan = lfp_grouped_plan[..., freq].mean(axis=-1)
                     lfp_grouped_exec = lfp_grouped_exec[..., freq].mean(axis=-1)
                     n_part = len(np.unique(part_vec))
+                    obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                               'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
+
                     mask_plan = {'ext': np.array([1, 1, 0, 0, 0] * n_part, dtype=bool),
                                  'flx': np.array([0, 0, 0, 1, 1] * n_part, dtype=bool)}
                     mask_exec = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
@@ -249,23 +252,23 @@ def main(args):
                     plan_ext = lfp_grouped_plan[mask_plan['ext']].reshape(n_part, 2, 154, 32).mean(axis=1)
                     plan_flx = lfp_grouped_plan[mask_plan['flx']].reshape(n_part, 2, 154, 32).mean(axis=1)
                     plan = plan_ext - plan_flx
-                    plan = plan[:, cuePost - 16:cuePost].mean(axis=1)
+                    plan = plan[:, cuePost - 20:cuePost].mean(axis=1)
                     plan = plan - plan.mean(axis=-1, keepdims=True)
 
                     exec_ext = lfp_grouped_exec[mask_exec['ext']].reshape(n_part, 4, 154, 32).mean(axis=1)
                     exec_flx = lfp_grouped_exec[mask_exec['flx']].reshape(n_part, 4, 154, 32).mean(axis=1)
                     exec = exec_ext - exec_flx
-                    exec = exec[:, pertIdx + 8]#.mean(axis=1)
+                    exec = exec[:, pertIdx + 4:pertIdx + 24].mean(axis=1)
                     exec = exec - exec.mean(axis=-1, keepdims=True)
 
                     data = np.r_[plan, exec]
                     T, C = data.shape
-                    err = data - data.mean(axis=0, keepdims=True)
+                    X = pcm.indicator(obs_des['part_vec'])
+                    beta, *_ = np.linalg.lstsq(X, data)
+                    err = data - X @ beta
                     cov = (err.T @ err) / T
                     data_prewhitened = data / np.sqrt(np.diag(cov))
 
-                    obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
-                               'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
                     Y.append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
                     G.append(pcm.est_G_crossval(
                         Y[i].measurements,
@@ -302,59 +305,61 @@ def main(args):
         freq = freq_masks['beta']
         G, Y, i = [], [], 0
         for mon in monkey:
-            for r, rec in enumerate(recordings[mon][args.region]):
-                print(f'doing {mon}, recording {rec}')
+            for roi in args.regions:
+                for r, rec in enumerate(recordings[mon][roi]):
+                    print(f'doing {mon}, recording {rec}')
 
-                lfp = np.load(os.path.join(baseDir, lfpDir, mon, f'lfp_aligned.{args.region}-{rec}.npy'))
-                trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
-                trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
-                mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
-                trial_info.cond = trial_info.cond.map(mapping)
+                    lfp = np.load(os.path.join(baseDir, lfpDir, mon, f'lfp_aligned.{roi}-{rec}.npy'))
+                    trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
+                    trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+                    mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
+                    trial_info.cond = trial_info.cond.map(mapping)
 
-                lfp_grouped, _, part_vec = pcm.group_by_condition(lfp, trial_info.cond, trial_info.block, axis=-1)
-                lfp_grouped = lfp_grouped[..., freq].mean(axis=-1)
-                n_part = len(np.unique(part_vec))
-                mask_plan = {'ext': np.array([0, 1, 0, 0, 1, 0, 0, 0] * n_part, dtype=bool),
-                             'flx': np.array([0, 0, 0, 1, 0, 0, 1, 0] * n_part, dtype=bool)}
-                mask_exec = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
-                             'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
+                    lfp_grouped, _, part_vec = pcm.group_by_condition(lfp, trial_info.cond, trial_info.block, axis=-1)
+                    lfp_grouped = lfp_grouped[..., freq].mean(axis=-1)
+                    n_part = len(np.unique(part_vec))
+                    obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                               'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
 
-                plan_ext = plan_ext[mask_plan['ext']].reshape(n_part, 2, 154, 32).mean(axis=1)
-                plan_flx = plan_flx[mask_plan['flx']].reshape(n_part, 2, 154, 32).mean(axis=1)
-                plan = plan_ext - plan_flx
-                plan = plan[:, pertIdx+8] #.mean(axis=1)
-                plan = plan - plan.mean(axis=-1, keepdims=True)
+                    mask_plan = {'ext': np.array([0, 1, 0, 0, 1, 0, 0, 0] * n_part, dtype=bool),
+                                 'flx': np.array([0, 0, 0, 1, 0, 0, 1, 0] * n_part, dtype=bool)}
+                    mask_exec = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
+                                 'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
 
-                exec_ext = exec_ext[mask_exec['ext']].reshape(n_part, 4, 154, 32).mean(axis=1)
-                exec_flx = exec_flx[mask_exec['flx']].reshape(n_part, 4, 154, 32).mean(axis=1)
-                exec = exec_ext - exec_flx
-                exec = exec[:, pertIdx+8] #.mean(axis=1)
-                exec = exec - exec.mean(axis=-1, keepdims=True)
+                    plan_ext = lfp_grouped[mask_plan['ext']].reshape(n_part, 2, 154, 32).mean(axis=1)
+                    plan_flx = lfp_grouped[mask_plan['flx']].reshape(n_part, 2, 154, 32).mean(axis=1)
+                    plan = plan_ext - plan_flx
+                    plan = plan[:, pertIdx+4:pertIdx+24].mean(axis=1)
+                    plan = plan - plan.mean(axis=-1, keepdims=True)
 
-                data = np.r_[plan, exec]
-                T, C = data.shape
-                err = data - data.mean(axis=0, keepdims=True)
-                cov = (err.T @ err) / err.shape[0]
-                data_prewhitened = data / np.sqrt(np.diag(cov))
+                    exec_ext = lfp_grouped[mask_exec['ext']].reshape(n_part, 4, 154, 32).mean(axis=1)
+                    exec_flx = lfp_grouped[mask_exec['flx']].reshape(n_part, 4, 154, 32).mean(axis=1)
+                    exec = exec_ext - exec_flx
+                    exec = exec[:, pertIdx+4:pertIdx+24].mean(axis=1)
+                    exec = exec - exec.mean(axis=-1, keepdims=True)
 
-                obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
-                           'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
-                Y.append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
-                G.append(pcm.est_G_crossval(
-                    Y[i].measurements,
-                    Y[i].obs_descriptors['cond_vec'],
-                    Y[i].obs_descriptors['part_vec'])[0])
-                i += 1
+                    data = np.r_[plan, exec]
+                    T, C = data.shape
+                    X = pcm.indicator(obs_des['part_vec'])
+                    beta, *_ = np.linalg.lstsq(X, data)
+                    err = data - X @ beta
+                    cov = (err.T @ err) / err.shape[0]
+                    data_prewhitened = data / np.sqrt(np.diag(cov))
+                    Y.append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
+                    G.append(pcm.est_G_crossval(
+                        Y[-1].measurements,
+                        Y[-1].obs_descriptors['cond_vec'],
+                        Y[-1].obs_descriptors['part_vec'])[0])
 
-        np.save(os.path.join(baseDir, pcmDir, f'G_obs.lfp.corr_cue-dir.{args.region}.npy'), np.array(G))
+        np.save(os.path.join(baseDir, pcmDir, f'G_obs.lfp.corr_cue-dir.{"-".join(args.regions)}.npy'), np.array(G))
         T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False, verbose=True)
         T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True, verbose=False)
-        T_in.to_pickle(os.path.join(baseDir, pcmDir, f'T_in.lfp.corr_cue-dir.{args.region}.p'))
-        T_gr.to_pickle(os.path.join(baseDir, pcmDir, f'T_gr.lfp.corr_cue-dir.{args.region}.p'))
+        T_in.to_pickle(os.path.join(baseDir, pcmDir, f'T_in.lfp.corr_cue-dir.{"-".join(args.regions)}.p'))
+        T_gr.to_pickle(os.path.join(baseDir, pcmDir, f'T_gr.lfp.corr_cue-dir.{"-".join(args.regions)}.p'))
 
-        f = open(os.path.join(baseDir, pcmDir, f'theta_in.lfp.corr_cue-dir.{args.region}.p'), 'wb')
+        f = open(os.path.join(baseDir, pcmDir, f'theta_in.lfp.corr_cue-dir.{"-".join(args.regions)}.p'), 'wb')
         pickle.dump(theta_in, f)
-        f = open(os.path.join(baseDir, pcmDir, f'theta_gr.lfp.corr_cue-dir.{args.region}.p'), 'wb')
+        f = open(os.path.join(baseDir, pcmDir, f'theta_gr.lfp.corr_cue-dir.{"-".join(args.regions)}.p'), 'wb')
         pickle.dump(theta_gr, f)
 
         # do bootstrap
@@ -366,12 +371,13 @@ def main(args):
         )
         r_bootstrap = np.array([r for r in results if r is not None])
         n_disc = len(results) - len(r_bootstrap)
-        print(f'{args.region}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
-        np.save(os.path.join(baseDir, pcmDir, f'r_bootstrap.lfp.corr_cue-dir.{args.region}.npy'), r_bootstrap)
+        print(f'{"-".join(args.regions)}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
+        np.save(os.path.join(baseDir, pcmDir, f'r_bootstrap.lfp.corr_cue-dir.{"-".join(args.regions)}.npy'), r_bootstrap)
     if args.what=='correlation_continuous':
         rng = np.random.default_rng(0)  # seed for reprodocibility
         f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
         Mflex = pickle.load(f)
+        G = []
         T, F = 154, 40
         Y = {(t, f): [] for t in range(T) for f in range(F)}
         for mon in monkey:
@@ -397,22 +403,29 @@ def main(args):
                 exec_ext = lfp_grouped[mask_exec['ext']].reshape(n_part, 4, T, C, F).mean(axis=1)
                 exec_flx = lfp_grouped[mask_exec['flx']].reshape(n_part, 4, T, C, F).mean(axis=1)
                 exec_tf = exec_ext - exec_flx
-                exec_t = exec_tf[:, pertIdx+4:pertIdx+12].mean(axis=1)
+                # exec_t = exec_tf[:, pertIdx+4:pertIdx+12].mean(axis=1)
 
                 obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
                            'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
 
+                Gg = np.zeros((T, F, 2, 2))
                 for t in range(T):
                     for f in range(F):
                         plan = plan_tf[:, t, :, f]
                         plan = plan - plan.mean(axis=-1, keepdims=True)
-                        exec = exec_t[:, :, f]
+                        exec = exec_tf[:, t, :, f]
                         exec = exec - exec.mean(axis=-1, keepdims=True)
                         data = np.r_[plan, exec]
-                        err = data - data.mean(axis=0, keepdims=True)
+                        X = pcm.indicator(obs_des['part_vec'])
+                        beta, *_ = np.linalg.lstsq(X, data)
+                        err = data - X @ beta
                         cov = (err.T @ err) / data.shape[0]
                         data_prewhitened = data / np.sqrt(np.diag(cov))
                         Y[(t, f)].append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
+                        Gg[t, f] = pcm.est_G_crossval(Y[(t, f)][-1].measurements,
+                                                    Y[(t, f)][-1].obs_descriptors['cond_vec'],
+                                                    Y[(t, f)][-1].obs_descriptors['part_vec'])[0]
+                G.append(Gg)
 
         N = len(Y[(0, 0)])
         r_indiv = np.zeros((N, F, T))
@@ -431,6 +444,7 @@ def main(args):
                 theta_gr, _ = pcm.group_to_individ_param(theta_gr[0], Mflex, N)
                 r_group[f, t] = Mflex.get_correlation(theta_gr)[0]
 
+        np.save(os.path.join(baseDir, pcmDir, f'G_obs.lfp.corr_tf.{args.region}.npy'), np.array(G))
         np.save(os.path.join(baseDir, pcmDir, f'r_indiv.lfp.corr_tf.{args.region}.npy'), r_indiv)
         np.save(os.path.join(baseDir, pcmDir, f'SNR.lfp.corr_tf.{args.region}.npy'), SNR)
         np.save(os.path.join(baseDir, pcmDir, f'r_group.lfp.corr_tf.{args.region}.npy'), r_group)
@@ -448,6 +462,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='component')
     parser.add_argument('--recording', nargs='+', type=int, default=[19, 20, 21, 22, 23])
     parser.add_argument( '--region', type=str, default='PMd')
+    parser.add_argument('--regions', type=list, default=['M1', 'S1'])
     parser.add_argument('--monkey', type=str, default='Malfoy')
 
     args = parser.parse_args()

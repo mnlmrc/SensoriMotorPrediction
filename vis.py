@@ -634,7 +634,10 @@ def plot_force_repr_corr(fig, axs, panel, param_c, diff):
     return fig, axs
 
 def plot_correlation(fig, axs, panel, x, y, alternative_slope='two-sided', alternative_intercept='two-sided'):
-    ax = axs[panel]
+    if isinstance(axs, plt.Axes):
+        ax = axs
+    elif isinstance(axs, np.ndarray):
+        ax = axs[panel]
 
     slope, intercept, r_value, p_slope, std_err = linregress(x, y, alternative=alternative_slope)
 
@@ -757,7 +760,7 @@ def plot_pcm_corr(fig, axs, panel, Mflex, theta, theta_g, r_bootstrap=None):
 
     return fig, axs
 
-def add_sig_comp_bayes(fig, axs, panel, c_bf):
+def add_sig_comp_bayes(fig, axs, panel, c_bf, rotation=0, fontsize=10):
     ax = axs[panel]
     for i, col in enumerate(c_bf.columns):
         vals = c_bf[col].dropna().values
@@ -780,11 +783,11 @@ def add_sig_comp_bayes(fig, axs, panel, c_bf):
             stars = None
 
         if stars:
-            ax.text(i, 0, stars, ha='center', va='top', fontsize=10)
+            ax.text(i, 0, stars, ha='center', va='top', fontsize=fontsize, rotation=rotation)
 
     return fig, axs
 
-def add_sig_to_bars(fig, ax, data, y=None, x=None, alternative='two-sided'):
+def add_sig_to_bars(fig, ax, data, y=None, x=None, alternative='two-sided', fontsize=10):
     if isinstance(data, dict):
         data = pd.DataFrame(data)
 
@@ -807,11 +810,11 @@ def add_sig_to_bars(fig, ax, data, y=None, x=None, alternative='two-sided'):
             mean = datai.mean()
             se = datai.std() / np.sqrt(datai.size)
             y_max = mean + se * np.sign(mean)
-            ax.text(xi, y_max + offset * np.sign(mean), f'{stars}', ha='center', va='top')
+            ax.text(xi, y_max + offset * np.sign(mean), f'{stars}', ha='center', va='top', fontsize=fontsize)
 
     return fig, ax
 
-def add_sig_var_expl(fig, axs, panel, param_c, components):
+def add_sig_var_expl(fig, axs, panel, param_c, components, fontsize=10):
     var_expl = np.exp(param_c)
     ax = axs[panel]
 
@@ -860,7 +863,7 @@ def add_sig_var_expl(fig, axs, panel, param_c, components):
 
             # Draw bar and stars
             ax.plot([x1, x2], [y_max + offset , y_max + offset], lw=1.5, c='k')
-            ax.text(center, y_max + .8 * offset, stars, ha='center', va='bottom', fontsize=10)
+            ax.text(center, y_max + .8 * offset, stars, ha='center', va='bottom', fontsize=fontsize)
 
     return fig, axs
 
@@ -1417,7 +1420,7 @@ def main(args, **kwargs):
         palette = kwargs.get('palette', ['#FFFF00', 'red', 'cyan'])
         figsize = tuple(map(float, kwargs.get('figsize', (8, 4))))
         pcm_path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
-        fig, axs = plt.subplots(1, len(args.rois), figsize=figsize, sharey=True, )
+        fig, axs = plt.subplots(1, len(args.rois), figsize=figsize, sharey=True, constrained_layout=True)
         for r, roi in enumerate(args.rois):
             f = open(os.path.join(pcm_path, f'theta_in.{args.epoch}.glm{args.glm}.{args.H}.{roi}.p'), "rb")
             param = pickle.load(f)
@@ -1432,11 +1435,13 @@ def main(args, **kwargs):
             c_bf = MF.component_bayesfactor(T.likelihood, method='AIC', format='DataFrame')
             fig, axs = add_sig_comp_bayes(fig, axs, r, c_bf)
             fig, axs = add_sig_var_expl(fig, axs, r, param_c, components)
-            axs[r].set_title(roi)
+            axs[r].set_title(roi, fontsize=11)
+            axs[r].set_facecolor('none')
         legend_handles = [Patch(facecolor=col, edgecolor='black', label=comp) for comp, col in zip(components, palette)]
-        fig.legend(handles=legend_handles, loc='lower center', frameon=False, ncol=len(components), fontsize=10)
+        axs[0].legend(handles=legend_handles, loc='upper left', frameon=False, ncol=len(components), fontsize=10)
         fig.suptitle('Variance explained by component model')
-        fig.subplots_adjust(bottom=.2, top=.8)
+        fig.tight_layout()
+        fig.subplots_adjust(left=.2, top=.8)
         axs[0].spines['left'].set_bounds(axs[0].get_yticks()[0], axs[0].get_yticks()[-2])
         fig.savefig(os.path.join(path_fig, f'var_expl.{args.epoch}.glm{args.glm}.{args.H}.svg'))
         plt.show()
@@ -1504,6 +1509,7 @@ def main(args, **kwargs):
         scaler = MinMaxScaler()
         gifti = nb.load(os.path.join(gl.baseDir, args.experiment, gl.wbDir, f'searchlight.var_expl.{args.epoch}.{args.H}.func.gii'))
         data = nt.get_gifti_data_matrix(gifti)
+        data = data[:, [0, -1]] if args.epoch == 'exec' else None
         raw_min, raw_max = np.nanmin(data), np.nanmax(data)
         data = scaler.fit_transform(data)
         data = np.clip(data / mclip, 0, 1)
@@ -1517,17 +1523,26 @@ def main(args, **kwargs):
         rgba[:, 2] = sulc_norm  # blue = grey
         rgba[:, 3] = 1.0  # opaque background
         overlay_mask = (data[:, 0] >= threshold) | (data[:, 1] >= threshold)
-        rgba[overlay_mask, 0] = data[overlay_mask, 0]  # red
-        rgba[overlay_mask, 1] = 0  # green stays off for 2-color blend
-        rgba[overlay_mask, 2] = data[overlay_mask, 1]  # blue
+        if args.epoch == 'plan': # red/blue
+            rgba[overlay_mask, 0] = data[overlay_mask, 0]  # red
+            rgba[overlay_mask, 1] = 0  # green stays off for 2-color blend
+            rgba[overlay_mask, 2] = data[overlay_mask, 1]  # blue
+        elif args.epoch == 'exec': #yellow/cyan
+            rgba[overlay_mask, 0] = data[overlay_mask, 0]  # red channel
+            rgba[overlay_mask, 1] = data[overlay_mask, 0]  # green channel
+            rgba[overlay_mask, 1] += data[overlay_mask, 1]  # green accumulates both
+            rgba[overlay_mask, 2] = data[overlay_mask, 1]  # blue channel
+            rgba[:, 1] = np.clip(rgba[:, 1], 0, 1) # clamp green if it exceeds 1
         rgba[overlay_mask, 3] = 1.0  # alpha: opaque overlay
         rgba[~overlay_mask, 3] = 1.0  # still show grey background
         fig, ax = plt.subplots()
         fig, ax = plot_surf(fig, ax, rgba, args.H, cmap=None, vmin=None, vmax=None, overlay='rgb')
-        blue_half = LinearSegmentedColormap.from_list("blue_half", ["black", "blue"])
+        blue_half = LinearSegmentedColormap.from_list(
+            "left_half", ["black", "blue" if args.epoch=='plan' else "yellow"])
         neg_norm = Normalize(vmin=raw_min, vmax=raw_max)
         sm_neg = ScalarMappable(norm=neg_norm, cmap=blue_half)
-        red_half = LinearSegmentedColormap.from_list("red_half", ["black", "red"])
+        red_half = LinearSegmentedColormap.from_list(
+            "right_half", ["black", "red" if args.epoch=='plan' else "cyan"])
         pos_norm = Normalize(vmin=raw_min, vmax=raw_max)
         sm_pos = ScalarMappable(norm=pos_norm, cmap=red_half)
         cax_neg = fig.add_axes([0.20, 0.10, 0.28, 0.025])  # left (blue)

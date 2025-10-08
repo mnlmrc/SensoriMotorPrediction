@@ -6,6 +6,8 @@ import argparse
 import os
 import globals as gl
 import pickle
+from sklearn.decomposition import PCA, NMF, TruncatedSVD
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 def align_spike(spike, trial_info, preProb=20, postProb=64, prePert=30, postPert=40,):
     cueTime = trial_info.probTime.to_numpy()
@@ -46,6 +48,20 @@ def main(args):
                 monkey=args.monkey,
             )
             main(arg)
+    if args.what=='pca':
+        pca = PCA(n_components=5)
+        scaler = StandardScaler()
+        for rec in args.recording:
+            spk = np.load(os.path.join(baseDir, spkDir, f'{args.monkey}', f'spk_aligned.{args.region}-{rec}.npy'))
+            Tp, N, Tr = spk.shape
+            spk_stacked = np.transpose(spk, (0, 2, 1)).reshape(-1, spk.shape[1])
+            spk_norm = scaler.fit_transform(spk_stacked)
+
+            PCs = pca.fit_transform(spk_norm)
+            PCs = PCs.reshape(Tp, Tr, -1)
+
+            np.save(os.path.join(baseDir, spkDir, f'{args.monkey}', f'pcs.{args.region}-{rec}.npy'), PCs)
+        pass
 
 
 if __name__ == '__main__':

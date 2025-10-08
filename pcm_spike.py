@@ -10,7 +10,7 @@ import pickle
 from pcm_models import find_model
 from depreciated.pcm_lfp import make_execution_models
 from joblib import Parallel, delayed, parallel_backend
-from pcm_cortical import bootstrap_correlation
+from imaging_pipelines.util import bootstrap_correlation
 
 def load_spike(file_path):
     mat = sio.loadmat(file_path)
@@ -115,6 +115,7 @@ def run_pcm(epoch='plan', monkey='Malfoy', roi='PMd', M=None, model='component',
 
     print('loading spikes...')
     spike = np.load(os.path.join(baseDir, spkDir, monkey, f'spk_aligned.{roi}-{rec}.npy'))
+    spike = np.sqrt(spike)
 
     trial_info = pd.read_csv(os.path.join(baseDir, recDir, monkey, f'trial_info-{rec}.tsv'), sep='\t')
     trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
@@ -211,7 +212,7 @@ def main(args):
                             out_dict['datatype'].append('spk')
         out = pd.DataFrame(out_dict)
         out.to_csv(os.path.join(baseDir, pcmDir, 'var_expl.plan.spk.tsv'), sep='\t', index=False)
-    if args.what == 'correlation_plan-exec':
+    if args.what=='correlation_plan-exec':
         rng = np.random.default_rng(0)  # seed for reprodocibility
         f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
         Mflex = pickle.load(f)
@@ -229,35 +230,33 @@ def main(args):
                 spk_grouped_plan, _, part_vec = pcm.group_by_condition(spk, trial_info.prob, trial_info.block, axis=-1)
                 spk_grouped_exec, _, _ = pcm.group_by_condition(spk, trial_info.cond, trial_info.block, axis=-1)
                 n_part = len(np.unique(part_vec))
+                obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                           'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
                 n_unit = spk.shape[1]
                 mask_plan = {'ext': np.array([1, 1, 0, 0, 0] * n_part, dtype=bool),
                              'flx': np.array([0, 0, 0, 1, 1] * n_part, dtype=bool)}
                 mask_exec = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
                              'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
 
-                plan_ext = spk_grouped_plan * mask_plan['ext'][:, None, None]
-                plan_ext = plan_ext[mask_plan['ext'] != 0].reshape(n_part, 2, 154, n_unit).mean(axis=1)
-                plan_flx = spk_grouped_plan * mask_plan['flx'][:, None, None]
-                plan_flx = plan_flx[mask_plan['flx'] != 0].reshape(n_part, 2, 154, n_unit).mean(axis=1)
+                plan_ext = spk_grouped_plan[mask_plan['ext']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
+                plan_flx = spk_grouped_plan[mask_plan['flx']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
                 plan = plan_ext - plan_flx
-                plan = plan[:, cuePost - 16:cuePost].mean(axis=1)
+                plan = plan[:, cuePost - 20:cuePost].mean(axis=1)
                 plan = plan - plan.mean(axis=-1, keepdims=True)
 
-                exec_ext = spk_grouped_exec * mask_exec['ext'][:, None, None]
-                exec_ext = exec_ext[mask_exec['ext'] != 0].reshape(n_part, 4, 154, n_unit).mean(axis=1)
-                exec_flx = spk_grouped_exec * mask_exec['flx'][:, None, None]
-                exec_flx = exec_flx[mask_exec['flx'] != 0].reshape(n_part, 4, 154, n_unit).mean(axis=1)
+                exec_ext = spk_grouped_exec[mask_exec['ext']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
+                exec_flx = spk_grouped_exec[mask_exec['flx']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
                 exec = exec_ext - exec_flx
-                exec = exec[:, pertIdx + 8] #.mean(axis=1)
+                exec = exec[:, pertIdx+4:pertIdx+24].mean(axis=1)
                 exec = exec - exec.mean(axis=-1, keepdims=True)
 
                 data = np.r_[plan, exec]
-                err = data - data.mean(axis=0, keepdims=True)
+                X = pcm.indicator(obs_des['part_vec'])
+                beta, *_ = np.linalg.lstsq(X, data)
+                err = data - X @ beta
                 cov = (err.T @ err) / err.shape[0]
                 data_prewhitened = data / np.sqrt(np.diag(cov))
 
-                obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
-                           'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
                 Y.append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
                 G.append(pcm.est_G_crossval(
                     Y[i].measurements,
@@ -293,62 +292,61 @@ def main(args):
         Mflex = pickle.load(f)
         G, Y, i = [], [], 0
         for mon in monkey:
-            for r, rec in enumerate(recordings[mon][args.region]):
-                print(f'doing {mon}, recording {rec}')
+            for roi in args.regions:
+                for r, rec in enumerate(recordings[mon][roi]):
+                    print(f'doing {mon}, recording {rec}')
 
-                spk = np.load(os.path.join(baseDir, spkDir, mon, f'spk_aligned.{args.region}-{rec}.npy'))
-                trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
-                trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
-                mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
-                trial_info.cond = trial_info.cond.map(mapping)
+                    spk = np.load(os.path.join(baseDir, spkDir, mon, f'spk_aligned.{roi}-{rec}.npy'))
+                    spk = np.sqrt(spk)
+                    trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
+                    trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+                    mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
+                    trial_info.cond = trial_info.cond.map(mapping)
 
-                spk_grouped, _, part_vec = pcm.group_by_condition(spk, trial_info.cond, trial_info.block, axis=-1)
-                n_part = len(np.unique(part_vec))
-                n_unit = spk.shape[1]
-                mask_plan = {'ext': np.array([0, 1, 0, 0, 1, 0, 0, 0] * n_part, dtype=bool),
-                             'flx': np.array([0, 0, 0, 1, 0, 0, 0, 1] * n_part, dtype=bool)}
-                mask_exec = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
-                             'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
+                    spk_grouped, _, part_vec = pcm.group_by_condition(spk, trial_info.cond, trial_info.block, axis=-1)
+                    n_part = len(np.unique(part_vec))
+                    obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                               'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
+                    n_unit = spk.shape[1]
+                    mask_plan = {'ext': np.array([0, 1, 0, 0, 1, 0, 0, 0] * n_part, dtype=bool),
+                                 'flx': np.array([0, 0, 0, 1, 0, 0, 1, 0] * n_part, dtype=bool)}
+                    mask_exec = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
+                                 'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
 
-                plan_ext = spk_grouped * mask_plan['ext'][:,None, None]
-                plan_ext = plan_ext[mask_plan['ext']!=0].reshape(n_part, 2, 154, n_unit).mean(axis=1)
-                plan_flx = spk_grouped * mask_plan['flx'][:,None, None]
-                plan_flx = plan_flx[mask_plan['flx']!=0].reshape(n_part, 2, 154, n_unit).mean(axis=1)
-                plan = plan_ext - plan_flx
-                plan = plan[:, pertIdx+8].mean(axis=1)
-                plan = plan - plan.mean(axis=-1, keepdims=True)
+                    plan_ext = spk_grouped[mask_plan['ext']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
+                    plan_flx = spk_grouped[mask_plan['flx']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
+                    plan = plan_ext - plan_flx
+                    plan = plan[:, pertIdx+4:pertIdx+24].mean(axis=1)
+                    plan = plan - plan.mean(axis=-1, keepdims=True)
 
-                exec_ext = spk_grouped * mask_exec['ext'][:,None, None]
-                exec_ext = exec_ext[mask_exec['ext']!=0].reshape(n_part, 4, 154, n_unit).mean(axis=1)
-                exec_flx = spk_grouped * mask_exec['flx'][:,None, None]
-                exec_flx = exec_flx[mask_exec['flx']!=0].reshape(n_part, 4, 154, n_unit).mean(axis=1)
-                exec = exec_ext - exec_flx
-                exec = exec[:, pertIdx+8].mean(axis=1)
-                exec = exec - exec.mean(axis=-1, keepdims=True)
+                    exec_ext = spk_grouped[mask_exec['ext']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
+                    exec_flx = spk_grouped[mask_exec['flx']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
+                    exec = exec_ext - exec_flx
+                    exec = exec[:, pertIdx+4:pertIdx+24].mean(axis=1)
+                    exec = exec - exec.mean(axis=-1, keepdims=True)
 
-                data = np.r_[plan, exec]
-                err = data - data.mean(axis=0, keepdims=True)
-                cov = (err.T @ err) / err.shape[0]
-                data_prewhitened = data / np.sqrt(np.diag(cov))
+                    data = np.r_[plan, exec]
+                    X = pcm.indicator(obs_des['part_vec'])
+                    beta, *_ = np.linalg.lstsq(X, data)
+                    err = data - X @ beta
+                    cov = (err.T @ err) / err.shape[0]
+                    data_prewhitened = data / np.sqrt(np.diag(cov))
 
-                obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
-                           'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
-                Y.append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
-                G.append(pcm.est_G_crossval(
-                    Y[i].measurements,
-                    Y[i].obs_descriptors['cond_vec'],
-                    Y[i].obs_descriptors['part_vec'])[0])
-                i += 1
+                    Y.append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
+                    G.append(pcm.est_G_crossval(
+                        Y[-1].measurements,
+                        Y[-1].obs_descriptors['cond_vec'],
+                        Y[-1].obs_descriptors['part_vec'])[0])
 
-        np.save(os.path.join(baseDir, pcmDir, f'G_obs.spk.corr_cue-dir.{args.region}.npy'), np.array(G))
+        np.save(os.path.join(baseDir, pcmDir, f'G_obs.spk.corr_cue-dir.{"-".join(args.regions)}.npy'), np.array(G))
         T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False, verbose=True)
         T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True, verbose=False)
-        T_in.to_pickle(os.path.join(baseDir, pcmDir, f'T_in.spk.corr_cue-dir.{args.region}.p'))
-        T_gr.to_pickle(os.path.join(baseDir, pcmDir, f'T_gr.spk.corr_cue-dir.{args.region}.p'))
+        T_in.to_pickle(os.path.join(baseDir, pcmDir, f'T_in.spk.corr_cue-dir.{"-".join(args.regions)}.p'))
+        T_gr.to_pickle(os.path.join(baseDir, pcmDir, f'T_gr.spk.corr_cue-dir.{"-".join(args.regions)}.p'))
 
-        f = open(os.path.join(baseDir, pcmDir, f'theta_in.spk.corr_cue-dir.{args.region}.p'), 'wb')
+        f = open(os.path.join(baseDir, pcmDir, f'theta_in.spk.corr_cue-dir.{"-".join(args.regions)}.p'), 'wb')
         pickle.dump(theta_in, f)
-        f = open(os.path.join(baseDir, pcmDir, f'theta_gr.spk.corr_cue-dir.{args.region}.p'), 'wb')
+        f = open(os.path.join(baseDir, pcmDir, f'theta_gr.spk.corr_cue-dir.{"-".join(args.regions)}.p'), 'wb')
         pickle.dump(theta_gr, f)
 
         # do bootstrap
@@ -360,12 +358,14 @@ def main(args):
         )
         r_bootstrap = np.array([r for r in results if r is not None])
         n_disc = len(results) - len(r_bootstrap)
-        print(f'{args.region}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
-        np.save(os.path.join(baseDir, pcmDir, f'r_bootstrap.spk.corr_cue-dir.{args.region}.npy'), r_bootstrap)
+        print(f'{"-".join(args.regions)}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
+        np.save(os.path.join(baseDir, pcmDir, f'r_bootstrap.spk.corr_cue-dir.{"-".join(args.regions)}.npy'), r_bootstrap)
     if args.what=='correlation_continuous':
         rng = np.random.default_rng(0)  # seed for reprodocibility
         f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
         Mflex = pickle.load(f)
+
+        G = []
         T = 154
         Y = {t: [] for t in range(T)}
         for mon in monkey:
@@ -377,6 +377,7 @@ def main(args):
                 mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
                 trial_info.cond = trial_info.cond.map(mapping)
                 spk_grouped, _, part_vec = pcm.group_by_condition(spk, trial_info.cond, trial_info.block, axis=-1)
+                spk_grouped = np.sqrt(spk_grouped)
                 n_part = len(np.unique(part_vec))
                 _, _, C = spk_grouped.shape
                 mask_plan = {'ext': np.array([0, 1, 0, 0, 1, 0, 0, 0] * n_part, dtype=bool),
@@ -390,21 +391,28 @@ def main(args):
 
                 exec_ext = spk_grouped[mask_exec['ext']].reshape(n_part, 4, T, C).mean(axis=1)
                 exec_flx = spk_grouped[mask_exec['flx']].reshape(n_part, 4, T, C).mean(axis=1)
-                exec = exec_ext - exec_flx
-                exec = exec[:, pertIdx+4:pertIdx+12].mean(axis=1)
-                exec = exec - exec.mean(axis=-1, keepdims=True)
+                exec_t = exec_ext - exec_flx
+                # exec = exec[:, pertIdx+4:pertIdx+12].mean(axis=1)
+                # exec = exec - exec.mean(axis=-1, keepdims=True)
 
                 obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
                            'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
 
+                Gg = np.zeros((T, 2, 2))
                 for t in range(T):
                     plan = plan_t[:, t, :]
                     plan = plan - plan.mean(axis=-1, keepdims=True)
+                    exec = exec_t[:, t, :]
+                    exec = exec - exec.mean(axis=-1, keepdims=True)
                     data = np.r_[plan, exec]
                     err = data - data.mean(axis=0, keepdims=True)
                     cov = (err.T @ err) / data.shape[0]
                     data_prewhitened = data / np.sqrt(np.diag(cov))
                     Y[t].append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
+                    Gg[t] = pcm.est_G_crossval(Y[t][-1].measurements,
+                                                  Y[t][-1].obs_descriptors['cond_vec'],
+                                                  Y[t][-1].obs_descriptors['part_vec'])[0]
+                G.append(Gg)
 
         N = len(Y[0])
         r_indiv = np.zeros((N, T))
@@ -422,9 +430,70 @@ def main(args):
             theta_gr, _ = pcm.group_to_individ_param(theta_gr[0], Mflex, N)
             r_group[t] = Mflex.get_correlation(theta_gr)[0]
 
+        np.save(os.path.join(baseDir, pcmDir, f'G_obs.spk.corr_tf.{args.region}.npy'), np.array(G))
         np.save(os.path.join(baseDir, pcmDir, f'r_indiv.spk.corr_tf.{args.region}.npy'), r_indiv)
         np.save(os.path.join(baseDir, pcmDir, f'SNR.spk.corr_tf.{args.region}.npy'), SNR)
         np.save(os.path.join(baseDir, pcmDir, f'r_group.spk.corr_tf.{args.region}.npy'), r_group)
+    if args.what=='autocorrelation':
+        rng = np.random.default_rng(0)  # seed for reprodocibility
+        f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
+        Mflex = pickle.load(f)
+        G = []
+        T, C = 154, 8
+        Y = {(c, ti, tj): [] for c in range(C) for ti in range(T) for tj in range(T)}
+        for mon in monkey:
+            for r, rec in enumerate(recordings[mon][args.region]):
+                print(f'doing {mon}, recording {rec}')
+                spk = np.load(os.path.join(baseDir, spkDir, mon, f'spk_aligned.{args.region}-{rec}.npy'))
+                trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
+                trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+                mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
+                trial_info.cond = trial_info.cond.map(mapping)
+                spk_grouped, _, part_vec = pcm.group_by_condition(spk, trial_info.cond, trial_info.block, axis=-1)
+                n_part = len(np.unique(part_vec))
+                spk_grouped = spk_grouped.reshape(n_part, C, T, -1)
+                obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                           'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
+                Gg = np.zeros((C, T, T, 2, 2))
+                for c in range(C):
+                    for ti in range(T):
+                        for tj in range(T):
+                            xi = spk_grouped[:, c, ti, :]
+                            xj = spk_grouped[:, c, tj, :]
+                            xi = xi - xi.mean()
+                            xj = xj - xj.mean()
+                            data = np.r_[xi, xj]
+                            err = data - data.mean(axis=0, keepdims=True)
+                            cov = (err.T @ err) / data.shape[0]
+                            data_prewhitened = data / np.sqrt(np.diag(cov) + 1e-6)
+                            Y[(c, ti, tj)].append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
+                            Gg[c, ti, tj] = pcm.est_G_crossval(Y[(c, ti, tj)][-1].measurements,
+                                                          Y[(c, ti, tj)][-1].obs_descriptors['cond_vec'],
+                                                          Y[(c, ti, tj)][-1].obs_descriptors['part_vec'])[0]
+                G.append(Gg)
+
+        N = len(Y[(0, 0, 0)])
+        r_indiv = np.zeros((N, C, T, T))
+        SNR = np.zeros_like(r_indiv)
+        r_group = np.zeros((C, T, T))
+        for c in range(C):
+            for ti in range(T):
+                for tj in range(T):
+                    print(f'doing ML estimation for c={c}, ti={ti}, tj={tj}...')
+                    _, theta = pcm.fit_model_individ(Y[(c, ti, tj)], Mflex, fixed_effect=None, fit_scale=False, verbose=False)
+                    _, theta_gr = pcm.fit_model_group(Y[(c, ti, tj)], Mflex, fixed_effect=None, fit_scale=True, verbose=False)
+                    sigma2_1 = np.exp(theta[0][0])
+                    sigma2_2 = np.exp(theta[0][1])
+                    r_indiv[:, c, ti, tj] = Mflex.get_correlation(theta[0])
+                    sigma2_e = np.exp(theta[0][3])
+                    SNR[:, c, ti, tj] = np.sqrt(sigma2_1 * sigma2_2) / sigma2_e
+                    theta_gr, _ = pcm.group_to_individ_param(theta_gr[0], Mflex, N)
+                    r_group[c, ti, tj] = Mflex.get_correlation(theta_gr)[0]
+
+        np.save(os.path.join(baseDir, pcmDir, f'G_obs.spk.autocorr.{args.region}.npy'), np.array(G))
+        np.save(os.path.join(baseDir, pcmDir, f'r_indiv.spk.autocorr.{args.region}.npy'), r_indiv)
+        np.save(os.path.join(baseDir, pcmDir, f'SNR.spk.autocorr.{args.region}.npy'), SNR)
+        np.save(os.path.join(baseDir, pcmDir, f'r_group.spk.autocorr.{args.region}.npy'), r_group)
 
 if __name__ == '__main__':
     start = time.time()
@@ -437,6 +506,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, default='component')
     parser.add_argument('--monkey', type=str, default='Pert')
     parser.add_argument('--region', type=str, default='PMd')
+    parser.add_argument('--regions', type=list, default=['M1', 'S1'])
     parser.add_argument('--recording', nargs='+', type=int, default=[19, 20, 21, 22, 23])
 
     args = parser.parse_args()

@@ -874,7 +874,7 @@ function varargout = smp2_glm(what, varargin)
             derivs = [0, 0];
             vararginoptions(varargin,{'sn', 'glm', 'derivs'})
             
-            hrf_params = str2double(strsplit(pinfo.hrf_params{pinfo.sn==sn}, ':'));
+            hrf_params = pinfo.hrf_params(pinfo.sn==sn, :);
             
             spm_get_defaults('cmdline', true);  % Suppress GUI prompts, no request for overwirte
                 
@@ -978,7 +978,7 @@ function varargout = smp2_glm(what, varargin)
             GL = surf_vol2surf(c1L,c2L,V,'anatomicalStruct','CortexLeft', 'exclude_thres', 0.9, 'faces', hemLpial.faces);
             GL = surf_makeFuncGifti(GL.cdata,'anatomicalStruct', 'CortexLeft', 'columnNames', cols);
     
-            save(GL, fullfile(baseDir, wbDir, subj_id, [glmEstDir '.'                                               type '.L.func.gii']))
+            save(GL, fullfile(baseDir, wbDir, subj_id, [glmEstDir '.' type '.L.func.gii']))  
     
             GR = surf_vol2surf(c1R,c2R,V,'anatomicalStruct','CortexRight', 'exclude_thres', 0.9, 'faces', hemRpial.faces);
             GR = surf_makeFuncGifti(GR.cdata,'anatomicalStruct', 'CortexRight', 'columnNames', cols);

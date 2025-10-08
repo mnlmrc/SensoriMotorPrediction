@@ -1,5 +1,9 @@
 clear
 close all
+
+addpath('yaml/')
+addpath('ReadC3D_3.1.2/')
+
 for monkeyList = {'Malfoy','Pert'}
     monkey = monkeyList{1};
 
@@ -313,8 +317,6 @@ for monkeyList = {'Malfoy','Pert'}
             end
 
             L = round(double(max(T)) / 30000);
-
-
 
             cutOffTrial(type) = length(neuralSync{type})+1;
 
