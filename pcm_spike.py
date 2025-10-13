@@ -158,9 +158,9 @@ def main(args):
 
     recordings = {
         'Malfoy': {
-            'PMd': [19, 20, 21, 22, 23, 24],
-            'S1': [26, 27, 28],
-            'M1': [12, 13, 25, 27, 28]
+            'PMd': [10, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24],
+            'S1': [5, 9, 11, 15, 16, 26, 27, 28],
+            'M1': [1, 6, 12, 13, 25, 27, 28]
         },
         'Pert': {
             'PMd': [4, 6, 7, 10, 20],
@@ -212,6 +212,25 @@ def main(args):
                             out_dict['datatype'].append('spk')
         out = pd.DataFrame(out_dict)
         out.to_csv(os.path.join(baseDir, pcmDir, 'var_expl.plan.spk.tsv'), sep='\t', index=False)
+    if args.what=='tot_variance_plan':
+        for mon in monkey:
+            for r, rec in enumerate(recordings[mon][args.region]):
+                print(f'doing {mon}, recording {rec}')
+                spk = np.load(os.path.join(baseDir, spkDir, mon, f'spk_aligned.{args.region}-{rec}.npy'))
+                spk = np.sqrt(spk)
+                trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
+                trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+                mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
+                trial_info.cond = trial_info.cond.map(mapping)
+                spk_grouped, cond_vec, part_vec = pcm.group_by_condition(spk, trial_info.prob, trial_info.block, axis=-1)
+                n_timep = spk_grouped.shape[1]
+                Var = np.zeros(n_timep)
+                for t in range(n_timep):
+                    Y = spk_grouped[:, t]
+                    G_obs, _ = pcm.est_G(Y, cond_vec, part_vec, X=pcm.indicator(part_vec))
+                    Var[t] = np.trace(G_obs)
+                np.save(os.path.join(baseDir, pcmDir, mon, f'var_tot.spk.{args.region}.plan-{rec}.npy'), Var)
+
     if args.what=='correlation_plan-exec':
         rng = np.random.default_rng(0)  # seed for reprodocibility
         f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")

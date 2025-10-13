@@ -151,7 +151,7 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
 
             # calc mean deviation
             X = mov[onset:onset + int(.5 * gl.fsample_mov), ch_idx]
-            md, _ = calc_md(X)
+            md, _ = calc_md(X[:, [1, 3]])
             force_dict['MD'].append(md)
             force_dict['stimFinger'].append(dat_tmp.iloc[ons]['stimFinger'])
             force_dict['cue'].append(dat_tmp.iloc[ons]['cue'])

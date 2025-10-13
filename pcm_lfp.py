@@ -157,9 +157,9 @@ def main(args):
 
     recordings = {
         'Malfoy': {
-            'PMd': [19, 20, 21, 22, 23, 24],
-            'S1': [26, 27, 28],
-            'M1': [12, 13, 25, 27, 28]
+            'PMd': [10, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24],
+            'S1': [5, 9, 11, 15, 16, 26, 27, 28],
+            'M1': [1, 6, 12, 13, 25, 27, 28]
         },
         'Pert': {
             'PMd': [4, 6, 7, 10, 20],
@@ -219,6 +219,24 @@ def main(args):
                                 out_dict['datatype'].append('lfp')
         out = pd.DataFrame(out_dict)
         out.to_csv(os.path.join(baseDir, pcmDir, 'var_expl.plan.lfp.tsv'), sep='\t', index=False)
+    if args.what=='tot_variance_plan':
+        for mon in monkey:
+            for r, rec in enumerate(recordings[mon][args.region]):
+                print(f'doing {mon}, recording {rec}')
+                lfp = np.load(os.path.join(baseDir, lfpDir, mon, f'lfp_aligned.{args.region}-{rec}.npy'))
+                trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
+                trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+                lfp_grouped, cond_vec, part_vec = pcm.group_by_condition(lfp, trial_info.prob, trial_info.block, axis=-1)
+                n_cond, n_timep, n_unit, n_freq = 5, lfp_grouped.shape[1], lfp_grouped.shape[2], lfp_grouped.shape[3]
+                # spk_grouped = lfp_grouped.reshape(n_cond, -1, n_timep, n_unit).mean(axis=1)
+                n_sample, n_feat = lfp_grouped.shape[0], lfp_grouped.shape[-1]
+                Var = np.zeros((n_timep, n_freq))
+                for f in range(n_freq):
+                    for t in range(n_timep):
+                        Y = lfp_grouped[:, t, :, f]
+                        G_obs, _ = pcm.est_G(Y, cond_vec, part_vec, X=pcm.indicator(part_vec))
+                        Var[t, f] = np.trace(G_obs)
+                np.save(os.path.join(baseDir, pcmDir, mon, f'var_tot.lfp.{args.region}.plan-{rec}.npy'), Var)
     if args.what=='correlation_plan-exec':
             rng = np.random.default_rng(0)  # seed for reprodocibility
             f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
