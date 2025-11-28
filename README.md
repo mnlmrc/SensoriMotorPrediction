@@ -57,7 +57,11 @@ visualisation, gifti files are converted to cifti and smoothed using the `surfac
 All the representational models are impletemented in the `pcm_models` module:
 
 - Save planning models: `python pcm_models.py plan`
-- Save execution models: `python pcm_models.py plan`
+- Save execution models: `python pcm_models.py exec`
+
+### PCM correlations
+
+- Planning-execution correlation in BOLD: `python pcm_cortical.py correlation_plan-exec`
 
 
 

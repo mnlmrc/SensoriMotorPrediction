@@ -1452,7 +1452,7 @@ def main(args, **kwargs):
         fig.suptitle('Representational models')
         fig.savefig(os.path.join(path_fig, f'models.{args.epoch}.svg'))
         plt.show()
-    if args.what=='weight':
+    if args.what=='weight_cortical':
         Mc, idxc = find_model(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.{args.epoch}.p'), 'component')
         n_param_c = Mc.n_param
         components = kwargs.get('components', ['sensory input', 'expectation', 'surprise'])
@@ -2003,60 +2003,36 @@ def main(args, **kwargs):
         axs.set_title('Maximum likelihood\nunder component model', pad=10)
         fig.savefig(os.path.join(path_fig, f'likelihood.emg.svg'))
         plt.show()
-    if args.what=='lfp_comp':
-        baseDir = '/cifs/pruszynski/Marco/SensoriMotorPrediction'
-        lfpDir = 'LFPs'  # + monkey + '/'
-        spkDir = 'spikes'  # + monkey + '/'
-        pcmDir = 'pcm'
-        behavDir = 'Behavioural'
-        recDir = 'Recordings'
-        cfg = mat73.loadmat(os.path.join(baseDir, lfpDir, 'Malfoy/cfg.PMd-19.mat'))['cfg']
+    if args.what=='weight_lfp':
+        figsize = tuple(map(float, kwargs.get('figsize', (4, 3))))
+        monkey = list(map(str, kwargs.get('monkey', ['Malfoy', 'Pert'])))
+        models = list(map(str, kwargs.get('models', ['Expectation', 'Uncertainty'])))
+        model = kwargs.get('model', 'Expectation')
+        freq1, freq2 = tuple(map(float, kwargs.get('band', (10, 20))))
+        epoch = args.epoch
+        rois = args.rois
+        cfg = mat73.loadmat(os.path.join(gl.nhpDir, gl.lfpDir, 'Malfoy/cfg.PMd-19.mat'))['cfg']
         foi = cfg['foi']
-        freq_masks = make_freq_masks(cfg)
 
-        freqs = ['delta', 'theta', 'alpha-beta', 'gamma']
-        recordings = {
-            'Malfoy': {
-                'PMd': [10, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24],
-                'M1': [12, 13, 25, 27, 28],
-                'S1': [5, 9, 11, 15, 16, 26, 27, 28]
-            },
-            'Pert': {
-                'PMd': [4, 6, 7, 10, 20],
-                'M1': [2, 3, 14, 20],
-                'S1': [15]
-            }
-        }
-
-        cuePre = 0
-        cueIdx = 20
-        cuePost = 84
-        pertPre = cuePost
-        pertIdx = pertPre + 30
-        pertPost = pertPre + 70
-
-        t_cue = np.linspace(0, cuePost - 1, cuePost)
-        t_pert = np.linspace(pertPre, pertPost - 1, pertPost - pertPre) + 5
+        t_cue = np.linspace(0, gl.cuePost - 1, gl.cuePost)
+        t_pert = np.linspace(gl.pertPre, gl.pertPost - 1, gl.pertPost - gl.pertPre) + 5
         t = np.concatenate((t_cue, t_pert))
 
-        monkey = ['Malfoy', 'Pert']
-
-        rois = ['PMd', 'S1']
-        freq = freq_masks['alpha-beta']
-
         var_expl = {"lfp": [], "spk": [], 'roi': []}  # each becomes list over rois
+        lfp = {'lpf': []}
         kin = {"elbow": [], "prob": [], 'cond': [], 'rec': [], 'roi': []}
-        corr = {"lfp": [], "spk": [], 'roi': []}
-        epoch = 'plan'
+
         for roi in rois:
             for mon in monkey:
-                for rec in recordings[mon][roi]:
+                for rec in gl.recordings[mon][roi]:
                     theta_lfp_comp = np.load(
-                        os.path.join(baseDir, pcmDir, mon, f'theta_in.lfp.component.{roi}.{epoch}-{rec}.npy'))
+                        os.path.join(gl.nhpDir, gl.pcmDir, mon, f'theta_in.lfp.component.{roi}.{epoch}-{rec}.npy'))
                     theta_spk_comp = np.load(
-                        os.path.join(baseDir, pcmDir, mon, f'theta_in.spk.component.{roi}.{epoch}-{rec}.npy'))
-                    var_tot_lfp = np.load(os.path.join(baseDir, pcmDir, mon, f'var_tot.lfp.{roi}.{epoch}-{rec}.npy'))
-                    var_tot_spk = np.load(os.path.join(baseDir, pcmDir, mon, f'var_tot.spk.{roi}.{epoch}-{rec}.npy'))
+                        os.path.join(gl.nhpDir, gl.pcmDir, mon, f'theta_in.spk.component.{roi}.{epoch}-{rec}.npy'))
+                    var_tot_lfp = np.load(
+                        os.path.join(gl.nhpDir, gl.pcmDir, mon, f'var_tot.lfp.{roi}.{epoch}-{rec}.npy'))
+                    var_tot_spk = np.load(
+                        os.path.join(gl.nhpDir, gl.pcmDir, mon, f'var_tot.spk.{roi}.{epoch}-{rec}.npy'))
                     var_expl["lfp"].append(np.exp(theta_lfp_comp[..., :-1]) / var_tot_lfp.T[..., None])
                     var_expl["spk"].append(np.exp(theta_spk_comp[:, :-1]) / var_tot_spk.T[..., None])
                     var_expl["roi"].append(roi)
@@ -2067,16 +2043,16 @@ def main(args, **kwargs):
                                              'roi': var_expl['roi'],
                                              'freq': foi,
                                              'time': t,
-                                             'model': ['cue', 'uncertainty']})
+                                             'model': models})
         var_expl_spk_plan = xr.DataArray(data=np.stack(var_expl["spk"]),
                                          dims=('roi', 'time', 'model'),
                                          coords={
                                              'roi': var_expl['roi'],
                                              'time': t,
-                                             'model': ['cue', 'uncertainty']})
+                                             'model': models})
 
-        fig, axs_ = plt.subplots(2, 3, sharex='col', figsize=(4, 3), gridspec_kw={"width_ratios": [80, 80, 2]},
-                                 constrained_layout=True)
+        fig, axs_ = plt.subplots(2, len(rois) + 1, sharex='col', figsize=figsize,
+                                 gridspec_kw={"width_ratios": [80] * len(rois) + [2]}, constrained_layout=True)
 
         axs = axs_[:, :-1]
         ax_c = axs_[:, -1]
@@ -2084,118 +2060,54 @@ def main(args, **kwargs):
         vmin, vmax = 0, .1
         color = [['darkred', 'navy'], ['lightcoral', 'lightblue']]
         label = ['cue', 'uncertainty']
-        for r, roi in enumerate(['PMd', 'S1']):
-            lfp_tf1 = var_expl_lfp_plan.sel(roi=roi, time=slice(0, cuePost - 1), model='cue').mean(dim='roi').values
-            lfp_tf2 = var_expl_lfp_plan.sel(roi=roi, time=slice(pertPre, None), model='cue').mean(dim='roi').values
-            lfp_t1 = var_expl_lfp_plan.sel(roi=roi, time=slice(0, cuePost - 1), model='cue', freq=slice(10, 20)).mean(
+        for r, roi in enumerate(rois):
+            ax = axs[:, r]
+            lfp_tf1 = var_expl_lfp_plan.sel(roi=roi, time=slice(0, gl.cuePost - 1), model=model).mean(dim='roi').values
+            lfp_tf2 = var_expl_lfp_plan.sel(roi=roi, time=slice(gl.pertPre, None), model=model).mean(dim='roi').values
+            lfp_t1 = var_expl_lfp_plan.sel(roi=roi, time=slice(0, gl.cuePost - 1), model=model, freq=slice(freq1, freq2)).mean(
                 dim=('roi', 'freq')).values
-            lfp_t2 = var_expl_lfp_plan.sel(roi=roi, time=slice(pertPre, None), model='cue', freq=slice(10, 20)).mean(
+            lfp_t2 = var_expl_lfp_plan.sel(roi=roi, time=slice(gl.pertPre, None), model=model, freq=slice(freq1, freq2)).mean(
                 dim=('roi', 'freq')).values
-            h1 = axs[0, r].pcolormesh(t_cue, foi, lfp_tf1, vmin=vmin, vmax=vmax, cmap='plasma')
-            h2 = axs[0, r].pcolormesh(t_pert, foi, lfp_tf2, vmin=vmin, vmax=vmax, cmap='plasma')
+            h1 = ax[0].pcolormesh(t_cue, foi, lfp_tf1, vmin=vmin, vmax=vmax, cmap='plasma')
+            h2 = ax[0].pcolormesh(t_pert, foi, lfp_tf2, vmin=vmin, vmax=vmax, cmap='plasma')
             h1.set_rasterized(True)
             h2.set_rasterized(True)
-            axs[0, r].set_yscale('log')
-            axs[0, r].set_title(roi)
-            axs[0, r].axhline(10, color='k', lw='.8')
-            axs[0, r].axhline(20, color='k', lw='.8')
-            axs[0, r].set_ylabel('frequency (Hz)') if r == 0 else None
-            firing1 = var_expl_spk_plan.sel(roi=roi, time=slice(0, cuePost - 1), model='cue').mean(dim='roi').values
-            firing2 = var_expl_spk_plan.sel(roi=roi, time=slice(pertPre, None), model='cue').mean(dim='roi').values
-            axs[1, r].plot(t_cue, firing1, color='brown', label='spiking activity')
-            axs[1, r].plot(t_pert, firing2, color='brown')
-            axs[1, r].plot(t_cue, lfp_t1, color='lightcoral', label='LFPs (10-20Hz)')
-            axs[1, r].plot(t_pert, lfp_t2, color='lightcoral')
-            axs[1, r].axvspan(cueIdx, cuePost, color='grey', alpha=.2, lw=0)
-            axs[1, r].set_ylim([-.01, .3])
-            axs[1, r].set_yticks((0, .3))
-            axs[1, r].spines['left'].set_bounds(0, .3)
-            axs[1, r].set_ylabel('weight') if r == 0 else None
+            ax[0].set_yscale('log')
+            ax[0].set_title(roi)
+            ax[0].axhline(freq1, color='k', lw='.8')
+            ax[0].axhline(freq2, color='k', lw='.8')
+            ax[0].set_ylabel('frequency (Hz)') if r == 0 else None
+            firing1 = var_expl_spk_plan.sel(roi=roi, time=slice(0, gl.cuePost - 1), model=model).mean(dim='roi').values
+            firing2 = var_expl_spk_plan.sel(roi=roi, time=slice(gl.pertPre, None), model=model).mean(dim='roi').values
+            ax[1].plot(t_cue, firing1, color='brown', label='spiking activity')
+            ax[1].plot(t_pert, firing2, color='brown')
+            ax[1].plot(t_cue, lfp_t1, color='lightcoral', label='LFPs (10-20Hz)')
+            ax[1].plot(t_pert, lfp_t2, color='lightcoral')
+            ax[1].axvspan(gl.cueIdx, gl.cuePost, color='grey', alpha=.2, lw=0)
+            ax[1].set_ylim([-.01, .3])
+            ax[1].set_yticks((0, .3))
+            ax[1].spines['left'].set_bounds(0, .3)
+            ax[1].set_ylabel('weight') if r == 0 else None
             for i in range(2):
-                axs[i, r].axvline(cueIdx, color='k', lw='.8')
-                axs[i, r].axvline(pertIdx, color='k', lw='.8')
-                axs[i, r].set_xticks([cueIdx, pertIdx])
-                axs[i, r].set_xticklabels(['Cue', 'Pert'])
-                axs[i, r].set_yticks([]) if r > 0 else None
-                axs[i, r].spines[['bottom', 'right', 'top']].set_visible(False) if r == 0 else axs[i, r].spines[
+                ax[i].axvline(gl.cueIdx, color='k', lw='.8')
+                ax[i].axvline(gl.pertIdx, color='k', lw='.8')
+                ax[i].set_xticks([gl.cueIdx, gl.pertIdx])
+                ax[i].set_xticklabels(['Cue', 'Pert'])
+                ax[i].set_yticks([]) if r > 0 else None
+                ax[i].spines[['bottom', 'right', 'top']].set_visible(False) if r == 0 else axs[i, r].spines[
                     ['bottom', 'right', 'top', 'left']].set_visible(False)
 
-        axs[1, 1].legend(frameon=False, ncol=1, fontsize=8, loc='upper left')
+        axs_[1, 0].legend(frameon=False, ncol=1, fontsize=8, loc='upper left')
 
         fig.colorbar(h1, cax=ax_c[0], label='weight')
         for ax in ax_c[1:]:
             ax.remove()
 
-        fig.suptitle(f'Expectation weight', va='center')
-        fig.savefig(os.path.join(path_fig, f'lfp.component.plan.svg'))
+        fig.suptitle(f'{model} weight', va='center')
+        fig.savefig(os.path.join(path_fig, f'lfp.component.{model}.{args.epoch}.{".".join(rois)}.svg'))
         plt.show()
-    if args.what=='lfp_aov':
-        baseDir = '/cifs/pruszynski/Marco/SensoriMotorPrediction'
-        lfpDir = 'LFPs'  # + monkey + '/'
-        spkDir = 'spikes'  # + monkey + '/'
-        pcmDir = 'pcm'
-        behavDir = 'Behavioural'
-        recDir = 'Recordings'
-        cfg = mat73.loadmat(os.path.join(baseDir, lfpDir, 'Malfoy/cfg.PMd-19.mat'))['cfg']
-        foi = cfg['foi']
-        recordings = {
-            'Malfoy': {
-                'PMd': [10, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24],
-                'M1': [12, 13, 25, 27, 28],
-                'S1': [5, 9, 11, 15, 16, 26, 27, 28]
-            },
-            'Pert': {
-                'PMd': [4, 6, 7, 10, 20],
-                'M1': [2, 3, 14, 20],
-                'S1': [15]
-            }
-        }
+    if args.what=='lfp_aov_model':
 
-        cuePre = 0
-        cueIdx = 20
-        cuePost = 84
-        pertPre = cuePost
-        pertIdx = pertPre + 30
-        pertPost = pertPre + 70
-
-        t_cue = np.linspace(0, cuePost - 1, cuePost)
-        t_pert = np.linspace(pertPre, pertPost - 1, pertPost - pertPre) + 5
-        t = np.concatenate((t_cue, t_pert))
-
-        monkey = ['Malfoy', 'Pert']
-
-        rois = ['PMd', 'S1']
-
-        var_expl = {"lfp": [], "spk": [], 'roi': []}  # each becomes list over rois
-        kin = {"elbow": [], "prob": [], 'cond': [], 'rec': [], 'roi': []}
-        corr = {"lfp": [], "spk": [], 'roi': []}
-        epoch = 'plan'
-        for roi in rois:
-            for mon in monkey:
-                for rec in recordings[mon][roi]:
-                    theta_lfp_comp = np.load(
-                        os.path.join(baseDir, pcmDir, mon, f'theta_in.lfp.component.{roi}.{epoch}-{rec}.npy'))
-                    theta_spk_comp = np.load(
-                        os.path.join(baseDir, pcmDir, mon, f'theta_in.spk.component.{roi}.{epoch}-{rec}.npy'))
-                    var_tot_lfp = np.load(os.path.join(baseDir, pcmDir, mon, f'var_tot.lfp.{roi}.{epoch}-{rec}.npy'))
-                    var_tot_spk = np.load(os.path.join(baseDir, pcmDir, mon, f'var_tot.spk.{roi}.{epoch}-{rec}.npy'))
-                    var_expl["lfp"].append(np.exp(theta_lfp_comp[..., :-1]) / var_tot_lfp.T[..., None])
-                    var_expl["spk"].append(np.exp(theta_spk_comp[:, :-1]) / var_tot_spk.T[..., None])
-                    var_expl["roi"].append(roi)
-
-        var_expl_lfp_plan = xr.DataArray(data=np.stack(var_expl["lfp"]),
-                                         dims=('roi', 'freq', 'time', 'model'),
-                                         coords={
-                                             'roi': var_expl['roi'],
-                                             'freq': foi,
-                                             'time': t,
-                                             'model': ['cue', 'uncertainty']})
-        var_expl_spk_plan = xr.DataArray(data=np.stack(var_expl["spk"]),
-                                         dims=('roi', 'time', 'model'),
-                                         coords={
-                                             'roi': var_expl['roi'],
-                                             'time': t,
-                                             'model': ['cue', 'uncertainty']})
         pmd_lfp = var_expl_lfp_plan.sel(roi='PMd', time=slice(cueIdx, cuePost), model='cue', freq=slice(10, 20)).mean(
             dim=('freq', 'time')).values
         s1_lfp = var_expl_lfp_plan.sel(roi='S1', time=slice(cueIdx, cuePost), model='cue', freq=slice(10, 20)).mean(
@@ -2231,7 +2143,7 @@ def main(args, **kwargs):
         ax.spines['left'].set_bounds(0, .12)
         ax.set_xlabel(None)
         ax.set_ylabel('variance (a.u.)')
-        fig.savefig(os.path.join(path_fig, f'lfp.component.plan.binned.svg'))
+        fig.savefig(os.path.join(path_fig, f'lfp.component.{epocj}.binned.svg'))
         plt.show()
 
 
