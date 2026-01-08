@@ -50,12 +50,11 @@ def segment_mov(experiment=None, sn=None, session=None, blocks=None, prestim=gl.
 
         idx = mov[:, 1] > gl.planState[experiment]
         idxD = np.diff(idx.astype(int))
-        stimOnset = np.where(idxD == 1)[0]
+        stimOnset = np.where(idxD == 1)[0] + int(.05 * gl.fsample_mov) # skip first 50ms (electro-mechanical delay)
 
         print(f'Processing... subj{sn}, block {bl}, {len(stimOnset)} trials found...')
 
         for ons, onset in enumerate(stimOnset):
-            # if self.dat.GoNogo.iloc[ons] == 'go':
             force.append(mov[onset - int(prestim * gl.fsample_mov):onset + int(poststim * gl.fsample_mov), ch_idx].T)
 
     descr = json.dumps({
@@ -100,8 +99,31 @@ def calc_md(X):
 
     return MD, d
 
+def calc_rt(X, thresh, fs):
+    """
+    Compute reaction time (RT) as the first sample where any column in X
+    exceeds the given threshold.
 
-def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1.5, 0), (.2, .4), ]):
+    Parameters
+    ----------
+    X : np.ndarray
+        Array of shape (time, channels).
+    thresh : float
+        Threshold for detection.
+    fs : float
+        Sampling frequency (Hz).
+
+    Returns
+    -------
+    rt : float or np.nan
+        Reaction time in seconds.
+    """
+    above = np.any(X > thresh, axis=1)
+    idx = np.argmax(above) #if np.any(above) else np.nan
+    return idx / fs if np.any(above) else -1
+
+
+def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1.5, 0), (.25, .45), ]):
     ch_idx = [col in gl.channels['mov'] for col in gl.col_mov[experiment]]
 
     dat = pd.read_csv(os.path.join(gl.baseDir, experiment, session, f'subj{sn}', f'{experiment}_{sn}.dat'),
@@ -113,6 +135,9 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
         'stimFinger': [],
         'cue': [],
         'MD': [],
+        'forceDiff': [],
+        'Unexpected': [],
+        'RT': []
     }
     fingers = ['thumb', 'index', 'middle', 'ring', 'pinkie']
     for i in range(len(win)):
@@ -149,14 +174,28 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
                 for j, f in enumerate(fingers):
                     force_dict[f'{f}{i}'].append(force_tmp[j])
 
-            # calc mean deviation
-            X = mov[onset:onset + int(.5 * gl.fsample_mov), ch_idx]
-            md, _ = calc_md(X[:, [1, 3]])
+            if dat_tmp.iloc[ons]['GoNogo']=='nogo':
+                unexp = -1
+            elif ((dat_tmp.iloc[ons]['GoNogo']=='go') &
+                  ((dat_tmp.iloc[ons]['stimFinger']==91999) & (dat_tmp.iloc[ons]['cue']==12)) |
+                  (dat_tmp.iloc[ons]['stimFinger']==99919) & (dat_tmp.iloc[ons]['cue']==21)):
+                unexp = 1
+            else:
+                unexp = 0
+
+            X_md = mov[onset + int(.05 * gl.fsample_mov):onset + int(.5 * gl.fsample_mov), ch_idx] # skip electro-mechanical delay (50ms)
+            md, _ = calc_md(X_md[:, [1, 3]])
+            bs = mov[onset - int(.1 * gl.fsample_mov):onset, ch_idx].mean(axis=0, keepdims=True)
+            X_rt = mov[onset:onset + int(.4 * gl.fsample_mov), ch_idx]
+            rt = calc_rt(X_rt - bs, 3.5, gl.fsample_mov) - .05 # skip electro-mechanical delay (50ms)
             force_dict['MD'].append(md)
+            force_dict['RT'].append(rt)
+            force_dict['Unexpected'].append(unexp)
             force_dict['stimFinger'].append(dat_tmp.iloc[ons]['stimFinger'])
             force_dict['cue'].append(dat_tmp.iloc[ons]['cue'])
             force_dict['BN'].append(dat_tmp.iloc[ons]['BN'])
             force_dict['TN'].append(dat_tmp.iloc[ons]['TN'])
+            force_dict['forceDiff'].append(dat_tmp.iloc[ons]['forceDiff'])
             if 'GoNogo' in dat:
                 force_dict['GoNogo'].append(dat_tmp.iloc[ons]['GoNogo'])
 

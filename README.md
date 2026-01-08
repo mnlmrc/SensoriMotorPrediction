@@ -1,8 +1,10 @@
-This repository contains Python and MATLAB code related to the SensoriMotorPrediction (SMP) project in which we investigate how probabilistic cues are incorporated into feedback control mechanisms. 
+This repository contains Python and MATLAB code related to the SensoriMotorPrediction (SMP) project in which we 
+investigate how probabilistic predictions are incorporated into feedback control mechanisms.
 
 Toolbox dependencies to use the code:
 
-MATLAB R2020a (version used for fMRI data preprocessing), SPM12 (https://www.fil.ion.ucl.ac.uk/spm), Dataframe toolbox (https://github.com/jdiedrichsen/dataframe), ...
+MATLAB R2020a (version used for fMRI data preprocessing), SPM12 (https://www.fil.ion.ucl.ac.uk/spm), 
+Dataframe toolbox (https://github.com/jdiedrichsen/dataframe), ...
 
 # **Behavioural data
 
@@ -62,6 +64,7 @@ All the representational models are impletemented in the `pcm_models` module:
 ### PCM correlations
 
 - Planning-execution correlation in BOLD: `python pcm_cortical.py correlation_plan-exec`
+
 
 
 

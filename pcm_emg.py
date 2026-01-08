@@ -12,7 +12,7 @@ import pandas as pd
 import numpy as np
 import os
 import sys
-from imaging_pipelines.util import bootstrap_correlation
+from imaging_pipelines.util import bootstrap_correlation, bootstrap_summary
 
 warnings.filterwarnings("ignore")
 
@@ -156,227 +156,6 @@ class EMG():
 
 def main(args):
 
-    if args.what == 'emg_G_obs_continuous':
-        emg = []
-        dat = []
-        for sn in args.snS:
-            emg_raw = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}', f'emg_raw.npy'))
-            emg_rect = np.abs(emg_raw)
-            bs = emg_rect[..., :2148].mean(axis=-1, keepdims=True)
-            # emg_norm = emg_rect / bs
-            emg.append(emg_rect)
-            dat_tmp = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
-                                                f'{args.experiment}_{sn}.dat'), sep='\t')
-            dat_tmp['stimFinger'] = dat_tmp['stimFinger'].map(gl.stimFinger_mapping)
-            dat_tmp['cue'] = dat_tmp['cue'].map(gl.cue_mapping)
-            dat_tmp['BN'] = dat_tmp['BN'].astype(str)
-            dat.append(dat_tmp)
-
-        G_obs = []
-        for tp in range(6444):
-            print(f'tp: {tp}/{6444}')
-            G_obs_tmp, _ = G_obs_in_timepoint(emg, dat, tp)
-            G_obs.append(G_obs_tmp)
-
-        np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'G_obs.emg.continuous.npy'), np.array(G_obs))
-    if args.what == 'continuous':
-
-        M = make_execution_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.emg.pkl'), "wb")
-        pickle.dump(M, f)
-
-        _, idx = find_model(M, 'feature')
-
-        width = 0.025  # 20 ms
-        n_wins = 100
-        start = -0.1
-        end = 0.5
-        wins = [(t - width / 2, t + width / 2) for t in np.linspace(start, end, n_wins)]
-
-        fs = 2148
-        onset = int(1 * fs)
-
-        emg = []
-        dat = []
-        for sn in args.snS:
-            emg_raw = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}', f'emg_raw.npy'))
-            emg_rect = np.abs(emg_raw)
-            bs = emg_rect[..., :onset].mean(axis=-1, keepdims=True)
-            emg_norm = emg_rect - bs
-            emg.append(emg_norm)
-            dat_tmp = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
-                                               f'{args.experiment}_{sn}.dat'), sep='\t')
-            dat_tmp['stimFinger'] = dat_tmp['stimFinger'].map(gl.stimFinger_mapping)
-            dat_tmp['cue'] = dat_tmp['cue'].map(gl.cue_mapping)
-            dat_tmp['BN'] = dat_tmp['BN'].astype(str)
-            dat.append(dat_tmp)
-
-        Emg = EMG(M, emg, dat, wins, onset, 2148)
-        # Emg.G_obs_in_timepoint(wins[0])
-        res_dict = Emg.run_parallel_pcm_across_timepoints()
-
-        theta_in = []
-        for w, win in enumerate(wins):
-            th = res_dict['theta_in'][w][idx]
-            theta_in.append(th)
-
-        theta_in = np.array(theta_in)
-
-        descr = {
-            'wins': wins,
-            'width': width
-        }
-
-        np.savez(
-            os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'theta_in.emg.continuous.npz'),
-            theta=theta_in,
-            descr=descr  # This dict will be saved as a single object
-        )
-    if args.what == 'binned':
-
-        M = make_execution_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.emg.pkl'), "wb")
-        pickle.dump(M, f)
-
-        wins = [(-.1, 0.0), (.025, .05), (.05, .1), (.1, .5)]
-        epochs = ['Pre', 'SLR', 'LLR', 'Vol']
-
-        fs = 2148
-        onset = int(1 * fs)
-
-        emg = []
-        dat = []
-        for sn in args.snS:
-            emg_raw = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}', f'emg_raw.npy'))
-            emg_rect = np.abs(emg_raw)
-            bs = emg_rect[..., :onset].mean(axis=-1, keepdims=True)
-            emg_norm = emg_rect - bs
-            emg.append(emg_norm)
-            dat_tmp = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
-                                               f'{args.experiment}_{sn}.dat'), sep='\t')
-            dat_tmp['stimFinger'] = dat_tmp['stimFinger'].map(gl.stimFinger_mapping)
-            dat_tmp['cue'] = dat_tmp['cue'].map(gl.cue_mapping)
-            dat_tmp['BN'] = dat_tmp['BN'].astype(str)
-            dat.append(dat_tmp)
-
-        Emg = EMG(M, emg, dat, wins, onset, 2148)
-        Emg.G_obs_in_timepoint(wins[0])
-        res_dict = Emg.run_parallel_pcm_across_timepoints()
-
-        # return res_dict
-
-        for w, win in enumerate(wins):
-            theta_in = res_dict['theta_in'][w]
-            T_cv = res_dict['T_cv'][w]
-            T_gr= res_dict['T_gr'][w]
-            G_obs = res_dict['G_obs'][w]
-
-            f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'theta_in.emg.{epochs[w]}.p'), "wb")
-            pickle.dump(theta_in, f)
-
-            f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_cv.emg.{epochs[w]}.p'), "wb")
-            pickle.dump(T_cv, f)
-
-            f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T_gr.emg.{epochs[w]}.p'), "wb")
-            pickle.dump(T_gr, f)
-
-            np.save(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'G_obs.emg.{epochs[w]}.npy'), G_obs)
-
-        return res_dict
-    if args.what == 'model_family':
-        M = make_execution_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.emg.p'), "wb")
-        pickle.dump(M, f)
-
-        wins = [(-1.0, 0.0), (.025, .05), (.05, .1), (.1, .5)]
-        epochs = ['Pre', 'SLR', 'LLR', 'Vol']
-
-        fs = 2148
-        # latency = .05 * fs
-        onset = int(1 * fs)
-
-        emg = []
-        dat = []
-        for sn in args.snS:
-            emg_raw = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}', f'emg_raw.npy'))
-            emg_rect = np.abs(emg_raw)
-            bs = emg_rect[..., :onset].mean(axis=-1, keepdims=True)
-            emg_norm = emg_rect - bs
-            emg.append(emg_norm)
-            dat_tmp = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
-                                               f'{args.experiment}_{sn}.dat'), sep='\t')
-            dat_tmp['stimFinger'] = dat_tmp['stimFinger'].map(gl.stimFinger_mapping)
-            dat_tmp['cue'] = dat_tmp['cue'].map(gl.cue_mapping)
-            dat_tmp['BN'] = dat_tmp['BN'].astype(str)
-            dat.append(dat_tmp)
-
-        Emg = EMG(M, emg, dat, wins, onset, 2148)
-        res_dict = Emg.fit_model_family_across_rois('component', basecomp=np.eye(8)[None, :, :], # basecomp needs to be num_basecompxNxN
-                                             comp_names=['finger', 'cue', 'surprise'])
-
-        for w, win in enumerate(wins):
-            theta = res_dict['theta'][w]
-            T = res_dict['T'][w]
-
-            T.to_pickle(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'T.model_family.emg.{epochs[w]}.p'))
-
-            f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'theta.model_family.emg.{epochs[w]}.p'), 'wb')
-            pickle.dump(theta, f)
-    if args.what == 'force_execution':
-
-        M = make_execution_models()
-        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.force.exec.p'), "wb")
-        pickle.dump(M, f)
-
-        N = len(args.snS)
-
-        G_obs = np.zeros((N, 8, 8))
-        Y = list()
-        for s, sn in enumerate(args.snS):
-            force = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}',
-                                             f'{args.experiment}_{sn}_force_single_trial.tsv'), sep='\t')
-            force = force[force['GoNogo'] == 'go'] if 'GoNogo' in force else force # select only go trial
-            force['cue'] = force['cue'].map(gl.cue_mapping)
-            force['stimFinger'] = force['stimFinger'].map(gl.stimFinger_mapping)
-            force = force.groupby(['BN', 'stimFinger', 'cue']).mean(numeric_only=True).reset_index()
-            cond_vec = force['cue'] + ',' + force['stimFinger']
-            part_vec = force['BN']
-
-            force = force[['thumb1', 'index1', 'middle1', 'ring1', 'pinkie1']].to_numpy()
-
-            cov = force.T @ force
-
-            force = force / np.sqrt(np.diag(cov)) # prewhitening using variance of each channel
-
-            obs_des = {'cond_vec': cond_vec.map(gl.regressor_mapping),
-                       'part_vec': part_vec}
-
-            Y.append(pcm.dataset.Dataset(force, obs_descriptors=obs_des))
-
-            G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],
-                                             Y[s].obs_descriptors['part_vec'],
-                                             X=pcm.matrix.indicator(Y[s].obs_descriptors['part_vec']))
-
-        T_in, theta_in = pcm.fit_model_individ(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-        T_cv, theta_cv = pcm.fit_model_group_crossval(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-        T_gr, theta_gr = pcm.fit_model_group(Y, M, fit_scale=True, verbose=True, fixed_effect='block')
-
-        path = os.path.join(gl.baseDir, args.experiment, gl.pcmDir)
-
-        os.makedirs(path, exist_ok=True)
-
-        np.save(os.path.join(path, f'G_obs.force.exec.npy'), G_obs)
-
-        T_in.to_pickle(os.path.join(path, f'T_in.force.exec.p'))
-        T_cv.to_pickle(os.path.join(path, f'T_cv.force.exec.p'))
-        T_gr.to_pickle(os.path.join(path, f'T_gr.force.exec.p'))
-
-        with open(os.path.join(path, f'theta_in.force.exec.p'), 'wb') as f:
-            pickle.dump(theta_in, f)
-        with open(os.path.join(path, f'theta_cv.force.exec.p'), 'wb') as f:
-            pickle.dump(theta_cv, f)
-        with open(os.path.join(path, f'theta_gr.force.exec.p'), 'wb') as f:
-            pickle.dump(theta_gr, f)
     if args.what == 'force_planning':
 
         f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan.p'), "rb")
@@ -507,8 +286,7 @@ def main(args):
             pickle.dump(theta_in, f)
             f = open(os.path.join(path_pcm, f'theta_gr.corr_cue-finger.emg.{epoch}.p'), 'wb')
             pickle.dump(theta_gr, f)
-
-    if args.what == 'feature':
+    if args.what == 'G_obs_win':
         f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.exec.p'), "rb")
         M = pickle.load(f)
         path_emg = os.path.join(gl.baseDir, args.experiment, 'emg', )
@@ -537,22 +315,63 @@ def main(args):
                 emg_gr, cond_vec_gr, part_vec_gr = pcm.group_by_condition(emg_w, cond_vec, part_vec, axis=0)
                 obs_des = {'cond_vec': cond_vec_gr, 'part_vec': part_vec_gr}
                 X = pcm.indicator(part_vec_gr)
-                beta, *_ = np.linalg.lstsq(X,  emg_gr) # dimord part, channel
+                beta, *_ = np.linalg.lstsq(X, emg_gr) # dimord part, channel
                 err = emg_gr - X @ beta
                 cov = (err.T @ err) / emg_gr.shape[0]
                 emg_prewhitened = emg_gr / np.sqrt(np.diag(cov))
-                Y[epoch].append(pcm.dataset.Dataset(emg_prewhitened, obs_descriptors=obs_des))
-                G[s, w], _ = pcm.est_G_crossval(Y[epoch][-1].measurements,
-                                             Y[epoch][-1].obs_descriptors['cond_vec'],
-                                             Y[epoch][-1].obs_descriptors['part_vec'],
-                                             X=pcm.matrix.indicator(Y[epoch][-1].obs_descriptors['part_vec']))
-
-        for epoch in epochs:
-            _, theta_in = pcm.fit_model_individ(Y[epoch], M[6], fit_scale=False, verbose=True, fixed_effect='block')
-            f = open(os.path.join(path_pcm, f'theta_in.emg.{epoch}.p'), "wb")
-            pickle.dump(theta_in, f)
+                Y = pcm.dataset.Dataset(emg_prewhitened, obs_descriptors=obs_des)
+                G[s, w], _ = pcm.est_G_crossval(Y.measurements,
+                                             Y.obs_descriptors['cond_vec'],
+                                             Y.obs_descriptors['part_vec'],
+                                             X=pcm.matrix.indicator(Y.obs_descriptors['part_vec']))
 
         np.save(os.path.join(path_pcm, f'G_obs.emg.npy'), G)
+    if args.what == 'corr2tsv':
+        if args.what == 'corr2tsv':
+            corrs = ['cue-finger']
+            epochs = ['Pre', 'SLR', 'LLR', 'Vol']
+            corr_dict = {
+                'r_indiv': [],
+                'r_group': [],
+                'SNR': [],
+                'corr': [],
+                'ci_lo': [],
+                'ci_hi': [],
+                'epoch': [],
+                'participant_id': []
+            }
+            f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
+            Mflex = pickle.load(f)
+            for corr in corrs:
+                for epoch in epochs:
+                    f = open(os.path.join(gl.baseDir, args.experiment,gl.pcmDir, f'theta_in.corr_{corr}.emg.{epoch}.p'), 'rb')
+                    theta = pickle.load(f)[0]
+                    r_bootstrap = np.load(
+                        os.path.join(gl.baseDir, args.experiment,gl.pcmDir, f'r_bootstrap.corr_{corr}.emg.{epoch}.npy'))
+                    f = open(os.path.join(gl.baseDir, args.experiment,gl.pcmDir, f'theta_gr.corr_{corr}.emg.{epoch}.p'), 'rb')
+                    theta_g = pickle.load(f)[0]
+
+                    N = theta.shape[1]
+                    sigma2_1 = np.exp(theta[0])
+                    sigma2_2 = np.exp(theta[1])
+                    r_indiv = Mflex.get_correlation(theta)
+                    sigma2_e = np.exp(theta[3])
+                    SNR = np.sqrt(sigma2_1 * sigma2_2) / sigma2_e
+
+                    theta_g, _ = pcm.group_to_individ_param(theta_g, Mflex, N)
+                    r_group = Mflex.get_correlation(theta_g)
+                    (ci_lo, ci_hi), _, _ = bootstrap_summary(r_bootstrap, alpha=0.025)
+
+                    corr_dict['r_indiv'].extend(r_indiv)
+                    corr_dict['r_group'].extend(r_group)
+                    corr_dict['ci_lo'].extend([ci_lo] * r_indiv.shape[0])
+                    corr_dict['ci_hi'].extend([ci_hi] * r_indiv.shape[0])
+                    corr_dict['SNR'].extend(SNR)
+                    corr_dict['corr'].extend([corr] * r_indiv.shape[0])
+                    corr_dict['participant_id'].extend(args.sns)
+                    corr_dict['epoch'].extend([epoch] * r_indiv.shape[0])
+            df_corr = pd.DataFrame(corr_dict)
+            df_corr.to_csv(os.path.join(gl.baseDir, args.experiment,gl.pcmDir, 'correlations.EMG.tsv'), sep='\t', index=False)
 
 
 if __name__ == '__main__':

@@ -48,6 +48,24 @@ def main(args):
                 monkey=args.monkey,
             )
             main(arg)
+    if args.what=='average':
+        rec = args.recording[0] if isinstance(args.recording, list) else args.recording
+        spk_aligned = np.load(os.path.join(baseDir, spkDir, args.monkey, f'spk_aligned.{args.region}-{rec}.npy'))
+        # trial_info = pd.read_csv(os.path.join(baseDir, recDir, f'{args.monkey}/trial_info-{rec}.tsv'), sep='\t')
+        # trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+        # spk_aligned_prob = np.array([spk_aligned[..., trial_info.prob==prob].mean(axis=-1)
+        #                              for prob in trial_info.prob.unique()])
+        np.save(os.path.join(baseDir, spkDir, args.monkey, f'spk_aligned.avg.{args.region}-{rec}.npy'),
+                spk_aligned.mean(axis=-1))
+    if args.what == 'average_all':
+        for rec in args.recording:
+            arg = argparse.Namespace(
+                what='average',
+                region=args.region,
+                recording=rec,
+                monkey=args.monkey,
+            )
+            main(arg)
     if args.what=='pca':
         pca = PCA(n_components=5)
         scaler = StandardScaler()

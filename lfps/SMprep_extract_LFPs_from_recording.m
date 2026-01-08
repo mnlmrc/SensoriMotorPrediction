@@ -112,24 +112,24 @@ for m = 1:length(monkeys)
             movementTime = zeros(1, numTrials);   % ms from Pert to Reward
             
             for i = 1:numTrials
-                cueTime = []; pertTime = []; rewardTime = [];
+                cueTime = []; goTime = []; targetTime = [];
             
                 % Parse events in ms
                 for j = 1:length(data.c3d(i).EVENTS.LABELS)
                     lab = data.c3d(i).EVENTS.LABELS{j};
-                    if strncmp(lab,'TARGET_SHOWN',3)
+                    if strcmp(lab,'TARGET_SHOWN')
                         cueTime   = round(data.c3d(i).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
                     elseif strncmp(lab,'GO_CUE',4)
-                        pertTime  = round(data.c3d(i).EVENTS.TIMES(j)*1000);
+                        goTime  = round(data.c3d(i).EVENTS.TIMES(j)*1000);
                     elseif strncmp(lab,'TARGET_1',3) 
-                        rewardTime= round(data.c3d(i).EVENTS.TIMES(j)*1000);
+                        targetTime= round(data.c3d(i).EVENTS.TIMES(j)*1000);
                     end
                 end
           
             
                 % Movement duration (Pert -> Reward)
-                if ~isempty(pertTime) && ~isempty(rewardTime)
-                    movementTime(i) = rewardTime - pertTime;   % ms
+                if ~isempty(goTime) && ~isempty(targetTime)
+                    movementTime(i) = targetTime - goTime;   % ms
                 else
                     movementTime(i) = 0;
                 end
@@ -149,7 +149,8 @@ for m = 1:length(monkeys)
                 'Home',           NaN, ...
                 'Target',  NaN, ...
                 'cueTime',       NaN, ...
-                'goTime',       NaN);
+                'goTime',       NaN, ...
+                'targetTime', NaN);
             
             % 2) Preallocate
             trial = repmat(proto, 1, numSuccess);
@@ -162,29 +163,43 @@ for m = 1:length(monkeys)
                 cueTime = NaN; goTime = NaN; targetTime = NaN; TP = data.c3d(i).TRIAL.TP;
                 for j = 1:length(data.c3d(i).EVENTS.LABELS)
                     lab = data.c3d(i).EVENTS.LABELS{j};
-                    if strncmp(lab,'TARGET_SHOWN',3)
+                    if strcmp(lab,'TARGET_SHOWN')
                         cueTime = round(data.c3d(i).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
-                    elseif strncmp(lab,'GO_CUE',4)
+                    elseif strcmp(lab,'GO_CUE')
                         goTime = round(data.c3d(i).EVENTS.TIMES(j)*1000);
-                    elseif strncmp(lab,'TARGET_1',3)
+                    elseif strcmp(lab,'TARGET_1')
                         targetTime = round(data.c3d(i).EVENTS.TIMES(j)*1000);
                     end
                 end
+
+                TP = data.c3d(ii).TRIAL.TP;
             
                 t = proto; % start from uniform prototype
-                t.Home = data.c3d(ii).TP_TABLE.Start_Target;
-                t.Target = data.c3d(ii).TP_TABLE.Target_1;
+                t.Home = data.c3d(ii).TP_TABLE.Start_Target(TP);
+                t.Target = data.c3d(ii).TP_TABLE.Target_1(TP);
                 t.cueTime = cueTime;
                 t.goTime = goTime;
+                t.targetTime = targetTime;
+
+                t.cueTime = floor((nBack / tSample) + 0.5);
+                if ~isnan(goTime) && ~isnan(cueTime)
+                    t.goTime = floor(((goTime - cueTime + nBack) / tSample) + 0.5);
+                end
+                if ~isnan(targetTime) && ~isnan(cueTime)
+                    t.targetTime = floor(((targetTime - cueTime + nBack) / tSample) + 0.5);
+                    %t.moveTimeFull = (rewardTime - cueTime + nBack) - (goTime - cueTime + nBack);
+                end
+
+                trial(ii) = t;
 
             end
             
-            clear t probTime pertTime rewardTime TP i ii j lab
+            clear t cueTime goTime rewardTime TP i ii j lab
             
             %% --- Restore sync -> neuralSync{1} minimally (for LFP alignment) ---
             neuralSync = cell(1,2);
             neuralSync{2} = []; % no myo
-            sync_file = dir([loadDir sprintf('/%s_g0/%s_g0_imec%d/%s_g0_t0.sync.mat', session, session, num_elec, session)]);
+            sync_file = dir([loadDir sprintf('/%s_g0/%s_g0_imec0/%s_g0_t0.sync.mat', session, session, session)]);
             if isempty(sync_file), error('No sync.mat in %s (needed for LFP alignment)', loadDir); end
             load([sync_file.folder '/' sync_file.name]); % expects variable "sync"
             trialSignal = sync; clear sync
@@ -210,7 +225,7 @@ for m = 1:length(monkeys)
             % ---------- PARAMETERS ----------
             stability_threshold = 2;   % same as your original
             minimumRate         = 0.1; % Hz for neural units
-            % nBack   = 600;             % ms (matches your trial building)
+            nBack   = 600;             % ms (matches your trial building)
             nForward= 300;             % ms
             % tSample = 10;              % ms binning for kinematics & spikes
             % visualPresentationDelay = 58; % ms (already used above)
@@ -312,24 +327,24 @@ for m = 1:length(monkeys)
             for iiTr = 1:numSuccess
                 trIdx  = successInd(iiTr);
                 % trial window in ms relative to probTime
-                probTime = NaN; pertTime = NaN; rewardTime = NaN;
+                cueTime = NaN; goTime = NaN; targetTime = NaN;
                 for j = 1:length(data.c3d(trIdx).EVENTS.LABELS)
                     lab = data.c3d(trIdx).EVENTS.LABELS{j};
-                    if strncmp(lab,'Cue',3)
-                        probTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
-                    elseif strncmp(lab,'Pert',4)
-                        pertTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
-                    elseif strncmp(lab,'Rew',3)
-                        rewardTime= round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
+                    if strcmp(lab,'TARGET_SHOWN')
+                        cueTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
+                    elseif strcmp(lab,'GO_CUE')
+                        goTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
+                    elseif strcmp(lab,'TARGET_1')
+                        targetTime= round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
                     end
                 end
-                if isnan(probTime) || isnan(rewardTime) || isempty(neuralSync{1})
+                if isnan(cueTime) || isnan(targetTime) || isempty(neuralSync{1})
                     spikes{iiTr,type}   = [];
                     spikes_s{iiTr,type} = [];
                     continue
                 end
-            
-                tRangeNeural = (probTime - nBack + 1) : (rewardTime + nForward); % ms
+                
+                tRangeNeural = (cueTime - nBack + 1) : (targetTime + nForward); % ms
                 flanks = 300;                                                    % ms for conv edges
                 tRange = (tRangeNeural(1) - flanks) : (tRangeNeural(end) + flanks);
                 tSteps = [1 tSample:tSample:length(tRangeNeural)];
@@ -378,23 +393,23 @@ for m = 1:length(monkeys)
             for iiTr = 1:numSuccess
                 trIdx  = successInd(iiTr);
                 % get times again
-                probTime = NaN; pertTime=NaN; rewardTime=NaN;
+                cueTime = NaN; goTime=NaN; targetTime=NaN;
                 for j = 1:length(data.c3d(trIdx).EVENTS.LABELS)
                     lab = data.c3d(trIdx).EVENTS.LABELS{j};
-                    if strncmp(lab,'Cue',3)
-                        probTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
-                    elseif strncmp(lab,'Pert',4)
-                        pertTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
-                    elseif strncmp(lab,'Rew',3)
-                        rewardTime= round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
+                    if strcmp(lab,'TARGET_SHOWN')
+                        cueTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
+                    elseif strcmp(lab,'GO_CUE')
+                        goTime  = round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
+                    elseif strcmp(lab,'TARGET_1')
+                        targetTime= round(data.c3d(trIdx).EVENTS.TIMES(j)*1000);
                     end
                 end
-                if isnan(probTime) || isnan(rewardTime)
+                if isnan(cueTime) || isnan(goTime) || isnan(targetTime)
                     elbKin{iiTr}=[]; elbVel{iiTr}=[]; shoKin{iiTr}=[]; shoVel{iiTr}=[]; handKin{iiTr}=[];
                     continue
                 end
             
-                tRangeNeural = (probTime - nBack + 1) : (rewardTime + nForward);
+                tRangeNeural = (cueTime - nBack + 1) : (targetTime + nForward);
                 tSteps = [1 tSample:tSample:length(tRangeNeural)];
             
                 % pull from filtered KINARM signals (rad->deg; pos in whatever units you used)
@@ -448,7 +463,7 @@ for m = 1:length(monkeys)
             pad_length   = 7500;   % LFP samples (2.5 kHz); shrink if memory is tight
             post_ms      = 5000;   % ms after probTime to include
             chan_step    = 12;     % keep every 12th channel -> 32 chans
-            BATCH_TRIALS = 2;     % trials per FieldTrip batch
+            BATCH_TRIALS = 12;     % trials per FieldTrip batch
             numFreqs     = 40;     % fewer freqs = less memory/CPU
             toi_step_s   = 0.01;   % time step (sec) for TFR
             bp_band      = [1 200];% bandpass for FT preprocessing
@@ -484,22 +499,22 @@ for m = 1:length(monkeys)
         
             for ii = 1:numSuccess
                 i = successInd(ii);
-                % cueTime = NaN; rewardTime = NaN;
-                % for j = 1:length(data.c3d(i).EVENTS.LABELS)
-                %     lab = data.c3d(i).EVENTS.LABELS{j};
-                %     if strncmp(lab,'Cue',3)
-                %         probTime  = round(data.c3d(i).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
-                %     elseif strncmp(lab,'Rew',3)
-                %         rewardTime = round(data.c3d(i).EVENTS.TIMES(j)*1000);
-                %     end
-                % end
-                % if isnan(probTime) || isempty(neuralSync{1})
-                %     trialRanges{ii} = [];
-                %     continue
-                % end
+                cueTime = NaN; targetTime = NaN;
+                for j = 1:length(data.c3d(i).EVENTS.LABELS)
+                    lab = data.c3d(i).EVENTS.LABELS{j};
+                    if strcmp(lab,'TARGET_SHOWN')
+                        cueTime  = round(data.c3d(i).EVENTS.TIMES(j)*1000) + visualPresentationDelay;
+                    elseif strcmp(lab,'TARGET_1')
+                        targetTime = round(data.c3d(i).EVENTS.TIMES(j)*1000);
+                    end
+                end
+                if isnan(cueTime) || isnan(targetTime) || isempty(neuralSync{1})
+                    trialRanges{ii} = [];
+                    continue
+                end
         
                 % ms window (fixed length: pre nBack, post post_ms)
-                tRange_ms = (probTime - nBack + 1) : (probTime + post_ms);
+                tRange_ms = (cueTime - nBack + 1) : (targetTime + post_ms);
         
                 % Convert sync (30 kHz) -> LFP samples (2.5 kHz)
                 thisT = round(neuralSync{1}(successInd(ii)) / 30 * 2.5);
@@ -632,7 +647,7 @@ for m = 1:length(monkeys)
             % mf.targPos     = targPos;
             mf.date        = date;
             mf.brainID     = brain_area_list{num_elec + 1};
-            mf.numPreMove  = numPreMove;
+            %mf.numPreMove  = numPreMove;
             mf.cfg = cfg;
             
             % end

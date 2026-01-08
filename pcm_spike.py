@@ -10,7 +10,8 @@ import pickle
 from pcm_models import find_model
 from depreciated.pcm_lfp import make_execution_models
 from joblib import Parallel, delayed, parallel_backend
-from imaging_pipelines.util import bootstrap_correlation
+from imaging_pipelines.util import bootstrap_correlation, bootstrap_summary
+from sigproc.statistics import permutation_t_test_1samp_tf
 
 def load_spike(file_path):
     mat = sio.loadmat(file_path)
@@ -97,6 +98,25 @@ class Spikes:
         results = self._extract_results_from_parallel_process(results, field_names=['G_obs', 'T_in', 'theta_in', 't'])
         return results
 
+    def fit_model_family_in_timepoint(self, t, model,  basecomp=None, comp_names=None):
+        M, _ = find_model(self.M, model)
+        if isinstance(M, pcm.ComponentModel):
+            G = M.Gc
+            MF = pcm.model.ModelFamily(G, comp_names=comp_names, basecomponents=basecomp)
+        _, Y = self.G_obs_in_timepoint(t)
+        T, theta = pcm.fit_model_individ(Y, MF, verbose=True, fixed_effect='block', fit_scale=False)
+        c_bf = MF.component_bayesfactor(T.likelihood, method='AIC', format='DataFrame')
+        return c_bf.to_numpy()
+
+
+    def fit_model_family_across_timepoints(self, model, basecomp=None, comp_names=None):
+        with parallel_backend("loky"):  # use threading for debug in PyCharm, for run use loky
+            c_bf = Parallel(n_jobs=self.n_jobs)(
+                delayed(self.fit_model_family_in_timepoint)(t, model, basecomp, comp_names)
+                for t in range(self.timepoints)
+            )
+        c_bf = np.vstack(c_bf)
+        return c_bf
 
     def _extract_results_from_parallel_process(self, results, field_names):
         res_dict = {key: [] for key in field_names}
@@ -131,8 +151,6 @@ def run_pcm(epoch='plan', monkey='Malfoy', roi='PMd', M=None, model='component',
     print('doing pcm...')
     Spk = Spikes(M, spike_grouped, cond_vec=cond_vec, part_vec=part_vec)
 
-    # Spk.G_obs_in_timepoint(13)
-    # Spk.fit_model_in_timepoint(55)
     res_dict = Spk.run_parallel_pcm_across_timepoints()
 
     theta_in = []
@@ -143,94 +161,66 @@ def run_pcm(epoch='plan', monkey='Malfoy', roi='PMd', M=None, model='component',
     theta_in = np.array(theta_in)
     G_obs = np.array(res_dict['G_obs'])
 
+    c_bf = Spk.fit_model_family_across_timepoints(model=model)
+
     np.save(os.path.join(baseDir, pcmDir ,monkey, f'theta_in.spk.{model}.{roi}.{epoch}-{rec}.npy'), theta_in, )
     np.save(os.path.join(baseDir, pcmDir ,monkey, f'G_obs.spk.{roi}.{epoch}-{rec}.npy'), G_obs, )
+    np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'c_bf.spk.{model}.{roi}.{epoch}-{rec}.npy'), c_bf, )
 
 def main(args):
-    cuePre = 0
-    cueIdx = 20
-    cuePost = 84
-    pertPre = cuePost
-    pertIdx = pertPre + 30
-    pertPost = pertPre + 70
 
     monkey = ['Malfoy', 'Pert']
 
-    recordings = {
-        'Malfoy': {
-            'PMd': [10, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24],
-            'S1': [5, 9, 11, 15, 16, 26, 27, 28],
-            'M1': [1, 6, 12, 13, 25, 27, 28]
-        },
-        'Pert': {
-            'PMd': [4, 6, 7, 10, 20],
-            'S1': [15],
-            'M1': [2, 3, 14, 20]
-        }
-    }
-
-    if args.what=='continuous_plan':
-        f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan.p'), "rb")
+    if args.what == 'continuous':
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.{args.epoch}.p'), "rb")
         M = pickle.load(f)[:-1]
-        for rec in args.recording:
-            run_pcm('plan', args.monkey, roi=args.region, M=M, model=args.model, rec=rec)
-    if args.what=='continuous_exec':
-        f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.exec.p'), "rb")
-        M = pickle.load(f)[:-1]
-        for rec in args.recording:
-            run_pcm('exec', args.monkey, roi=args.region, M=M, model=args.model, rec=rec)
-    if args.what=='binned_plan':
-        rois = ['PMd', 'S1']
-        model = ['Cue', 'Uncertainty']
-        epochs = {
-            'Pre': (cuePre, cueIdx),
-            'Cue': (cueIdx, cuePost),
-            'Pert': (pertIdx, pertPost),
-        }
-        out_dict = {
-            'monkey': [],
-            'recording': [],
-            'region': [],
-            'model': [],
-            'epoch': [],
-            'variance': [],
-            'datatype': []
-        }
-        for roi in rois:
-            for mon in monkey:
-                for rec in recordings[mon][roi]:
-                    theta = np.load(os.path.join(baseDir, pcmDir, mon, f'theta_in.spk.component.{roi}.plan-{rec}.npy'))
-                    var_expl = np.exp(theta[..., :-1])
-                    for m, md in enumerate(model):
-                        for epoch, interval in epochs.items():
-                            out_dict['monkey'].append(mon)
-                            out_dict['recording'].append(rec)
-                            out_dict['region'].append(roi)
-                            out_dict['model'].append(md)
-                            out_dict['variance'].append(var_expl[interval[0]:interval[1], m].mean())
-                            out_dict['epoch'].append(epoch)
-                            out_dict['datatype'].append('spk')
-        out = pd.DataFrame(out_dict)
-        out.to_csv(os.path.join(baseDir, pcmDir, 'var_expl.plan.spk.tsv'), sep='\t', index=False)
-    if args.what=='tot_variance_plan':
         for mon in monkey:
-            for r, rec in enumerate(recordings[mon][args.region]):
+            for rec in gl.recordings[mon][args.region]:
+                run_pcm(args.epoch, mon, M=M, roi=args.region, model=args.model, rec=rec)
+    if args.what=='tot_variance':
+        for mon in monkey:
+            for r, rec in enumerate(gl.recordings[mon][args.region]):
                 print(f'doing {mon}, recording {rec}')
-                spk = np.load(os.path.join(baseDir, spkDir, mon, f'spk_aligned.{args.region}-{rec}.npy'))
+                spk = np.load(os.path.join(gl.nhpDir, gl.spkDir, mon, f'spk_aligned.{args.region}-{rec}.npy'))
                 spk = np.sqrt(spk)
-                trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
+                trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.spkDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
                 trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
                 mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
                 trial_info.cond = trial_info.cond.map(mapping)
-                spk_grouped, cond_vec, part_vec = pcm.group_by_condition(spk, trial_info.prob, trial_info.block, axis=-1)
+                spk_grouped, cond_vec, part_vec = pcm.group_by_condition(spk,
+                                                                         trial_info.prob if args.epoch=='plan' else trial_info.cond,
+                                                                         trial_info.block, axis=-1)
                 n_timep = spk_grouped.shape[1]
                 Var = np.zeros(n_timep)
                 for t in range(n_timep):
                     Y = spk_grouped[:, t]
                     G_obs, _ = pcm.est_G(Y, cond_vec, part_vec, X=pcm.indicator(part_vec))
                     Var[t] = np.trace(G_obs)
-                np.save(os.path.join(baseDir, pcmDir, mon, f'var_tot.spk.{args.region}.plan-{rec}.npy'), Var)
+                np.save(os.path.join(gl.nhpDir, gl.pcmDir, mon, f'var_tot.spk.{args.region}.{args.epoch}-{rec}.npy'), Var)
+    if args.what=='cluster-based_perm':
+        for seg in ['Cue', 'Pert']:
+            c_bf = []
+            print('loading component bayes factor...')
+            for mon in monkey:
+                for r, rec in enumerate(gl.recordings[mon][args.region]):
+                    print(f'loading component bayes factor for {mon}, recording{rec})')
+                    c_bf_tmp = np.load(os.path.join(gl.nhpDir, gl.pcmDir, mon,
+                                         f'c_bf.spk.{args.model}.{args.region}.{args.epoch}-{rec}.npy'))
+                    if seg=='Cue':
+                        c_bf_tmp = c_bf_tmp[:gl.cuePost, :]
+                    elif seg=='Pert':
+                        c_bf_tmp = c_bf_tmp[gl.pertPre:, :]
+                    c_bf.append(c_bf_tmp)
+            c_bf = np.array(c_bf)
+            n_sess, n_timep, n_comp = c_bf.shape
+            significant_bf = np.zeros((n_timep, n_comp))
+            n_comp = c_bf.shape[-1]
+            print('doing permutations...')
+            for i in range(n_comp):
+                _, _, significant_bf[:,  i] = permutation_t_test_1samp_tf(c_bf[:, :, i])
 
+            np.save(os.path.join(gl.nhpDir, gl.pcmDir,
+                                 f'significant_bf.spk.{seg}.{args.region}.{args.epoch}.npy'), significant_bf)
     if args.what=='correlation_plan-exec':
         rng = np.random.default_rng(0)  # seed for reprodocibility
         f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
@@ -309,76 +299,79 @@ def main(args):
         rng = np.random.default_rng(0)  # seed for reprodocibility
         f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
         Mflex = pickle.load(f)
-        G, Y, i = [], [], 0
-        for mon in monkey:
-            for roi in args.regions:
-                for r, rec in enumerate(recordings[mon][roi]):
-                    print(f'doing {mon}, recording {rec}')
+        time_interval = {'early':(gl.pertIdx + 4, gl.pertIdx + 24),
+                         'late': (gl.pertPost - 20, gl.pertPost)}
+        for tint in ['early', 'late']:
+            G, Y, i = [], [], 0
+            for mon in monkey:
+                for roi in args.regions:
+                    for r, rec in enumerate(gl.recordings[mon][roi]):
+                        print(f'doing {mon}, recording {rec}')
 
-                    spk = np.load(os.path.join(baseDir, spkDir, mon, f'spk_aligned.{roi}-{rec}.npy'))
-                    spk = np.sqrt(spk)
-                    trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
-                    trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
-                    mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
-                    trial_info.cond = trial_info.cond.map(mapping)
+                        spk = np.load(os.path.join(gl.nhpDir, gl.spkDir, mon, f'spk_aligned.{roi}-{rec}.npy'))
+                        spk = np.sqrt(spk)
+                        trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
+                        trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+                        mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
+                        trial_info.cond = trial_info.cond.map(mapping)
 
-                    spk_grouped, _, part_vec = pcm.group_by_condition(spk, trial_info.cond, trial_info.block, axis=-1)
-                    n_part = len(np.unique(part_vec))
-                    obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
-                               'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
-                    n_unit = spk.shape[1]
-                    mask_plan = {'ext': np.array([0, 1, 0, 0, 1, 0, 0, 0] * n_part, dtype=bool),
-                                 'flx': np.array([0, 0, 0, 1, 0, 0, 1, 0] * n_part, dtype=bool)}
-                    mask_exec = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
-                                 'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
+                        spk_grouped, _, part_vec = pcm.group_by_condition(spk, trial_info.cond, trial_info.block, axis=-1)
+                        n_part = len(np.unique(part_vec))
+                        obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                                   'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
+                        n_unit = spk.shape[1]
+                        mask_plan = {'ext': np.array([0, 1, 0, 0, 1, 0, 0, 0] * n_part, dtype=bool),
+                                     'flx': np.array([0, 0, 0, 1, 0, 0, 1, 0] * n_part, dtype=bool)}
+                        mask_exec = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
+                                     'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
 
-                    plan_ext = spk_grouped[mask_plan['ext']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
-                    plan_flx = spk_grouped[mask_plan['flx']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
-                    plan = plan_ext - plan_flx
-                    plan = plan[:, pertIdx+4:pertIdx+24].mean(axis=1)
-                    plan = plan - plan.mean(axis=-1, keepdims=True)
+                        plan_ext = spk_grouped[mask_plan['ext']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
+                        plan_flx = spk_grouped[mask_plan['flx']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
+                        plan = plan_ext - plan_flx
+                        plan = plan[:, time_interval[tint][0]:time_interval[tint][1]].mean(axis=1)
+                        plan = plan - plan.mean(axis=-1, keepdims=True)
 
-                    exec_ext = spk_grouped[mask_exec['ext']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
-                    exec_flx = spk_grouped[mask_exec['flx']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
-                    exec = exec_ext - exec_flx
-                    exec = exec[:, pertIdx+4:pertIdx+24].mean(axis=1)
-                    exec = exec - exec.mean(axis=-1, keepdims=True)
+                        exec_ext = spk_grouped[mask_exec['ext']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
+                        exec_flx = spk_grouped[mask_exec['flx']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
+                        exec = exec_ext - exec_flx
+                        exec = exec[:, time_interval[tint][0]:time_interval[tint][1]].mean(axis=1)
+                        exec = exec - exec.mean(axis=-1, keepdims=True)
 
-                    data = np.r_[plan, exec]
-                    X = pcm.indicator(obs_des['part_vec'])
-                    beta, *_ = np.linalg.lstsq(X, data)
-                    err = data - X @ beta
-                    cov = (err.T @ err) / err.shape[0]
-                    data_prewhitened = data / np.sqrt(np.diag(cov))
+                        data = np.r_[plan, exec]
+                        X = pcm.indicator(obs_des['part_vec'])
+                        beta, *_ = np.linalg.lstsq(X, data)
+                        err = data - X @ beta
+                        cov = (err.T @ err) / err.shape[0]
+                        data_prewhitened = data / np.sqrt(np.diag(cov))
 
-                    Y.append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
-                    G.append(pcm.est_G_crossval(
-                        Y[-1].measurements,
-                        Y[-1].obs_descriptors['cond_vec'],
-                        Y[-1].obs_descriptors['part_vec'])[0])
+                        Y.append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
+                        G.append(pcm.est_G_crossval(
+                            Y[-1].measurements,
+                            Y[-1].obs_descriptors['cond_vec'],
+                            Y[-1].obs_descriptors['part_vec'])[0])
 
-        np.save(os.path.join(baseDir, pcmDir, f'G_obs.spk.corr_cue-dir.{"-".join(args.regions)}.npy'), np.array(G))
-        T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False, verbose=True)
-        T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True, verbose=False)
-        T_in.to_pickle(os.path.join(baseDir, pcmDir, f'T_in.spk.corr_cue-dir.{"-".join(args.regions)}.p'))
-        T_gr.to_pickle(os.path.join(baseDir, pcmDir, f'T_gr.spk.corr_cue-dir.{"-".join(args.regions)}.p'))
+            np.save(os.path.join(baseDir, pcmDir, f'G_obs.spk.corr_cue-dir.{"-".join(args.regions)}.{tint}.npy'), np.array(G))
+            T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False, verbose=True)
+            T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True, verbose=False)
+            T_in.to_pickle(os.path.join(baseDir, pcmDir, f'T_in.spk.corr_cue-dir.{"-".join(args.regions)}.{tint}.p'))
+            T_gr.to_pickle(os.path.join(baseDir, pcmDir, f'T_gr.spk.corr_cue-dir.{"-".join(args.regions)}.{tint}.p'))
 
-        f = open(os.path.join(baseDir, pcmDir, f'theta_in.spk.corr_cue-dir.{"-".join(args.regions)}.p'), 'wb')
-        pickle.dump(theta_in, f)
-        f = open(os.path.join(baseDir, pcmDir, f'theta_gr.spk.corr_cue-dir.{"-".join(args.regions)}.p'), 'wb')
-        pickle.dump(theta_gr, f)
+            f = open(os.path.join(baseDir, pcmDir, f'theta_in.spk.corr_cue-dir.{"-".join(args.regions)}.{tint}.p'), 'wb')
+            pickle.dump(theta_in, f)
+            f = open(os.path.join(baseDir, pcmDir, f'theta_gr.spk.corr_cue-dir.{"-".join(args.regions)}.{tint}.p'), 'wb')
+            pickle.dump(theta_gr, f)
 
-        # do bootstrap
-        B = 1000
-        S = len(Y)
-        indeces = rng.integers(0, S, size=(B, S))
-        results = Parallel(n_jobs=16, backend='loky')(
-            delayed(bootstrap_correlation)(idx, Y, Mflex) for idx in indeces
-        )
-        r_bootstrap = np.array([r for r in results if r is not None])
-        n_disc = len(results) - len(r_bootstrap)
-        print(f'{"-".join(args.regions)}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
-        np.save(os.path.join(baseDir, pcmDir, f'r_bootstrap.spk.corr_cue-dir.{"-".join(args.regions)}.npy'), r_bootstrap)
+            # do bootstrap
+            B = 1000
+            S = len(Y)
+            indeces = rng.integers(0, S, size=(B, S))
+            results = Parallel(n_jobs=16, backend='loky')(
+                delayed(bootstrap_correlation)(idx, Y, Mflex) for idx in indeces
+            )
+            r_bootstrap = np.array([r for r in results if r is not None])
+            n_disc = len(results) - len(r_bootstrap)
+            print(f'{"-".join(args.regions)}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
+            np.save(os.path.join(baseDir, pcmDir, f'r_bootstrap.spk.corr_cue-dir.{"-".join(args.regions)}.{tint}.npy'), r_bootstrap)
     if args.what=='correlation_continuous':
         rng = np.random.default_rng(0)  # seed for reprodocibility
         f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
@@ -453,66 +446,92 @@ def main(args):
         np.save(os.path.join(baseDir, pcmDir, f'r_indiv.spk.corr_tf.{args.region}.npy'), r_indiv)
         np.save(os.path.join(baseDir, pcmDir, f'SNR.spk.corr_tf.{args.region}.npy'), SNR)
         np.save(os.path.join(baseDir, pcmDir, f'r_group.spk.corr_tf.{args.region}.npy'), r_group)
-    if args.what=='autocorrelation':
-        rng = np.random.default_rng(0)  # seed for reprodocibility
-        f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
+    if args.what=='spk2tsv':
+        components = {
+            'plan': ['expectation', 'uncertainty'],
+            'exec': ['sensory input', 'expectation', 'surprise']
+        }
+        pcm_dict = {
+            'epoch': [],
+            'roi': [],
+            'weight': [],
+            'monkey': [],
+            'component': [],
+            'session': [],
+            'noise': []
+        }
+        rois = ['PMd', 'M1', 'S1']
+        for epoch in ['plan', 'exec']:
+            for roi in rois:
+                weight = []
+                for mon in monkey:
+                    for rec in gl.recordings[mon][roi]:
+                        theta_spk_comp = np.load(
+                            os.path.join(gl.nhpDir, gl.pcmDir, mon, f'theta_in.spk.component.{roi}.{epoch}-{rec}.npy'))
+                        var_tot_spk = np.load(
+                            os.path.join(gl.nhpDir, gl.pcmDir, mon, f'var_tot.spk.{roi}.{epoch}-{rec}.npy'))
+                        weight_norm = np.exp(theta_spk_comp[..., :-1]) / var_tot_spk.T[..., None]
+                        noise = np.exp(theta_spk_comp[..., -1]) / var_tot_spk.T[..., None]
+                        weight.append(weight_norm)
+                        for md in range(weight_norm.shape[-1]):
+                            weight_avg = weight_norm[gl.cueIdx:gl.cuePost, md].mean()
+                            pcm_dict['epoch'].append(epoch)
+                            pcm_dict['roi'].append(roi)
+                            pcm_dict['weight'].append(weight_avg)
+                            pcm_dict['noise'].append(noise[gl.cueIdx:gl.cuePost].mean())
+                            pcm_dict['component'].append(components[epoch][md])
+                            pcm_dict['session'].append(rec)
+                            pcm_dict['monkey'].append(mon[0])
+                weight = np.array(weight)
+                df_weight = pd.DataFrame(pcm_dict)
+                np.save(os.path.join(gl.nhpDir, gl.pcmDir, f'weight.spk.{roi}.{epoch}.npy'), weight)
+        df_weight.to_csv(os.path.join(gl.nhpDir, gl.pcmDir, 'weight.spk.10-20Hz.tsv'), sep='\t', index=False)
+    if args.what == 'corr2tsv':
+        corrs = ['cue-dir']
+        corr_dict = {
+            'r_indiv': [],
+            'r_group': [],
+            'SNR': [],
+            'corr': [],
+            'ci_lo': [],
+            'ci_hi': [],
+            'roi': [],
+            'time_interval': [],
+            'session_id': []
+        }
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan-exec.p'), "rb")
         Mflex = pickle.load(f)
-        G = []
-        T, C = 154, 8
-        Y = {(c, ti, tj): [] for c in range(C) for ti in range(T) for tj in range(T)}
-        for mon in monkey:
-            for r, rec in enumerate(recordings[mon][args.region]):
-                print(f'doing {mon}, recording {rec}')
-                spk = np.load(os.path.join(baseDir, spkDir, mon, f'spk_aligned.{args.region}-{rec}.npy'))
-                trial_info = pd.read_csv(os.path.join(baseDir, recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
-                trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
-                mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
-                trial_info.cond = trial_info.cond.map(mapping)
-                spk_grouped, _, part_vec = pcm.group_by_condition(spk, trial_info.cond, trial_info.block, axis=-1)
-                n_part = len(np.unique(part_vec))
-                spk_grouped = spk_grouped.reshape(n_part, C, T, -1)
-                obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
-                           'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
-                Gg = np.zeros((C, T, T, 2, 2))
-                for c in range(C):
-                    for ti in range(T):
-                        for tj in range(T):
-                            xi = spk_grouped[:, c, ti, :]
-                            xj = spk_grouped[:, c, tj, :]
-                            xi = xi - xi.mean()
-                            xj = xj - xj.mean()
-                            data = np.r_[xi, xj]
-                            err = data - data.mean(axis=0, keepdims=True)
-                            cov = (err.T @ err) / data.shape[0]
-                            data_prewhitened = data / np.sqrt(np.diag(cov) + 1e-6)
-                            Y[(c, ti, tj)].append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
-                            Gg[c, ti, tj] = pcm.est_G_crossval(Y[(c, ti, tj)][-1].measurements,
-                                                          Y[(c, ti, tj)][-1].obs_descriptors['cond_vec'],
-                                                          Y[(c, ti, tj)][-1].obs_descriptors['part_vec'])[0]
-                G.append(Gg)
+        for tint in ['early', 'late']:
+            for corr in corrs:
+                f = open(os.path.join(gl.nhpDir, gl.pcmDir, f'theta_in.spk.corr_{corr}.M1-S1.{tint}.p'), 'rb')
+                theta = pickle.load(f)[0]
+                r_bootstrap = np.load(
+                    os.path.join(gl.nhpDir, gl.pcmDir, f'r_bootstrap.spk.corr_{corr}.M1-S1.{tint}.npy'))
+                f = open(os.path.join(gl.nhpDir, gl.pcmDir, f'theta_gr.spk.corr_{corr}.M1-S1.{tint}.p'), 'rb')
+                theta_g = pickle.load(f)[0]
 
-        N = len(Y[(0, 0, 0)])
-        r_indiv = np.zeros((N, C, T, T))
-        SNR = np.zeros_like(r_indiv)
-        r_group = np.zeros((C, T, T))
-        for c in range(C):
-            for ti in range(T):
-                for tj in range(T):
-                    print(f'doing ML estimation for c={c}, ti={ti}, tj={tj}...')
-                    _, theta = pcm.fit_model_individ(Y[(c, ti, tj)], Mflex, fixed_effect=None, fit_scale=False, verbose=False)
-                    _, theta_gr = pcm.fit_model_group(Y[(c, ti, tj)], Mflex, fixed_effect=None, fit_scale=True, verbose=False)
-                    sigma2_1 = np.exp(theta[0][0])
-                    sigma2_2 = np.exp(theta[0][1])
-                    r_indiv[:, c, ti, tj] = Mflex.get_correlation(theta[0])
-                    sigma2_e = np.exp(theta[0][3])
-                    SNR[:, c, ti, tj] = np.sqrt(sigma2_1 * sigma2_2) / sigma2_e
-                    theta_gr, _ = pcm.group_to_individ_param(theta_gr[0], Mflex, N)
-                    r_group[c, ti, tj] = Mflex.get_correlation(theta_gr)[0]
+                N = theta.shape[1]
+                sigma2_1 = np.exp(theta[0])
+                sigma2_2 = np.exp(theta[1])
+                r_indiv = Mflex.get_correlation(theta)
+                sigma2_e = np.exp(theta[3])
+                SNR = np.sqrt(sigma2_1 * sigma2_2) / sigma2_e
 
-        np.save(os.path.join(baseDir, pcmDir, f'G_obs.spk.autocorr.{args.region}.npy'), np.array(G))
-        np.save(os.path.join(baseDir, pcmDir, f'r_indiv.spk.autocorr.{args.region}.npy'), r_indiv)
-        np.save(os.path.join(baseDir, pcmDir, f'SNR.spk.autocorr.{args.region}.npy'), SNR)
-        np.save(os.path.join(baseDir, pcmDir, f'r_group.spk.autocorr.{args.region}.npy'), r_group)
+                theta_g, _ = pcm.group_to_individ_param(theta_g, Mflex, N)
+                r_group = Mflex.get_correlation(theta_g)
+                (ci_lo, ci_hi), _, _ = bootstrap_summary(r_bootstrap, alpha=0.025)
+
+                corr_dict['r_indiv'].extend(r_indiv)
+                corr_dict['r_group'].extend(r_group)
+                corr_dict['ci_lo'].extend([ci_lo] * r_indiv.shape[0])
+                corr_dict['ci_hi'].extend([ci_hi] * r_indiv.shape[0])
+                corr_dict['SNR'].extend(SNR)
+                corr_dict['corr'].extend([corr] * r_indiv.shape[0])
+                corr_dict['session_id'].extend(np.linspace(1, r_indiv.shape[0], r_indiv.shape[0]))
+                corr_dict['roi'].extend(['M1-S1'] * r_indiv.shape[0])
+                corr_dict['time_interval'].extend([tint] * r_indiv.shape[0])
+        df_corr = pd.DataFrame(corr_dict)
+        df_corr.to_csv(os.path.join(gl.nhpDir, gl.pcmDir, 'correlations.spk.tsv'), sep='\t', index=False)
 
 if __name__ == '__main__':
     start = time.time()
@@ -521,6 +540,7 @@ if __name__ == '__main__':
 
     parser.add_argument('what', nargs='?', default='continuous')
     parser.add_argument('--n_jobs', type=int, default=16)
+    parser.add_argument('--experiment', type=str, default='smp2')
     parser.add_argument('--epoch', type=str, default='plan')
     parser.add_argument('--model', type=str, default='component')
     parser.add_argument('--monkey', type=str, default='Pert')

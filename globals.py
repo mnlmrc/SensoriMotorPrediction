@@ -28,6 +28,10 @@ roiDir = 'ROI'
 cosDir = 'cosine'
 pilotDir = 'pilot'
 pcmDir = 'pcm'
+nhpDir = '/cifs/pruszynski/Marco/SensoriMotorPrediction'
+spkDir = 'spikes'
+lfpDir = 'LFPs'
+recDir = 'Recordings'
 
 print("Base directory:", baseDir)
 
@@ -90,8 +94,29 @@ regressor_mapping = {
     '0-100%,ring': 12,
 }
 
-pert_dir = ['100-0%,flex', '75-25%,flex', '50-50%,flex', '25-75%,flex',
-            '75-25%,ext', '50-50%,ext', '25-75%,ext', '0-100%,ext',]
+freqs = ['delta', 'theta', 'alpha-beta', 'gamma']
+recordings = {
+            'Malfoy': {
+                'PFC': [17, 19, 20, 21, 22, 23, 24],
+                'PMd': [10, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23, 24],
+                'M1': [12, 13, 25, 27, 28],
+                'S1': [ 5, 9, 11, 15, 16, 26, 27, 28]
+            },
+            'Pert': {
+                'PFC': [8, 9, 10, 11, 12],
+                'PMd': [4, 6, 7, 10, 20],
+                'M1': [2, 3, 14, 20],
+                'S1': [15],
+
+            }
+        }
+
+cuePre = 0
+cueIdx = 20
+cuePost = 84
+pertPre = cuePost
+pertIdx = pertPre + 30
+pertPost = pertPre + 70
 
 ### colours ###
 cmap_plan = plt.get_cmap('Greys')
@@ -161,7 +186,7 @@ rois = {
             'ba4a', 'ba4p', 'ba3A', 'ba3B', 'ba1', 'ba2'
         ],
         'ROI': [
-            'SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1'
+            'SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp',
         ]
     }
 

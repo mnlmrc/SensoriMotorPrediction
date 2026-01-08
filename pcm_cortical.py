@@ -23,32 +23,9 @@ from sklearn.model_selection import cross_val_score, LeaveOneGroupOut
 from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score
 from sklearn.preprocessing import StandardScaler
+from imaging_pipelines.util import bootstrap_correlation
 
 warnings.filterwarnings("ignore")
-
-def bootstrap_summary(r_bootstrap, alpha=0.05):
-    """
-    Given the retained bootstrap correlations, return:
-      - central (1-2*alpha) CI (so for alpha=.05 -> 90% CI)
-      - functions for one-sided tests: r < x and r > x
-    """
-    r_bootstrap = np.asarray(r_bootstrap)
-    if r_bootstrap.size == 0:
-        raise ValueError("No valid bootstrap replicates retained.")
-
-    lo = np.quantile(r_bootstrap, alpha)        # lower bound of central CI
-    hi = np.quantile(r_bootstrap, 1 - alpha)    # upper bound of central CI
-
-    def pval_r_less_than(x):
-        # p ≈ proportion of bootstrap >= x  (upper tail)
-        return float(np.mean(r_bootstrap >= x))
-
-    def pval_r_greater_than(x):
-        # p ≈ proportion of bootstrap <= x  (lower tail)
-        # NOTE: tends to be liberal in the paper (lower bound too high)
-        return float(np.mean(r_bootstrap <= x))
-
-    return (lo, hi), pval_r_less_than, pval_r_greater_than
 
 
 def pcm_rois(M, epoch, args):
@@ -111,17 +88,17 @@ def pcm_searchlight(M, epoch, args):
             n_jobs=args.n_jobs
         )
         Mc, idx_c = find_model(M, 'component')
+        n_centre = SL.n_centre
         if epoch=='exec':
             Mf, idx_f = find_model(M, 'feature')
             n_param_f = Mf.n_param
+            param_f = np.full((n_centre, n_param_f), np.nan)
         n_param_c = Mc.n_param
-        n_centre = SL.n_centre
+        param_c = np.full((n_centre, n_param_c), np.nan)
         # n_centre = 2
         # SL.n_centre = n_centre
         var_tot = np.full((n_centre, len(SL.sns)), np.nan)
         distance = np.full((n_centre, len(SL.sns)), np.nan)
-        param_c = np.full((n_centre, n_param_c), np.nan)
-        param_f = np.full((n_centre, n_param_f), np.nan)
         G_obs, T_in, theta_in, T_cv, theta_cv, T_gr, theta_gr, good = SL.run_seachlight_parallel()
         for c in range(SL.n_centre):
             if good[c]:
@@ -133,11 +110,6 @@ def pcm_searchlight(M, epoch, args):
                     param_f[c] = theta_gr[c][idx_f][:n_param_f]
 
         var_expl = np.exp(param_c)
-
-        theta2 = param_f ** 2
-        covariance = param_f[:, 1] * param_f[:, 2]
-        stds = np.sqrt((theta2[:, 0] + theta2[:, 1]) * theta2[:, 2])
-        correlation = covariance / stds
 
         # trace to gifti
         data = var_tot
@@ -157,9 +129,12 @@ def pcm_searchlight(M, epoch, args):
 
         # correlation
         if epoch=='exec':
-            data = correlation
+            theta2 = param_f ** 2
+            covariance = param_f[:, 1] * param_f[:, 2]
+            stds = np.sqrt((theta2[:, 0] + theta2[:, 1]) * theta2[:, 2])
+            correlation = covariance / stds
             column_names = ['correlation']
-            gifti = nt.make_func_gifti(data, anatomical_struct=structnames[h], column_names=column_names)
+            gifti = nt.make_func_gifti(correlation, anatomical_struct=structnames[h], column_names=column_names)
             nb.save(gifti, os.path.join(surf_path, f'searchlight.correlation.{epoch}.{H}.func.gii'))
 
 def main(args):
@@ -169,7 +144,7 @@ def main(args):
     behav_path = os.path.join(gl.baseDir, args.experiment, gl.behavDir)
     Hem = ['L', 'R']
     subj_ids = [f'subj{sn}' for sn in args.sns]
-    rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp', 'V1']
+    rois = ['SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp']
     roi_imgs = [f'ROI.{H}.{roi}.nii' for H in Hem for roi in rois]
     cifti_img = 'beta.dscalar.nii'
     res_img = 'ResMS.nii'
@@ -282,9 +257,8 @@ def main(args):
                     obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
                                'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
                     Y.append(pcm.dataset.Dataset(beta_corr, obs_descriptors=obs_des))
-                    G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements,
-                                                     Y[s].obs_descriptors['cond_vec'],
-                                                     Y[s].obs_descriptors['part_vec'])
+                    beta_corr_mean = np.c_[beta_corr[0::2].mean(axis=0), beta_corr[1::2].mean(axis=0)]
+                    G_obs[s] = (beta_corr_mean.T @ beta_corr_mean) / beta_corr_mean.shape[0] #pcm.est_G(Y[s].measurements, Y[s].obs_descriptors['cond_vec'],Y[s].obs_descriptors['part_vec'])
 
                 np.save(os.path.join(pcm_path, f'G_obs.corr_plan-exec.glm{args.glm}.{H}.{roi}.npy'), G_obs)
                 T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False, verbose=False)
@@ -341,9 +315,11 @@ def main(args):
                     obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
                                'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
                     Y.append(pcm.dataset.Dataset(beta_corr, obs_descriptors=obs_des))
-                    G_obs[s], _ = pcm.est_G_crossval(Y[s].measurements,
-                                                     Y[s].obs_descriptors['cond_vec'],
-                                                     Y[s].obs_descriptors['part_vec'])
+                    beta_corr_mean = np.c_[beta_corr[0::2].mean(axis=0), beta_corr[1::2].mean(axis=0)]
+                    G_obs[s] = (beta_corr_mean.T @ beta_corr_mean) / beta_corr_mean.shape[0]
+                    #G_obs[s], _ = pcm.est_G(Y[s].measurements,
+                     #                                Y[s].obs_descriptors['cond_vec'],
+                      #                               Y[s].obs_descriptors['part_vec'])
 
                 np.save(os.path.join(pcm_path, f'G_obs.corr_cue-finger.glm{args.glm}.{H}.{roi}.npy'), G_obs)
                 T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False, verbose=False)
@@ -515,6 +491,103 @@ def main(args):
                 np.save(os.path.join(pcm_path, f'G_obs.pot.plan.glm{args.glm}.{H}.{roi}.npy'), G_nogo_pot)
                 np.save(os.path.join(pcm_path, f'G_obs.null.exec.glm{args.glm}.{H}.{roi}.npy'), G_go_null)
                 np.save(os.path.join(pcm_path, f'G_obs.pot.exec.glm{args.glm}.{H}.{roi}.npy'), G_go_pot)
+    if args.what == 'pcm2tsv':
+        components = {
+            'plan': ['expectation', 'uncertainty'],
+            'exec': ['sensory input', 'expectation', 'surprise']
+        }
+        pcm_dict = {
+            'epoch': [],
+            'Hem': [],
+            'roi': [],
+            'weight': [],
+            'noise': [],
+            'weight_sum': [],
+            'BF': [],
+            'component': [],
+            'participant_id': []
+        }
+        for epoch in ['plan', 'exec']:
+            Mc, idxc = find_model(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.{epoch}.p'), 'component')
+            n_param_c = Mc.n_param
+            MF = pcm.model.ModelFamily(Mc.Gc,
+                                       comp_names=components[epoch],
+                                       basecomponents=np.eye(8)[None, :, :] if epoch=='exec' else None)
+            for H in Hem:
+                for roi in rois:
+                    f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                          f'theta_in.{epoch}.glm{args.glm}.{H}.{roi}.p'), "rb")
+                    param = pickle.load(f)
+                    param_c = param[idxc][:n_param_c]
+                    noise = np.exp(param[idxc][-1])
+                    T = pd.read_pickle(
+                        os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                     f'T.model_family.{epoch}.glm{args.glm}.{H}.{roi}.p'))
+                    c_bf = MF.component_bayesfactor(T.likelihood, method='AIC', format='DataFrame')
+                    c_bf = pd.melt(c_bf, var_name='component', value_name='BF')
+                    weight_sum = np.exp(param_c).sum(axis=0)
+                    weight = np.exp(param_c).reshape(-1)
+                    pcm_dict['epoch'].extend([epoch] * weight.size)
+                    pcm_dict['roi'].extend([roi] * weight.size)
+                    pcm_dict['Hem'].extend([H] * weight.size)
+                    pcm_dict['weight'].extend(weight)
+                    pcm_dict['weight_sum'].extend(np.concatenate([weight_sum] * n_param_c))
+                    pcm_dict['noise'].extend(np.concatenate([noise] * n_param_c))
+                    pcm_dict['BF'].extend(c_bf['BF'].to_numpy())
+                    pcm_dict['component'].extend(c_bf['component'].to_numpy())
+                    pcm_dict['participant_id'].extend(args.sns * len(components[epoch]))
+                    pass
+        df = pd.DataFrame(pcm_dict)
+        df.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'component_model.BOLD.tsv'), sep='\t', index=False)
+    if args.what == 'corr2tsv':
+        corrs = ['plan-exec', 'cue-finger']
+        corr_dict = {
+            'r_indiv': [],
+            'r_group': [],
+            'SNR': [],
+            'corr': [],
+            'ci_lo': [],
+            'ci_hi': [],
+            'Hem': [],
+            'roi': [],
+            'participant_id': []
+        }
+        f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.plan-exec.p'), "rb")
+        Mflex = pickle.load(f)
+        for corr in corrs:
+            for H in Hem:
+                for roi in rois:
+                    f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                          f'theta_in.corr_{corr}.glm{args.glm}.{H}.{roi}.p'), 'rb')
+                    theta = pickle.load(f)[0]
+                    r_bootstrap = np.load(
+                        os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'r_bootstrap.corr_{corr}.{H}.{roi}.npy'))
+                    f = open(os.path.join(gl.baseDir, args.experiment, gl.pcmDir,
+                                          f'theta_gr.corr_{corr}.glm{args.glm}.{H}.{roi}.p'), 'rb')
+                    theta_g = pickle.load(f)[0]
+
+                    N = theta.shape[1]
+                    sigma2_1 = np.exp(theta[0])
+                    sigma2_2 = np.exp(theta[1])
+                    r_indiv = Mflex.get_correlation(theta)
+                    sigma2_e = np.exp(theta[3])
+                    SNR = np.sqrt(sigma2_1 * sigma2_2) / sigma2_e
+
+                    theta_g, _ = pcm.group_to_individ_param(theta_g, Mflex, N)
+                    r_group = Mflex.get_correlation(theta_g)
+                    (ci_lo, ci_hi), _, _ = bootstrap_summary(r_bootstrap, alpha=0.025)
+
+                    corr_dict['r_indiv'].extend(r_indiv)
+                    corr_dict['r_group'].extend(r_group)
+                    corr_dict['ci_lo'].extend([ci_lo] * len(args.sns))
+                    corr_dict['ci_hi'].extend([ci_hi] * len(args.sns))
+                    corr_dict['SNR'].extend(SNR)
+                    corr_dict['corr'].extend([corr] * len(args.sns))
+                    corr_dict['participant_id'].extend(args.sns)
+                    corr_dict['Hem'].extend([H] * len(args.sns))
+                    corr_dict['roi'].extend([roi] * len(args.sns))
+        df_corr = pd.DataFrame(corr_dict)
+        df_corr.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'correlations.BOLD.tsv'), sep='\t', index=False)
 
 
 if __name__ == '__main__':

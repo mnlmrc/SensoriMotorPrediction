@@ -3,9 +3,9 @@ clear
 close all
 
 % Get list of all Recording-*.mat files in the current folder
-baseDir = fullfile('/cifs/pruszynski/Marco/SensoriMotorPrediction/');
-monkey = 'Malfoy';
-files = dir(fullfile(baseDir, 'Recordings', monkey, 'tmp' ,'recording*.mat'));
+baseDir = fullfile('/cifs/pruszynski/Marco/SensoriMotorPreparation/');
+monkey = 'Pert';
+files = dir(fullfile(baseDir, 'Recordings', monkey, 'recording*.mat'));
 
 %%
 for i = 1:length(files)
