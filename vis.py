@@ -1271,18 +1271,18 @@ def main(args, **kwargs):
     path_fig = 'figures'
     if args.what=='force_aligned':
         experiment = 'smp2'
-        npz = np.load(os.path.join(gl.baseDir, experiment, gl.behavDir, 'force.segmented.avg.npz'), allow_pickle=True)
+        npz = np.load(os.path.join('data', gl.behavDir, 'force.segmented.avg.npz'), allow_pickle=True)
         force = npz['data_array']
         descr = pd.DataFrame(npz['descriptor'].item())
         force = force[descr.GoNogo == 'go']
         descr = descr[descr.GoNogo == 'go']
         fig, axs = plt.subplots(1, 2, figsize=(4, 5), sharey=True, sharex=True, constrained_layout=True)
-        fig, axs = plot_force_aligned(fig, axs, force, descr)
+        fig, axs = plot_aligned_force(fig, axs, force, descr)
         fig.tight_layout()
         plt.savefig(os.path.join(path_fig, 'force_response.svg'))
         plt.show()
     if args.what=='force_binned':
-        filepath = os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'{experiment}_force_single_trial.tsv')
+        filepath = os.path.join('data', gl.behavDir, f'{args.experiment}_force_single_trial.tsv')
         dat = pd.read_csv(filepath, sep='\t', )
         dat = dat.groupby(['sn', 'cue', 'stimFinger', 'GoNogo', ]).mean(numeric_only=True).reset_index()
         fig, axs = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(2, 2))
@@ -1296,19 +1296,19 @@ def main(args, **kwargs):
     if args.what=='dev_aligned':
         cut = float(kwargs.get('cut', .05))
         startSample = int(gl.prestim * gl.fsample_mov + cut * gl.fsample_mov)
-        npz = np.load(os.path.join(gl.baseDir, args.experiment, gl.behavDir, 'force.segmented.avg.npz'), allow_pickle=True)
+        npz = np.load(os.path.join('data', gl.behavDir,  'force.segmented.avg.npz'), allow_pickle=True)
         force = npz['data_array']
         descr = pd.DataFrame(npz['descriptor'].item())
         force = force[descr.GoNogo == 'go', startSample:]
         force = force - force[:, 0][:, None]
         descr = descr[descr.GoNogo == 'go']
         fig, axs = plt.subplots(1, 2, figsize=(5, 2.75), sharey=True, sharex=True, constrained_layout=True)
-        fig, axs = plot_dev_aligned(fig, axs, force, descr)
+        fig, axs = plot_aligned_deviation(fig, axs, force, descr)
         fig.tight_layout()
         plt.savefig(os.path.join(path_fig, 'dev_aligned.svg'))
         plt.show()
     if args.what=='dev_binned':
-        filepath = os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'{experiment}_force_single_trial.tsv')
+        filepath = os.path.join('data', gl.behavDir, f'{args.experiment}_force_single_trial.tsv')
         dat = pd.read_csv(filepath, sep='\t', )
         dat = dat.groupby(['sn', 'cue', 'stimFinger', 'GoNogo', ]).mean(numeric_only=True).reset_index()
         fig, axs = plt.subplots(1, 2, sharey=True, sharex=True, figsize=(2, 2))

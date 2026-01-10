@@ -129,19 +129,19 @@ cmap_ring = plt.get_cmap('Oranges')
 col_ring = [cmap_ring(i) for i in np.linspace(.3, .9, 5)][1:]
 
 colour_mapping = {
-    '100-0%': col_plan[0],
-    '75-25%': col_plan[1],
-    '50-50%': col_plan[2],
-    '25-75%': col_plan[3],
-    '0-100%': col_plan[4],
-    '100-0%,index': col_index[0],
-    '75-25%,index': col_index[1],
-    '50-50%,index': col_index[2],
-    '25-75%,index': col_index[3],
-    '75-25%,ring': col_ring[0],
-    '50-50%,ring': col_ring[1],
-    '25-75%,ring': col_ring[2],
-    '0-100%,ring': col_ring[3],
+    '100-0%': '#EC008C', #col_plan[0],
+    '75-25%': '#BD60A5', #col_plan[1],
+    '50-50%': '#8781BD', #col_plan[2],
+    '25-75%': '#1D9AD6', #col_plan[3],
+    '0-100%': '#00AEEF', #col_plan[4],
+    '100-0%,index': '#EC008C', #col_index[0],
+    '75-25%,index': '#F067A6', #col_index[1],
+    '50-50%,index': '#F49AC1', #col_index[2],
+    '25-75%,index': '#F9CBDF', #col_index[3],
+    '75-25%,ring': '#B9E4FA', #col_ring[0],
+    '50-50%,ring': '#6DCFF6', #col_ring[1],
+    '25-75%,ring': '#00C2F3', #col_ring[2],
+    '0-100%,ring': '#00AEEF', #col_ring[3],
 }
 
 ###############
