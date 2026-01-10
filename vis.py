@@ -21,9 +21,11 @@ import SUITPy.flatmap as flatmap
 import seaborn as sb
 import pandas as pd
 import mat73
-from depreciated.pcm_lfp import make_freq_masks
+from lfp import make_freq_masks
 from util import concat_hrf
 from itertools import combinations
+from imaging_pipelines.util import bootstrap_summary
+
 import warnings
 import xarray as xr
 
