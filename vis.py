@@ -7,7 +7,7 @@ import nitools as nt
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 import PcmPy as pcm
-from pcm_models import find_model
+#from pcm_models import find_model
 from sklearn.preprocessing import MinMaxScaler
 from matplotlib.cm import ScalarMappable
 from matplotlib.patches import Rectangle, FancyBboxPatch, Patch
@@ -21,7 +21,7 @@ import seaborn as sb
 import pandas as pd
 import mat73
 from itertools import combinations
-from imaging_pipelines.util import bootstrap_summary
+#from imaging_pipelines.util import bootstrap_summary
 
 import warnings
 import xarray as xr
@@ -722,10 +722,10 @@ def plot_pcm_corr(fig, axs, panel, Mflex, theta, theta_g, r_bootstrap=None, alph
     else:
         ax.tick_params(left=False)
 
-    if r_bootstrap is not None:
-        (ci_lo, ci_hi), _, _ = bootstrap_summary(r_bootstrap, alpha=alpha)
-        print(f"group estimate:{r_group[0]} central {(1 - 2 * alpha) * 100:.0f}% CI for r: [{ci_lo:.3f}, {ci_hi:.3f}]")
-        ax.axhspan(ci_lo, ci_hi, lw=0, color='lightgrey', zorder=0)
+    #if r_bootstrap is not None:
+    #    (ci_lo, ci_hi), _, _ = bootstrap_summary(r_bootstrap, alpha=alpha)
+    #    print(f"group estimate:{r_group[0]} central {(1 - 2 * alpha) * 100:.0f}% CI for r: [{ci_lo:.3f}, {ci_hi:.3f}]")
+    #    ax.axhspan(ci_lo, ci_hi, lw=0, color='lightgrey', zorder=0)
 
     sigma_g_2_1 = np.exp(theta_g[0, 0])
     sigma_g_2_2 = np.exp(theta_g[1, 0])
@@ -1412,32 +1412,32 @@ def main(args, **kwargs):
         fig.suptitle(suptitle)
         plt.savefig(os.path.join(path_fig, f'dissimilarity.{args.epoch}.{args.H}.svg'))
         plt.show()
-    if args.what=='pcm_models':
-        vmin, vmax = tuple(map(float, kwargs.get('vlim', (0, 1))))
-        figsize = tuple(map(float, kwargs.get('figsize', (2.66, 2))))
-        components = kwargs.get('components', ['sensory input', 'expectation', 'surprise'])
-        Mc, _ = find_model(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.{args.epoch}.p'), 'component')
-        G_mod = Mc.Gc
-        if args.epoch == 'plan':
-            ticklabels = list(gl.regressor_mapping.keys())[:5]
-            suptitle = 'Crossnobis dissimilarities during response preparation'
-        elif args.epoch == 'exec':
-            ticklabels = list(gl.regressor_mapping.keys())[5:13]
-            suptitle = 'Crossnobis dissimilarities during response execution'
-            Mf, _ = find_model(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.{args.epoch}.p'), 'feature')
-            Ac_pos = (Mf.Ac * np.array([1, 1, 1, ])[:, None, None]).sum(axis=0)
-            Gx_pos = Ac_pos @ Ac_pos.T
-            Ac_neg = (Mf.Ac * np.array([1, 1, -1, ])[:, None, None]).sum(axis=0)
-            Gx_neg = Ac_neg @ Ac_neg.T
-            G_mod = np.r_[G_mod, Gx_pos[None, :, :], Gx_neg[None, :, :]]
-        D_mod = pcm.G_to_dist(G_mod)
-        fig, axs = plt.subplots(1, G_mod.shape[0], figsize=figsize, sharex=True, sharey=True, )
-        for m, D in enumerate(D_mod):
-            fig, axs = plot_dissimilarities(fig, axs, m, D[None, :, :], ticklabels, vmin=vmin, vmax=vmax, sqrt=True)
-            axs[m].set_title(components[m])
-        fig.suptitle('Representational models')
-        fig.savefig(os.path.join(path_fig, f'models.{args.epoch}.svg'))
-        plt.show()
+    # if args.what=='pcm_models':
+    #     vmin, vmax = tuple(map(float, kwargs.get('vlim', (0, 1))))
+    #     figsize = tuple(map(float, kwargs.get('figsize', (2.66, 2))))
+    #     components = kwargs.get('components', ['sensory input', 'expectation', 'surprise'])
+    #     Mc, _ = find_model(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.{args.epoch}.p'), 'component')
+    #     G_mod = Mc.Gc
+    #     if args.epoch == 'plan':
+    #         ticklabels = list(gl.regressor_mapping.keys())[:5]
+    #         suptitle = 'Crossnobis dissimilarities during response preparation'
+    #     elif args.epoch == 'exec':
+    #         ticklabels = list(gl.regressor_mapping.keys())[5:13]
+    #         suptitle = 'Crossnobis dissimilarities during response execution'
+    #         Mf, _ = find_model(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'M.{args.epoch}.p'), 'feature')
+    #         Ac_pos = (Mf.Ac * np.array([1, 1, 1, ])[:, None, None]).sum(axis=0)
+    #         Gx_pos = Ac_pos @ Ac_pos.T
+    #         Ac_neg = (Mf.Ac * np.array([1, 1, -1, ])[:, None, None]).sum(axis=0)
+    #         Gx_neg = Ac_neg @ Ac_neg.T
+    #         G_mod = np.r_[G_mod, Gx_pos[None, :, :], Gx_neg[None, :, :]]
+    #     D_mod = pcm.G_to_dist(G_mod)
+    #     fig, axs = plt.subplots(1, G_mod.shape[0], figsize=figsize, sharex=True, sharey=True, )
+    #     for m, D in enumerate(D_mod):
+    #         fig, axs = plot_dissimilarities(fig, axs, m, D[None, :, :], ticklabels, vmin=vmin, vmax=vmax, sqrt=True)
+    #         axs[m].set_title(components[m])
+    #     fig.suptitle('Representational models')
+    #     fig.savefig(os.path.join(path_fig, f'models.{args.epoch}.svg'))
+    #     plt.show()
     if args.what=='weight_cortical':
         figsize = tuple(map(float, kwargs.get('figsize', (4, 3))))
         df = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'component_model.BOLD.tsv'), sep='\t')
