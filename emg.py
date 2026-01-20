@@ -5,7 +5,9 @@ import numpy as np
 import os
 import globals as gl
 from scipy.signal import resample
+import PcmPy as pcm
 import pickle
+from util import lp_filter
 from sklearn.decomposition import PCA, NMF, TruncatedSVD
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
@@ -180,14 +182,6 @@ def main(args):
         emg = np.vstack(emg)
 
         np.save(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', f'emg_raw.{args.datatype}.npy'), emg)
-
-    if args.what=='make_bins':
-
-        for sn in args.snS:
-            emg = np.load(gl.baseDir, experiment, 'emg', f'subj{sn}', f'{experiment}_{sn}.npy')
-            for win in args.wins:
-                pass
-
     if args.what=='mep_amp':
         # load data behav
         pinfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'participants.tsv'), sep='\t')
@@ -240,8 +234,6 @@ def main(args):
         df_mep_amp.drop(['TrigPlan', 'TrigExec', 'TrigBaseline'], axis=1, inplace=True)
         df_mep_amp.to_csv(os.path.join(gl.baseDir, args.experiment, 'emg',
                                        f'subj{args.sn}', 'mep_amp.tsv'), sep='\t', index=False)
-
-
     if args.what=='segment_emg':
         pinfo = pd.read_csv(os.path.join(gl.baseDir, args.experiment, 'participants.tsv'), sep='\t')
         blocks = pinfo[pinfo.sn==args.sn].reset_index().blocks_emg_task[0]
@@ -276,7 +268,6 @@ def main(args):
         emg = np.vstack(emg)
 
         np.save(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', 'emg_raw.behav.task.npy'), emg)
-
     if args.what=='segment_emg_all':
         for sn in args.snS:
             args = argparse.Namespace(
@@ -285,8 +276,6 @@ def main(args):
                 sn=sn,
             )
             main(args)
-
-
     if args.what=='save_participants_dict':
 
         channels = ['thumb_flex',
@@ -329,9 +318,7 @@ def main(args):
 
         f = open(os.path.join(gl.baseDir, args.experiment, 'emg', 'emg.p'), 'wb')
         pickle.dump(Dict, f)
-
     if args.what == 'pca':
-
         print(f'loading subj{args.sn}...')
         emg_raw = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', f'emg_raw.npy'))
         emg_rect = np.abs(emg_raw)
@@ -346,30 +333,44 @@ def main(args):
         # scaler = MinMaxScaler()
         scaler = StandardScaler()
         emg_stacked = scaler.fit_transform(emg_stacked)
-
         PCs = pca.fit_transform(emg_stacked)
         # PCs =  nmf.fit_transform(emg_stacked)
         PCs = PCs.reshape(emg.shape[0], emg.shape[-1], -1)  # (200, 6444, n_components)
         PCs = np.transpose(PCs, (0, 2, 1))
-
         np.save(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{args.sn}', 'pcs.npy'), PCs)
-
     if args.what=='pca_all':
-        for sn in args.snS:
+        for sn in args.sns:
             args = argparse.Namespace(
                 what='pca',
                 experiment=args.experiment,
                 sn=sn,
             )
             main(args)
+    if args.what=='trajectories':
+        pcs = []
+        for sn in args.sns:
+            print(f'doing participant {sn}...')
+            dat = pd.read_csv(os.path.join(gl.baseDir, args.experiment, gl.behavDir, f'subj{sn}', f'{args.experiment}_{sn}.dat'),
+                              sep='\t')
+            cue = dat.cue.map(gl.cue_mapping)
+            stimFinger = dat.stimFinger.map(gl.stimFinger_mapping)
+            cond_vec = cue + ',' + stimFinger
+            cond_vec = cond_vec.map(gl.regressor_mapping).to_numpy()
+            part_vec = np.ones_like(cond_vec)
+            pcs_tmp = np.load(os.path.join(gl.baseDir, args.experiment, 'emg', f'subj{sn}', 'pcs.npy'))
+            pcs_tmp = lp_filter(pcs_tmp, 10, gl.fsample_emg, axis=-1)
+            pcs_tmp, _, _ = pcm.group_by_condition(pcs_tmp, cond_vec, part_vec, axis=0)
+            pcs.append(pcs_tmp)
+        #pcs = np.array(pcs).mean(axis=0)
+        np.save(os.path.join(gl.baseDir, args.experiment, 'emg', 'trajectories.npy'), pcs)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('what', nargs='?', default=None)
     parser.add_argument('--sn', type=int, default=None)
-    parser.add_argument('--snS', nargs='+', type=int, default=[100, 101, 102, 104, 105, 106, 107, 108, 109, 110])
-    parser.add_argument('--experiment', type=str, default='smp3')
+    parser.add_argument('--sns', nargs='+', type=int, default=[100, 101, 102, 104, 105, 106, 107, 108, 109, 110])
+    parser.add_argument('--experiment', type=str, default='smp0')
     parser.add_argument('--datatype', type=str, default='task')
     parser.add_argument('--edge', type=str, default='rising')
     parser.add_argument('--thresh', type=float, default=2)
