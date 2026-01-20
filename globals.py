@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import matplotlib.pyplot as plt
+import sys
 
 import numpy as np
 
@@ -11,6 +12,9 @@ Dirs = ["/Volumes/diedrichsen_data$/data/SensoriMotorPrediction/",
 
 # Find the first existing directory
 baseDir = next((Dir for Dir in Dirs if Path(Dir).exists()), None)
+
+ROOT =  Path().resolve().parent
+sys.path.append(str(ROOT))
 
 if baseDir:
     print(f"Base directory found: {baseDir}")
@@ -168,10 +172,11 @@ mask_stimFinger_cue[[5, 6, 10, 12, 15, 16]] = True
 borders = {'L': os.path.join(baseDir, 'smp2', surfDir, 'fs_LR.32k.L.border'),
            'R': os.path.join(baseDir, 'smp2', surfDir, 'fs_LR.32k.R.border')}
 
-atlasDirs = ["/home/UWO/memanue5/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/",
-             "/Users/mnlmrc/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/"]
+# atlasDirs = ["/home/UWO/memanue5/Documents/GitHub/Functional_Fusion/Functional_Fusion/Atlases/tpl-fs32k/",
+#              "/Users/mnlmrc/Documents/GitHub/sensori-motor-prediction/data/atlases/"]
 
-atlasDir = next((Dir for Dir in atlasDirs if Path(Dir).exists()), None)
+atlasDir = os.path.join(ROOT, 'data', 'atlases') #next((Dir for Dir in atlasDirs if Path(Dir).exists()), None)
+print(f'Atlases dir found: {atlasDir}')
 
 rois = {
         'Desikan': [

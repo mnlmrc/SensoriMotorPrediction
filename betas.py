@@ -112,11 +112,6 @@ def main(args=None):
         masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]
         residuals = bt.make_cifti_residuals(path_glm, masks, struct)
         nb.save(residuals, path_glm + '/' + 'residual.dtseries.nii')
-    # if args.what == 'make_4D_residuals_nifti':
-    #     path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
-    #     cifti = nb.load(path_glm + '/' + 'residual.dtseries.nii')
-    #     nifti = nt.volume_from_cifti(cifti, struct_names=struct)
-    #     nb.save(nifti, path_glm + '/' + 'residual.nii')
     if args.what == 'make_residuals_cifti_all':
         for sn in args.sns:
             print(f'Processing subj{sn}...')

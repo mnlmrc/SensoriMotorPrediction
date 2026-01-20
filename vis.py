@@ -14,15 +14,12 @@ from matplotlib.patches import Rectangle, FancyBboxPatch, Patch
 import surfAnalysisPy as surf
 from matplotlib.lines import Line2D
 import os
-#from pcm_cortical import bootstrap_summary
 import globals as gl
 from scipy.stats import ttest_1samp, ttest_rel, linregress, t, permutation_test, binomtest
 import SUITPy.flatmap as flatmap
 import seaborn as sb
 import pandas as pd
 import mat73
-from lfp import make_freq_masks
-from util import concat_hrf
 from itertools import combinations
 from imaging_pipelines.util import bootstrap_summary
 
@@ -30,29 +27,6 @@ import warnings
 import xarray as xr
 
 warnings.filterwarnings('ignore')
-
-def demographics(experiment):
-    # Load the data from the TSV file
-    data = pd.read_csv(os.path.join(gl.baseDir, experiment, 'participants.tsv'), sep='\t')
-
-    # Filter participants labeled as 'good'
-    good_participants = data[data['good'] == 1]
-
-    # Summarize demographics
-    demographics = {
-        'Total Participants': len(good_participants),
-        'Gender Distribution': good_participants['sex'].value_counts(),
-        'Average Age': good_participants['age'].mean(),
-        'SD Age': good_participants['age'].std(),
-        'Age Range': (good_participants['age'].min(), good_participants['age'].max()),
-        'Handedness Distribution': good_participants['handedness'].value_counts(),
-    }
-
-    # Print the summary
-    for key, value in demographics.items():
-        print(f"{key}: {value}")
-
-    return demographics
 
 def plot_aligned_force(fig, axs, force, descr):
     tAx = np.linspace(-gl.prestim, gl.poststim, force.shape[-1])
@@ -343,12 +317,11 @@ def plot_surf(fig, ax, surf_data, H, vmin=-10, vmax=10, cmap='viridis', col=0, t
     Hem = ['L', 'R']
     h = Hem.index(H)
 
-    surf = nb.load(f'/cifs/diedrichsen/data/Atlas_templates/fs_LR_32/fs_LR.32k.{H}.very_inflated.surf.gii')
+    surf = nb.load(os.path.join(gl.atlasDir, f'fs_LR.32k.{H}.very_inflated.surf.gii'))
     coords = surf.darrays[0].data
     faces = surf.darrays[1].data.astype(np.uint32)  # pyvista requires uint32
     faces = np.hstack([np.full((faces.shape[0], 1), 3), faces]).astype(np.int32).flatten()
-    sulc = nt.get_gifti_data_matrix(
-        nb.load(f'/cifs/diedrichsen/data/Atlas_templates/fs_LR_32/fs_LR.32k.LR.sulc.dscalar.gii'))
+    sulc = nt.get_gifti_data_matrix(nb.load(os.path.join(gl.atlasDir, 'fs_LR.32k.LR.sulc.dscalar.gii')))
 
     if isinstance(surf_data, nb.Cifti2Image):
         column_names = surf_data.header.get_axis(0).name
@@ -372,8 +345,7 @@ def plot_surf(fig, ax, surf_data, H, vmin=-10, vmax=10, cmap='viridis', col=0, t
     mesh.point_data["sulc"] = sulc
     mesh.point_data[overlay] = data
 
-    border_verts = load_border_vertices_xml(
-        f'/home/UWO/memanue5/Documents/GitHub/surfAnalysisPy/standard_mesh/fs_{H}/fs_LR.32k.{H}.border')
+    border_verts = load_border_vertices_xml(os.path.join(gl.atlasDir, f'fs_LR.32k.{H}.border'))
     border = coords[border_verts]
     p = pv.Plotter(window_size=(600, 600), off_screen=True)
     p.add_mesh(mesh, scalars="sulc", cmap="Greys", clim=[-2, 2], lighting=True, show_scalar_bar=False)

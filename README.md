@@ -46,7 +46,7 @@ are stored in a single CIFTI file using the `make_cifti_betas` function from [im
 - Save cortical beta coefficients to CIFTI file: `python betas.py make_betas_cifti --sn <subject number>`
 - Save cortical contrasts to CIFTI file: `python betas.py make_contrasts_cifti --sn <subject number>`
 - Save residuals timeseries to CIFTI file: `python betas.py make_residuals_cifti --sn <subject number>`
-- Save average contrasts across participants for each ROI to .tsv file: `python betas.py avg_roi_contrasts`
+- Save average contrasts across participants for each ROI to .tsv file: `python betas.py roi_contrasts`
 
 The univariate contrasts vs. baseline projected to the cortical surface are stored in gifti files. For better 
 visualisation, gifti files are converted to cifti and smoothed using the `surface.py` module:
@@ -63,7 +63,7 @@ All the representational models are impletemented in the `pcm_models` module:
 
 ### PCM correlations
 
-- Planning-execution correlation in BOLD: `python pcm_cortical.py correlation_plan-exec`
+- Preparation-execution correlation in BOLD: `python pcm_cortical.py correlation_plan-exec`
 
 
 
