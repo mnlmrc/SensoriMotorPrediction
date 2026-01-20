@@ -1615,7 +1615,7 @@ def main(args, **kwargs):
             ax.spines['left'].set_bounds(yticks[1], yticks[-2])
             ax.spines['bottom'].set_bounds(xticks[1], xticks[-2])
 
-        axs[0].set_ylabel('neural dissimilarity (a.u.)', fontsize=10)
+        axs[0].set_ylabel('BOLD dissimilarity (a.u.)', fontsize=10)
         axs[1].tick_params('y', left=False)
         fig.supxlabel('force dissimilarity (a.u.)', fontsize=10)
 
