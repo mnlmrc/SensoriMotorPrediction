@@ -1734,33 +1734,8 @@ def main(args, **kwargs):
         fig.suptitle('Crossnobis dissimilarities during response execution')
         fig.savefig(os.path.join(path_fig, f'dissimilarities_emg.svg'))
         plt.show()
-    if args.what=='mds_emg':
-        figsize = tuple(map(float, kwargs.get('figsize', (6, 3))))
-        xlim = tuple(map(float, kwargs.get('vlim', (-.1, .1))))
-        epochs = ['Pre', 'SLR', 'LLR', 'Vol']
-        color = list(gl.colour_mapping.values())[5:13]
-        fig, axs = plt.subplots(1, len(epochs), figsize=figsize, sharex=True, sharey=True, constrained_layout=True)
-        for e, epoch in enumerate(epochs):
-            ax = axs[e]
-            G = np.load(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, f'G_obs.emg.{epoch}.npy'))
-            mds, _ = pcm.classical_mds(G.mean(axis=0))
-            ax.scatter(mds[:, 0], mds[:, 1], color=color)
-            ax.set_aspect('equal')
-            ax.set_ylim(ax.get_xlim())
-            ax.set_xlabel('PC1')
-            ax.set_title(epoch)
-            ax.set_xticks(xlim)
-            ax.set_yticks(ax.get_xticks())
-            ax.spines[['left', 'top', 'right']].set_visible(False)
-            ax.spines[['left', 'bottom']].set_bounds(xlim)
-            if e == 0:
-                ax.spines['left'].set_visible(True)
-                ax.set_ylabel('PC2')
-            else:
-                ax.tick_params(axis='y', left=False)
-            fig.suptitle('Multidimensional scaling')
-            plt.savefig(os.path.join(path_fig, f'mds.emg.svg'))
-        plt.show()
+    if args.what=='mds':
+        pass
     if args.what=='weight_ephys':
         figsize = tuple(map(float, kwargs.get('figsize', (4, 3))))
         ylim = tuple(map(float, kwargs.get('ylim', (0, .3))))
