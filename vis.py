@@ -226,7 +226,7 @@ def plot_aligned_deviation(fig, axs, force, descr):
 
     fig.supxlabel('index force (N)', fontsize=10)
     fig.supylabel('ring force (N)', fontsize=10)
-    fig.suptitle('Mean deviation from ideal straight trajectory')
+    fig.suptitle('Force trajectories')
 
     return fig, axs
 
