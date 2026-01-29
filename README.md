@@ -1,5 +1,5 @@
 This repository contains Python and MATLAB code related to the SensoriMotorPrediction (SMP) project in which we 
-investigate how probabilistic predictions are incorporated into feedback control mechanisms. Within the project, the 
+investigate how probabilistic predictions are incorporated into feedback control mechanisms. Within the project, 
 `experiment=smp2` refer to Experiment 1 and `experiment=smp0` to Experiment 2. Wherever required to run the code, the
 `<subject number>` for a given participant can be found in the `participants.tsv` file. 
 
@@ -12,9 +12,11 @@ surfAnalysis (https://github.com/DiedrichsenLab/surfAnalysis), surfAnalysisPy
 Functional_Fusion (https://github.com/DiedrichsenLab/Functional_Fusion), PcmPy 
 (https://github.com/DiedrichsenLab/PcmPy), imaging_pipelines (https://github.com/mnlmrc/imaging_pipelines)
 
-The data folder in the this repository contains the minimal dataset required to reproduce the results and figures 
-presented in the paper ... . The notebooks folder contains jupyter notebooks reproducing each figure for the mininal 
-dataset in the data folder. Additional data will be provided upon requested to the authors.
+The `data` folder in the this repository contains the minimal dataset required to reproduce the results and figures 
+presented in the article [Sensory expectations and prediction error during feedback control in the human brain](https://www.biorxiv.org/content/10.64898/2026.01.19.700321v1). 
+Participants' information is stored in the `participants.tsv` file. The `notebooks` folder contains jupyter notebooks 
+reproducing each figure for the mininal dataset in the `data` folder. Additional data will be provided upon requested to 
+the authors. 
 
 # **Behavioural data**
 
@@ -27,9 +29,6 @@ perturbation. Individual-participant behavioural datasets pooled together in a s
 `data/behavioural/smp2_force_single_trial.tsv`.
 
 # **fMRI data**
-
-The raw fMRI data are stored following the Brain Imaging Data Structure (BIDS). Participants' information are stored in 
-the `participants.tsv` file. 
 
 ## Preprocessing
 
@@ -58,7 +57,7 @@ All the representational models are impletemented in the `pcm_models` module:
 - `python pcm_models.py plan`: save preparation models (Fig. 3a)
 - `python pcm_models.py exec`: save execution models (Fig. 6a)
 
-This step produces `.p` files containing a list of second moment (G) matrix for each model. The G matrix can be 
+This step produces `.p` files containing a list with the second moment (G) matrix for each model. The G matrix can be 
 translated to squared Euclidean distances using the PCM function `pcm.G_to_dist` (see Eq. 5) 
 
 ### PCM model fitting
@@ -79,6 +78,7 @@ pre-whitened neural activity patterns:
 - `python pcm_cortical.py rois_planning`: fit preparation models to beta coefficient estimated for response preparation
 in each ROI
 - `python pcm_cortical.py rois_execution`: fit preparation models to beta coefficient estimated for response execution
+in each ROI
 
 These steps produce: 1) a `G_obs.<epoch>.glm12.<Hem>.<roi>.npy` file for each ROI with the observed G matrix in 
 each participant (a copy of these files is stored in `data/encoding/`); 2) a `theta_in.<epoch>.glm12.<Hem>.<roi>.p` with 
