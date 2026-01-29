@@ -6,7 +6,11 @@ investigate how probabilistic predictions are incorporated into feedback control
 Toolbox dependencies to use the code:
 
 MATLAB R2020a (version used for fMRI data preprocessing), SPM12 (https://www.fil.ion.ucl.ac.uk/spm), 
-Dataframe toolbox (https://github.com/jdiedrichsen/dataframe), ...
+Dataframe toolbox (https://github.com/jdiedrichsen/dataframe), RWLS toolbox (https://github.com/jdiedrichsen/rwls), 
+surfAnalysis (https://github.com/DiedrichsenLab/surfAnalysis), surfAnalysisPy 
+(https://github.com/DiedrichsenLab/surfAnalysisPy), nitools (https://github.com/DiedrichsenLab/nitools), 
+Functional_Fusion (https://github.com/DiedrichsenLab/Functional_Fusion), PcmPy 
+(https://github.com/DiedrichsenLab/PcmPy), imaging_pipelines (https://github.com/mnlmrc/imaging_pipelines)
 
 # **Behavioural data**
 
@@ -77,9 +81,9 @@ the log-weight of each model in each participant (see Eq. 12). The weights of ea
 
 ### PCM correlations
 
-- Preparation-execution correlation in BOLD: `python pcm_cortical.py correlation_plan-exec`
+- `python pcm_cortical.py correlation_plan-exec`: preparation-execution correlation in BOLD activity (see Fig. 4)
+- `python pcm_cortical.py correlation_cue-finger`: sensory input-expectation correlation in BOLD activity (see Fig. 7g)
 
-
-
+These steps produce `theta_in.corr_<plan-exec/cue-finger>.glm12.<Hem>.<roi>.p` and `theta_in.corr_cue-finger.glm12.<Hem>.<roi>.p`
 
 
