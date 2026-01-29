@@ -12,6 +12,10 @@ surfAnalysis (https://github.com/DiedrichsenLab/surfAnalysis), surfAnalysisPy
 Functional_Fusion (https://github.com/DiedrichsenLab/Functional_Fusion), PcmPy 
 (https://github.com/DiedrichsenLab/PcmPy), imaging_pipelines (https://github.com/mnlmrc/imaging_pipelines)
 
+The data folder in the this repository contains the minimal dataset required to reproduce the results and figures 
+presented in the paper ... . The notebooks folder contains jupyter notebooks reproducing each figure for the mininal 
+dataset in the data folder. Additional data will be provided upon requested to the authors.
+
 # **Behavioural data**
 
 - `python force.py single_trial <subject number>`: calculate behavioural metrics, including RT, average force response 
@@ -45,7 +49,9 @@ the rows and voxels in the columns
 files from the previous step and save it to .tsv file. This step produces the file at 
 `data/univariate_activation/ROI.con.avg.tsv`
 
-### PCM model definition
+## **PCM**
+
+### model definition
 
 All the representational models are impletemented in the `pcm_models` module:
 
@@ -57,8 +63,8 @@ translated to squared Euclidean distances using the PCM function `pcm.G_to_dist`
 
 ### PCM model fitting
 
-PCM models are fitted to the beta coefficients from 1st level GLM, separately for preparation and execution. First, the 
-beta coefficients and the residuals of each participants are saved to CIFTI files:
+PCM models are fitted to the beta coefficients from 1st level GLM. The beta coefficients and the residuals of each 
+participants need first to be saved as CIFTI files:
 
 - `python betas.py make_betas_cifti --sn <subject number>`: save cortical beta coefficients from 1st-level GLM to CIFTI 
 file with condition and runs in the rows 
@@ -76,14 +82,38 @@ in each ROI
 
 These steps produce: 1) a `G_obs.<epoch>.glm12.<Hem>.<roi>.npy` file for each ROI with the observed G matrix in 
 each participant (a copy of these files is stored in `data/encoding/`); 2) a `theta_in.<epoch>.glm12.<Hem>.<roi>.p` with 
-the log-weight of each model in each participant (see Eq. 12). The weights of each model are stored in 
-`data/encoding/component_model.BOLD.tsv`.
+the log-weight of each model in each participant (see Eq. 12). The standardised weights of each model are stored in 
+`data/encoding/component_model.BOLD.tsv`. The procedure is similar for the LFPs and spiking activity:
+
+- `python pcm_lfp.py continuous --<roi>`: fit PCM models for preparation to the LFPs aligned with cue presentation and 
+perturbation onset
+- `python pcm_spk.py continuous --<roi>`: fit PCM models for preparation to the spiking activity aligned with cue 
+presentation and perturbation onset
+
+The resulting standardised weight for each roi are stored in `data/encoding/weight.lfp.<roi>.plan.npy` and 
+`data/encoding/weight.lfp.<roi>.plan.npy`. The frequencies of interest used for LFP extraction can be found in 
+`data/LFPs/cfg.mat`. 
 
 ### PCM correlations
 
 - `python pcm_cortical.py correlation_plan-exec`: preparation-execution correlation in BOLD activity (see Fig. 4)
 - `python pcm_cortical.py correlation_cue-finger`: sensory input-expectation correlation in BOLD activity (see Fig. 7g)
 
-These steps produce `theta_in.corr_<plan-exec/cue-finger>.glm12.<Hem>.<roi>.p` and `theta_in.corr_cue-finger.glm12.<Hem>.<roi>.p`
+These steps produce `theta_in.corr_<plan-exec/cue-finger>.glm12.<Hem>.<roi>.p`,  
+`theta_gr.corr_<plan-exec/cue-finger>.glm12.<Hem>.<roi>.p` and `r_bootstrap.corr_<plan-exec/cue-finger>.<Hem>.<roi>.npy`
+files that contain the necessary information to calculate the individual and group correlation estimates (see black dots 
+and dashed red line, respectively, in Fig. 4 and 7g) and well the fSNR and the confidence interval using the 
+`extract_mle_corr` and `bootstrap_summary` functions in `imaging_pipelines`. All resulting correlation estimates and 
+confidence intervals are stored in `data/correlations/correlations.BOLD.tsv`. A similar approach was used to calculate 
+the correlation between sensory input and expectation in EMG, LFPs and spiking activity (see Fig. 7f,h,i):
+
+- `python pcm_emg.py correlation_cue-finger`: sensory input-expectation correlation in EMG activity (see Fig. 7f)
+- `python pcm_lfp.py correlation_cue-dir`: sensory input-expectation correlation in LFPs activity (see Fig. 7h)
+- `python pcm_spk.py correlation_cue-dir`: sensory input-expectation correlation in spiking activity (see Fig. 7i)
+
+These steps work similarly as for neuroimaging data. All resulting correlation estimates and confidence intervals are 
+stored in `data/correlations/correlations.EMG.tsv`, `data/correlations/correlations.lfp.tsv`, and
+`data/correlations/correlations.spk.tsv`.
+
 
 

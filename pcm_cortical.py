@@ -5,7 +5,6 @@ import argparse
 import pickle
 from itertools import combinations
 import rsatoolbox as rsa
-from rdms import D_to_rdm
 import PcmPy as pcm
 from pathlib import Path
 from joblib import Parallel, delayed, parallel_backend
@@ -23,10 +22,9 @@ from sklearn.model_selection import cross_val_score, LeaveOneGroupOut
 from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score
 from sklearn.preprocessing import StandardScaler
-from imaging_pipelines.util import bootstrap_correlation
+from imaging_pipelines.util import bootstrap_correlation, extract_mle_corr
 
 warnings.filterwarnings("ignore")
-
 
 def pcm_rois(M, epoch, args):
     Hem = ['L', 'R']
@@ -566,15 +564,7 @@ def main(args):
                                           f'theta_gr.corr_{corr}.glm{args.glm}.{H}.{roi}.p'), 'rb')
                     theta_g = pickle.load(f)[0]
 
-                    N = theta.shape[1]
-                    sigma2_1 = np.exp(theta[0])
-                    sigma2_2 = np.exp(theta[1])
-                    r_indiv = Mflex.get_correlation(theta)
-                    sigma2_e = np.exp(theta[3])
-                    SNR = np.sqrt(sigma2_1 * sigma2_2) / sigma2_e
-
-                    theta_g, _ = pcm.group_to_individ_param(theta_g, Mflex, N)
-                    r_group = Mflex.get_correlation(theta_g)
+                    r_group, r_indiv, SNR = extract_mle_corr(theta, theta_g)
                     (ci_lo, ci_hi), _, _ = bootstrap_summary(r_bootstrap, alpha=0.025)
 
                     corr_dict['r_indiv'].extend(r_indiv)
