@@ -564,7 +564,7 @@ def main(args):
                                           f'theta_gr.corr_{corr}.glm{args.glm}.{H}.{roi}.p'), 'rb')
                     theta_g = pickle.load(f)[0]
 
-                    r_group, r_indiv, SNR = extract_mle_corr(theta, theta_g)
+                    r_group, r_indiv, SNR = extract_mle_corr(Mflex, theta, theta_g)
                     (ci_lo, ci_hi), _, _ = bootstrap_summary(r_bootstrap, alpha=0.025)
 
                     corr_dict['r_indiv'].extend(r_indiv)
