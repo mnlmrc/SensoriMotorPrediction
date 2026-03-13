@@ -4,9 +4,10 @@ import os
 import warnings
 import numpy as np
 import pandas as pd
-import globals as gl
+import globals.globals as gl
 import time
 from util import corr_xval
+import PcmPy as pcm
 
 def load_mov(filename):
     try:
@@ -120,15 +121,15 @@ def calc_rt(X, thresh, fs):
     """
     above = np.any(X > thresh, axis=1)
     idx = np.argmax(above) #if np.any(above) else np.nan
-    return idx / fs if np.any(above) else -1
+
+    return idx / fs if np.any(above) else np.nan
 
 
-def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1.5, 0), (.25, .45), ]):
-    ch_idx = [col in gl.channels['mov'] for col in gl.col_mov[experiment]]
+def calc_behaviour(experiment=None, sn=None, blocks=None, win=[(-1.5, 0), (.25, .45), ]):
 
-    dat = pd.read_csv(os.path.join(gl.baseDir, experiment, session, f'subj{sn}', f'{experiment}_{sn}.dat'),
-                      sep='\t')
-
+    pinfo = pd.read_csv(os.path.join(gl.baseDir, experiment, 'participants.tsv'), sep='\t')
+    blocks = pinfo[pinfo.sn == sn].reset_index(drop=True).FuncRuns[0].split('.')
+    dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}', f'{experiment}_{sn}.dat'), sep='\t')
     force_dict = {
         'BN': [],
         'TN': [],
@@ -137,9 +138,12 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
         'MD': [],
         'forceDiff': [],
         'Unexpected': [],
-        'RT': []
+        'RT_global': [],
+        'RT_stimFinger': []
     }
     fingers = ['thumb', 'index', 'middle', 'ring', 'pinkie']
+    ch_idx = [col in gl.channels['mov'] for col in gl.col_mov[experiment]]
+    rt_thresh = 3.5 #N
     for i in range(len(win)):
         for f in fingers:
             force_dict[f'{f}{i}'] = []
@@ -151,7 +155,7 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
 
         dat_tmp = dat[dat['BN'] == int(bl)]
 
-        filename = os.path.join(gl.baseDir, experiment, session, f'subj{sn}', f'{experiment}_{sn}_{int(bl):02d}.mov')
+        filename = os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}', f'{experiment}_{sn}_{int(bl):02d}.mov')
 
         mov = load_mov(filename)
         mov = np.concatenate(mov, axis=0)
@@ -187,9 +191,16 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
             md, _ = calc_md(X_md[:, [1, 3]])
             bs = mov[onset - int(.1 * gl.fsample_mov):onset, ch_idx].mean(axis=0, keepdims=True)
             X_rt = mov[onset:onset + int(.4 * gl.fsample_mov), ch_idx]
-            rt = calc_rt(X_rt - bs, 3.5, gl.fsample_mov) - .05 # skip electro-mechanical delay (50ms)
+            rt_global = calc_rt(X_rt - bs, rt_thresh, gl.fsample_mov) - .05 # skip electro-mechanical delay (50ms)
+            if dat_tmp.iloc[ons]['stimFinger'] == 91999:
+                rt_stimFinger = calc_rt(X_rt[:, 1][:, None], rt_thresh, gl.fsample_mov) - .05
+            elif dat_tmp.iloc[ons]['stimFinger'] == 99919:
+                rt_stimFinger = calc_rt(X_rt[:, 3][:, None], rt_thresh, gl.fsample_mov) - .05
+            else:
+                rt_stimFinger = np.nan
             force_dict['MD'].append(md)
-            force_dict['RT'].append(rt)
+            force_dict['RT_global'].append(rt_global)
+            force_dict['RT_stimFinger'].append(rt_stimFinger)
             force_dict['Unexpected'].append(unexp)
             force_dict['stimFinger'].append(dat_tmp.iloc[ons]['stimFinger'])
             force_dict['cue'].append(dat_tmp.iloc[ons]['cue'])
@@ -200,8 +211,34 @@ def calc_avg_force(experiment=None, sn=None, session=None, blocks=None, win=[(-1
                 force_dict['GoNogo'].append(dat_tmp.iloc[ons]['GoNogo'])
 
     force_df = pd.DataFrame(force_dict)
+    force_df.to_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}',
+                                     f'{experiment}_{sn}_force_single_trial.tsv'), sep='\t', index=False)
 
-    return force_df
+    #return force_df
+
+def calc_G_force(experiment):
+    dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, 'behaviour.block.cue.tsv'), sep='\t')
+    G_obs = np.zeros((dat.sn.nunique(), 5, 5))
+    for s, sn in enumerate(dat.sn.unique()):
+        dat_s = dat[dat.sn == sn]
+        #dat_s = dat_s.groupby(['BN', 'cue']).mean(numeric_only=True).reset_index()
+        cond_vec = dat_s['cue'] #+ ',' + force['stimFinger']
+        part_vec = dat_s['BN']
+
+        force = dat_s[['thumb0', 'index0', 'middle0', 'ring0', 'pinkie0']].to_numpy()
+
+        #cov = force.T @ force
+
+        #force = force / np.sqrt(np.diag(cov)) # prewhitening using variance of each channel
+
+        obs_des = {'cond_vec': cond_vec, 'part_vec': part_vec}
+
+        G_obs[s], _ = pcm.est_G_crossval(force, cond_vec, part_vec, X=pcm.matrix.indicator(part_vec))
+
+    path = os.path.join(gl.baseDir, experiment, gl.pcmDir)
+    os.makedirs(path, exist_ok=True)
+    np.save(os.path.join(path, 'G_obs.force.plan.npy'), G_obs)
+
 
 def main(args):
 

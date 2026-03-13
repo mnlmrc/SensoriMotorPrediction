@@ -14,7 +14,7 @@ from matplotlib.patches import Rectangle, FancyBboxPatch, Patch
 import surfAnalysisPy as surf
 from matplotlib.lines import Line2D
 import os
-import globals as gl
+import globals.globals as gl
 from scipy.stats import ttest_1samp, ttest_rel, linregress, t, permutation_test, binomtest
 import SUITPy.flatmap as flatmap
 import seaborn as sb
@@ -68,7 +68,7 @@ def plot_aligned_force(fig, axs, force, descr):
     make_yref(axs[1], reference_length=5, pos='right', color='k')
 
     fig.suptitle('Force response to finger perturbation')
-    fig.supxlabel('time relative to perturbation (s)')
+    fig.supxlabel('time relative to perturbation (s)', fontsize=10)
 
     # Create legend entries as colored lines (matching plotted lines)
     legend_elements = []
@@ -85,7 +85,6 @@ def plot_aligned_force(fig, axs, force, descr):
 
     fig.subplots_adjust(wspace=.3)
 
-    return fig, axs
 
 def plot_aligned_emg(fig, axs, emg):
 
@@ -175,16 +174,16 @@ def plot_aligned_emg(fig, axs, emg):
 
     return fig, axs
 
-def plot_aligned_deviation(fig, axs, force, descr):
+def plot_aligned_deviation(fig, ax, force, descr):
     for s, stimFinger in enumerate(descr.stimFinger.unique()):
         for c, cue in enumerate(descr.cue.unique()):
             force1 = force[(descr.cue == cue) & (descr.stimFinger == stimFinger) & (descr.finger == 'index')]
             force2 = force[(descr.cue == cue) & (descr.stimFinger == stimFinger) & (descr.finger == 'ring')]
 
-            if stimFinger == 'index':
-                ax = axs[0]
-            else:
-                ax = axs[1]
+            # if stimFinger == 'index':
+            #     ax = axs[0]
+            # else:
+            #     ax = axs[1]
 
             y1 = force1.mean(axis=0)
             y2 = force2.mean(axis=0)
@@ -198,18 +197,18 @@ def plot_aligned_deviation(fig, axs, force, descr):
 
         ax.set_aspect('equal')
 
-    axs[0].text(0, ax.get_ylim()[1], 'index perturbation', va='bottom', ha='left')
-    axs[1].text(0, ax.get_ylim()[1], 'ring perturbation', va='bottom', ha='left')
+    # axs[0].text(0, ax.get_ylim()[1], 'index perturbation', va='bottom', ha='left')
+    # axs[1].text(0, ax.get_ylim()[1], 'ring perturbation', va='bottom', ha='left')
 
-    for a, ax in enumerate(axs):
+    # for a, ax in enumerate(axs):
         ax.set_yticks([0, 10])
         ax.set_xticks([0, 10])
         ax.spines[['left', 'bottom']].set_bounds(0, 10)
-        if a == 0:
-            ax.spines[['top', 'right', ]].set_visible(False)
-        else:
-            ax.spines[['top', 'right', 'left', ]].set_visible(False)
-            ax.tick_params(which='both', left=False)
+        # if a == 0:
+        ax.spines[['top', 'right', ]].set_visible(False)
+        # else:
+        #     ax.spines[['top', 'right', 'left', ]].set_visible(False)
+            # ax.tick_params(which='both', left=False)
 
     # Create legend entries as colored lines (matching plotted lines)
     legend_elements = []
@@ -218,45 +217,50 @@ def plot_aligned_deviation(fig, axs, force, descr):
             legend_elements.append(Line2D([0], [0], color=v, lw=2, label=k))
 
     # Add the legend to the figure, outside the right edge
-    axs[1].legend(handles=legend_elements,
+    ax.legend(handles=legend_elements,
                   loc='upper right',
                   # bbox_to_anchor=(.9, .5),
                   fontsize=8,
                   frameon=False, )
 
-    fig.supxlabel('index force (N)', fontsize=10)
-    fig.supylabel('ring force (N)', fontsize=10)
-    fig.suptitle('Force trajectories')
+    ax.set_xlabel('index force (N)', fontsize=10)
+    ax.set_ylabel('ring force (N)', fontsize=10)
+    ax.set_title('Force trajectories')
 
-    return fig, axs
+def plot_binned_cue(fig, ax, dat, x='cue', y=None, markersize=2, jitter=.2):
+    sb.pointplot(ax=ax, data=dat, x=x, y=y, order=list(gl.regressor_mapping.keys())[:5], errorbar='se', ls='none', 
+        palette=list(gl.colour_mapping.values())[:5])
+    sb.stripplot(ax=ax, data=dat, size=markersize, jitter=jitter, dodge=False,
+        x=x, y=y, order=list(gl.regressor_mapping.keys())[:5], color='k')
+    ax.tick_params(labelbottom=False, bottom=False)
+    ax.spines[['bottom', 'right', 'top']].set_visible(False)
+    ax.set_xlabel('')
 
-def plot_binned_behaviour(fig, axs, dat, y=('index0', 'ring0'), finger=('nogo', 'nogo'), markersize=2, jitter=.2):
-    sb.barplot(dat[dat['stimFinger'] == finger[0]], x='cue', y=y[0], ax=axs[0], errorbar='se',
-               width=1, palette=list(gl.colour_mapping.values())[5:9], order=list(gl.regressor_mapping)[0:4])
-    sb.stripplot(
-        dat[dat['stimFinger'] == finger[0]],
-        x='cue', y=y[0], ax=axs[0], size=markersize,
+def plot_binned_finger_cue(fig, axs, dat, x='cue', y=('index0', 'ring0'), finger=('nogo', 'nogo'), markersize=2, jitter=.2):
+    sb.pointplot(dat[dat['stimFinger'] == finger[0]], x=x, y=y[0], ax=axs[0], errorbar='se', 
+        palette=list(gl.colour_mapping.values())[5:9], order=list(gl.regressor_mapping)[0:4])
+    sb.stripplot(dat[dat['stimFinger'] == finger[0]],
+        x=x, y=y[0], ax=axs[0], size=markersize,
         order=list(gl.regressor_mapping)[0:4],
-        color='black', jitter=jitter, dodge=False,
-    )
-    sb.barplot(dat[dat['stimFinger'] == finger[1]], x='cue', y=y[1], ax=axs[1], errorbar='se',
-                width=1, palette=list(gl.colour_mapping.values())[9:13], order=list(gl.regressor_mapping)[1:5])
-    sb.stripplot(
-        dat[dat['stimFinger'] == finger[1]],
-        x='cue', y=y[1], ax=axs[1], size=markersize,
+        color='black', jitter=jitter, dodge=False,)
+    sb.pointplot(dat[dat['stimFinger'] == finger[1]], x=x, y=y[1], ax=axs[1], errorbar='se',
+                palette=list(gl.colour_mapping.values())[9:13], order=list(gl.regressor_mapping)[1:5])
+    sb.stripplot(dat[dat['stimFinger'] == finger[1]],
+        x=x, y=y[1], ax=axs[1], size=markersize,
         order=list(gl.regressor_mapping)[1:5],
-        color='black', jitter=jitter, dodge=False,
-    )
+        color='black', jitter=jitter, dodge=False,)
 
     for ax in axs:
         ax.set_xticks([])
         ax.spines[['bottom', 'right', 'top']].set_visible(False)
         ax.set_xlabel('')
-
     axs[1].spines[['left']].set_visible(False)
     axs[1].tick_params(width=0)
+    axs[0].set_xlim((-.5, 3.5))
+    axs[1].set_xlim((-.5, 3.5))
+    axs[0].set_title('Index')
+    axs[1].set_title('Ring')
 
-    return fig, axs
 
 def plot_bold(fig, axs, T, H, rois):
     tAx = np.linspace(-10, 20, T['y_adj'].shape[-1]) + .5
