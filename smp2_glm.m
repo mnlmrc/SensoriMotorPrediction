@@ -13,7 +13,7 @@ function varargout = smp2_glm(what, varargin)
         path = cbsPath;
     end
 
-    addpath([path 'GitHub/sensori-motor-prediction/'])
+    addpath([path 'GitHub/SensoriMotorPrediction/'])
     addpath([path 'GitHub/spmj_tools/'])
     addpath([path 'GitHub/dataframe/util/'])
     addpath([path 'GitHub/dataframe/kinematics/'])
@@ -230,6 +230,227 @@ function varargout = smp2_glm(what, varargin)
             varargout{1}= events;
             
         
+        
+        case 'GLM:make_glm13'
+
+            sn = [];
+            vararginoptions(varargin,{'sn'})
+
+            subj_id = pinfo.subj_id{pinfo.sn==sn};
+
+            D = dload(fullfile(baseDir, behavDir, subj_id, ['smp2_' subj_id(5:end) '.dat']));
+
+            go = strcmp(D.GoNogo, "go");
+
+            %% planning 0%
+            plan0.BN = D.BN(D.cue==93 & ~go);
+            plan0.TN = D.TN(D.cue==93 & ~go);
+            plan0.cue = D.cue(D.cue==93 & ~go);
+            plan0.stimFinger = D.stimFinger(D.cue==93 & ~go);
+            plan0.Onset = D.startTimeReal(D.cue==93 & ~go) + D.baselineWait(D.cue==93 & ~go);
+            plan0.Duration = zeros(length(plan0.BN), 1);
+            plan0.eventtype = repmat({'0-100%'}, [length(plan0.BN), 1]);
+
+            %% planning 25%
+            plan25.BN = D.BN(D.cue==12 & ~go);
+            plan25.TN = D.TN(D.cue==12 & ~go);
+            plan25.cue = D.cue(D.cue==12 & ~go);
+            plan25.stimFinger = D.stimFinger(D.cue==12 & ~go);
+            plan25.Onset = D.startTimeReal(D.cue==12 & ~go) + D.baselineWait(D.cue==12 & ~go);
+            plan25.Duration = zeros(length(plan25.BN), 1);
+            plan25.eventtype = repmat({'25-75%'}, [length(plan25.BN), 1]);
+
+            %% planning 50% 
+            plan50.BN = D.BN(D.cue==44 & ~go);
+            plan50.TN = D.TN(D.cue==44 & ~go);
+            plan50.cue = D.cue(D.cue==44 & ~go);
+            plan50.stimFinger = D.stimFinger(D.cue==44 & ~go);
+            plan50.Onset = D.startTimeReal(D.cue==44 & ~go) + D.baselineWait(D.cue==44 & ~go);
+            plan50.Duration = zeros(length(plan50.BN), 1);
+            plan50.eventtype = repmat({'50-50%'}, [length(plan50.BN), 1]);
+
+            %% planning 75% 
+            plan75.BN = D.BN(D.cue==21 & ~go);
+            plan75.TN = D.TN(D.cue==21 & ~go);
+            plan75.cue = D.cue(D.cue==21 & ~go);
+            plan75.stimFinger = D.stimFinger(D.cue==21 & ~go);
+            plan75.Onset = D.startTimeReal(D.cue==21 & ~go) + D.baselineWait(D.cue==21 & ~go);
+            plan75.Duration = zeros(length(plan75.BN), 1);
+            plan75.eventtype = repmat({'75-25%'}, [length(plan75.BN), 1]);
+
+            %% planning 100% 
+            plan100.BN = D.BN(D.cue==39 & ~go);
+            plan100.TN = D.TN(D.cue==39 & ~go);
+            plan100.cue = D.cue( D.cue==39 & ~go);
+            plan100.stimFinger = D.stimFinger(D.cue==39 & ~go);
+            plan100.Onset = D.startTimeReal( D.cue==39 & ~go) + D.baselineWait( D.cue==39 & ~go);
+            plan100.Duration = zeros(length(plan100.BN), 1);
+            plan100.eventtype = repmat({'100-0%'}, [length(plan100.BN), 1]);
+
+            %% planning 0% GO
+            plan0_go.BN = D.BN(D.cue==93 & go);
+            plan0_go.TN = D.TN(D.cue==93 & go);
+            plan0_go.cue = D.cue(D.cue==93 & go);
+            plan0_go.stimFinger = D.stimFinger(D.cue==93 & go);
+            plan0_go.Onset = D.startTimeReal(D.cue==93 & go) + D.baselineWait(D.cue==93 & go);
+            plan0_go.Duration = zeros(length(plan0_go.BN), 1);
+            plan0_go.eventtype = repmat({'0-100%,go'}, [length(plan0_go.BN), 1]);
+
+            %% planning 25% GO
+            plan25_go.BN = D.BN(D.cue==12 & go);
+            plan25_go.TN = D.TN(D.cue==12 & go);
+            plan25_go.cue = D.cue(D.cue==12 & go);
+            plan25_go.stimFinger = D.stimFinger(D.cue==12 & go);
+            plan25_go.Onset = D.startTimeReal(D.cue==12 & go) + D.baselineWait(D.cue==12 & go);
+            plan25_go.Duration = zeros(length(plan25_go.BN), 1);
+            plan25_go.eventtype = repmat({'25-75%,go'}, [length(plan25_go.BN), 1]);
+
+            %% planning 50% GO
+            plan50_go.BN = D.BN(D.cue==44 & go);
+            plan50_go.TN = D.TN(D.cue==44 & go);
+            plan50_go.cue = D.cue(D.cue==44 & go);
+            plan50_go.stimFinger = D.stimFinger(D.cue==44 & go);
+            plan50_go.Onset = D.startTimeReal(D.cue==44 & go) + D.baselineWait(D.cue==44 & go);
+            plan50_go.Duration = zeros(length(plan50_go.BN), 1);
+            plan50_go.eventtype = repmat({'50-50%,go'}, [length(plan50_go.BN), 1]);
+
+            %% planning 75% GO
+            plan75_go.BN = D.BN(D.cue==21 & go);
+            plan75_go.TN = D.TN(D.cue==21 & go);
+            plan75_go.cue = D.cue(D.cue==21 & go);
+            plan75_go.stimFinger = D.stimFinger(D.cue==21 & go);
+            plan75_go.Onset = D.startTimeReal(D.cue==21 & go) + D.baselineWait(D.cue==21 & go);
+            plan75_go.Duration = zeros(length(plan75_go.BN), 1);
+            plan75_go.eventtype = repmat({'75-25%,go'}, [length(plan75_go.BN), 1]);
+
+            %% planning 100% GO
+            plan100_go.BN = D.BN(D.cue==39 & go);
+            plan100_go.TN = D.TN(D.cue==39 & go);
+            plan100_go.cue = D.cue( D.cue==39 & go);
+            plan100_go.stimFinger = D.stimFinger(D.cue==39 & go);
+            plan100_go.Onset = D.startTimeReal( D.cue==39 & go) + D.baselineWait( D.cue==39 & go);
+            plan100_go.Duration = zeros(length(plan100_go.BN), 1);
+            plan100_go.eventtype = repmat({'100-0%,go'}, [length(plan100_go.BN), 1]);
+
+            %% ring 100% (go)
+            ring0.BN = D.BN(go & D.cue==93 & D.stimFinger==99919);
+            ring0.TN = D.TN(go & D.cue==93 & D.stimFinger==99919);
+            ring0.cue = D.cue(go & D.cue==93 & D.stimFinger==99919);
+            ring0.stimFinger = D.stimFinger(go & D.cue==93 & D.stimFinger==99919);
+            ring0.Onset = D.startTimeReal(go & D.cue==93 & D.stimFinger==99919)...
+                + D.baselineWait(go & D.cue==93 & D.stimFinger==99919) ...
+                + D.planTime(go & D.cue==93 & D.stimFinger==99919);
+            ring0.Duration = zeros(length(ring0.BN), 1);
+            ring0.eventtype = repmat({'0-100%,ring'}, [length(ring0.BN), 1]);
+
+            %% ring 75% (go)
+            ring25.BN = D.BN(go & D.cue==12 & D.stimFinger==99919);
+            ring25.TN = D.TN(go & D.cue==12 & D.stimFinger==99919);
+            ring25.cue = D.cue(go & D.cue==12 & D.stimFinger==99919);
+            ring25.stimFinger = D.stimFinger(go & D.cue==12 & D.stimFinger==99919);
+            ring25.Onset = D.startTimeReal(go & D.cue==12 & D.stimFinger==99919)...
+                + D.baselineWait(go & D.cue==12 & D.stimFinger==99919)...
+                + D.planTime(go & D.cue==12 & D.stimFinger==99919);
+            ring25.Duration = zeros(length(ring25.BN), 1);
+            ring25.eventtype = repmat({'25-75%,ring'}, [length(ring25.BN), 1]);
+
+            %% ring 50% (go)
+            ring50.BN = D.BN(go & D.cue==44 & D.stimFinger==99919);
+            ring50.TN = D.TN(go & D.cue==44 & D.stimFinger==99919);
+            ring50.cue = D.cue(go & D.cue==44 & D.stimFinger==99919);
+            ring50.stimFinger = D.stimFinger(go & D.cue==44 & D.stimFinger==99919);
+            ring50.Onset = D.startTimeReal(go & D.cue==44 & D.stimFinger==99919)... 
+                + D.baselineWait(go & D.cue==44 & D.stimFinger==99919)...
+                + D.planTime(go & D.cue==44 & D.stimFinger==99919);
+            ring50.Duration = zeros(length(ring50.BN), 1);
+            ring50.eventtype = repmat({'50-50%,ring'}, [length(ring50.BN), 1]);
+
+            %% ring 25% (go)
+            ring75.BN = D.BN(go & D.cue==21 & D.stimFinger==99919);
+            ring75.TN = D.TN(go & D.cue==21 & D.stimFinger==99919);
+            ring75.cue = D.cue(go & D.cue==21 & D.stimFinger==99919);
+            ring75.stimFinger = D.stimFinger(go & D.cue==21 & D.stimFinger==99919);
+            ring75.Onset = D.startTimeReal(go & D.cue==21 & D.stimFinger==99919)...
+                + D.baselineWait(go & D.cue==21 & D.stimFinger==99919)...
+                + D.planTime(go & D.cue==21 & D.stimFinger==99919);
+            ring75.Duration = zeros(length(ring75.BN), 1);
+            ring75.eventtype = repmat({'75-25%,ring'}, [length(ring75.BN), 1]);
+
+            %% index 75% (go)
+            index25.BN = D.BN(go & D.cue==12 & D.stimFinger==91999);
+            index25.TN = D.TN(go & D.cue==12 & D.stimFinger==91999);
+            index25.cue = D.cue(go & D.cue==12 & D.stimFinger==91999);
+            index25.stimFinger = D.stimFinger(go & D.cue==12 & D.stimFinger==91999);
+            index25.Onset = D.startTimeReal(go & D.cue==12 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==12 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==12 & D.stimFinger==91999);
+            index25.Duration = zeros(length(index25.BN), 1);
+            index25.eventtype = repmat({'25-75%,index'}, [length(index25.BN), 1]);
+
+            %% index 50% (go)
+            index50.BN = D.BN(go & D.cue==44 & D.stimFinger==91999);
+            index50.TN = D.TN(go & D.cue==44 & D.stimFinger==91999);
+            index50.cue = D.cue(go & D.cue==44 & D.stimFinger==91999);
+            index50.stimFinger = D.stimFinger(go & D.cue==44 & D.stimFinger==91999);
+            index50.Onset = D.startTimeReal(go & D.cue==44 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==44 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==44 & D.stimFinger==91999);
+            index50.Duration = zeros(length(index50.BN), 1);
+            index50.eventtype = repmat({'50-50%,index'}, [length(index50.BN), 1]);
+
+            %% index 25% (go)
+            index75.BN = D.BN(go & D.cue==21 & D.stimFinger==91999);
+            index75.TN = D.TN(go & D.cue==21 & D.stimFinger==91999);
+            index75.cue = D.cue(go & D.cue==21 & D.stimFinger==91999);
+            index75.stimFinger = D.stimFinger(go & D.cue==21 & D.stimFinger==91999);
+            index75.Onset = D.startTimeReal(go & D.cue==21 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==21 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==21 & D.stimFinger==91999);
+            index75.Duration = zeros(length(index75.BN), 1);
+            index75.eventtype = repmat({'75-25%,index'}, [length(index75.BN), 1]);
+
+            %% index 0% (go)
+            index100.BN = D.BN(go & D.cue==39 & D.stimFinger==91999);
+            index100.TN = D.TN(go & D.cue==39 & D.stimFinger==91999);
+            index100.cue = D.cue(go & D.cue==39 & D.stimFinger==91999);
+            index100.stimFinger = D.stimFinger(go & D.cue==39 & D.stimFinger==91999);
+            index100.Onset = D.startTimeReal(go & D.cue==39 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==39 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==39 & D.stimFinger==91999);
+            index100.Duration = zeros(length(index100.BN), 1);
+            index100.eventtype = repmat({'100-0%,index'}, [length(index100.BN), 1]);
+            
+            %% make table
+            
+            plan0 = struct2table(plan0);
+            plan25 = struct2table(plan25);
+            plan50 = struct2table(plan50);
+            plan75 = struct2table(plan75);
+            plan100 = struct2table(plan100);
+            plan0_go = struct2table(plan0_go);
+            plan25_go = struct2table(plan25_go);
+            plan50_go = struct2table(plan50_go);
+            plan75_go = struct2table(plan75_go);
+            plan100_go = struct2table(plan100_go);
+            ring0 = struct2table(ring0);
+            ring25 = struct2table(ring25);
+            ring50 = struct2table(ring50);
+            ring75 = struct2table(ring75);
+            index25 = struct2table(index25);
+            index50 = struct2table(index50);
+            index75 = struct2table(index75);
+            index100 = struct2table(index100);
+
+            events = [plan0; plan25; plan50; plan75; plan100;...
+                plan0_go; plan25_go; plan50_go; plan75_go; plan100_go;...
+                ring0; ring25; ring50; ring75;...
+                index25; index50; index75; index100];
+            
+            %% convert to secs
+            events.Onset = events.Onset ./ 1000;
+            events.Duration = events.Duration ./ 1000;                 
+                       
+            varargout{1}= events;
         case 'GLM:make_glm14'
 
             sn = [];
@@ -248,7 +469,7 @@ function varargout = smp2_glm(what, varargin)
             plan0.stimFinger = D.stimFinger(D.cue==93 & ~go);
             plan0.Onset = D.startTimeReal(D.cue==93 & ~go) + D.baselineWait(D.cue==93 & ~go);
             plan0.Duration = zeros(length(plan0.BN), 1);
-            plan0.eventtype = repmat({'100%'}, [length(plan0.BN), 1]);
+            plan0.eventtype = repmat({'0-100%'}, [length(plan0.BN), 1]);
 
             %% planning 25%
             plan25.BN = D.BN(D.cue==12 & ~go);
@@ -257,7 +478,7 @@ function varargout = smp2_glm(what, varargin)
             plan25.stimFinger = D.stimFinger(D.cue==12 & ~go);
             plan25.Onset = D.startTimeReal(D.cue==12 & ~go) + D.baselineWait(D.cue==12 & ~go);
             plan25.Duration = zeros(length(plan25.BN), 1);
-            plan25.eventtype = repmat({'75%'}, [length(plan25.BN), 1]);
+            plan25.eventtype = repmat({'25-75%'}, [length(plan25.BN), 1]);
 
             %% planning 50% 
             plan50.BN = D.BN(D.cue==44 & ~go);
@@ -266,7 +487,7 @@ function varargout = smp2_glm(what, varargin)
             plan50.stimFinger = D.stimFinger(D.cue==44 & ~go);
             plan50.Onset = D.startTimeReal(D.cue==44 & ~go) + D.baselineWait(D.cue==44 & ~go);
             plan50.Duration = zeros(length(plan50.BN), 1);
-            plan50.eventtype = repmat({'50%'}, [length(plan50.BN), 1]);
+            plan50.eventtype = repmat({'50-50%'}, [length(plan50.BN), 1]);
 
             %% planning 75% 
             plan75.BN = D.BN(D.cue==21 & ~go);
@@ -275,7 +496,7 @@ function varargout = smp2_glm(what, varargin)
             plan75.stimFinger = D.stimFinger(D.cue==21 & ~go);
             plan75.Onset = D.startTimeReal(D.cue==21 & ~go) + D.baselineWait(D.cue==21 & ~go);
             plan75.Duration = zeros(length(plan75.BN), 1);
-            plan75.eventtype = repmat({'25%'}, [length(plan75.BN), 1]);
+            plan75.eventtype = repmat({'75-25%'}, [length(plan75.BN), 1]);
 
             %% planning 100% 
             plan100.BN = D.BN(D.cue==39 & ~go);
@@ -284,16 +505,95 @@ function varargout = smp2_glm(what, varargin)
             plan100.stimFinger = D.stimFinger(D.cue==39 & ~go);
             plan100.Onset = D.startTimeReal( D.cue==39 & ~go) + D.baselineWait( D.cue==39 & ~go);
             plan100.Duration = zeros(length(plan100.BN), 1);
-            plan100.eventtype = repmat({'0%'}, [length(plan100.BN), 1]);
-            
-            %% exec
-            exec.BN = D.BN(go);
-            exec.TN = D.TN(go);
-            exec.cue = D.cue(go);
-            exec.stimFinger = D.stimFinger(go);
-            exec.Onset = D.startTimeReal(go) + D.baselineWait(go);
-            exec.Duration = zeros(length(exec.BN), 1);
-            exec.eventtype = repmat({'exec'}, [length(exec.BN), 1]);
+            plan100.eventtype = repmat({'100-0%'}, [length(plan100.BN), 1]);
+
+            %% ring 100% (go)
+            ring0.BN = D.BN(go & D.cue==93 & D.stimFinger==99919);
+            ring0.TN = D.TN(go & D.cue==93 & D.stimFinger==99919);
+            ring0.cue = D.cue(go & D.cue==93 & D.stimFinger==99919);
+            ring0.stimFinger = D.stimFinger(go & D.cue==93 & D.stimFinger==99919);
+            ring0.Onset = D.startTimeReal(go & D.cue==93 & D.stimFinger==99919)...
+                + D.baselineWait(go & D.cue==93 & D.stimFinger==99919) ...
+                + D.planTime(go & D.cue==93 & D.stimFinger==99919);
+            ring0.Duration = zeros(length(ring0.BN), 1);
+            ring0.eventtype = repmat({'0-100%,ring'}, [length(ring0.BN), 1]);
+
+            %% ring 75% (go)
+            ring25.BN = D.BN(go & D.cue==12 & D.stimFinger==99919);
+            ring25.TN = D.TN(go & D.cue==12 & D.stimFinger==99919);
+            ring25.cue = D.cue(go & D.cue==12 & D.stimFinger==99919);
+            ring25.stimFinger = D.stimFinger(go & D.cue==12 & D.stimFinger==99919);
+            ring25.Onset = D.startTimeReal(go & D.cue==12 & D.stimFinger==99919)...
+                + D.baselineWait(go & D.cue==12 & D.stimFinger==99919)...
+                + D.planTime(go & D.cue==12 & D.stimFinger==99919);
+            ring25.Duration = zeros(length(ring25.BN), 1);
+            ring25.eventtype = repmat({'25-75%,ring'}, [length(ring25.BN), 1]);
+
+            %% ring 50% (go)
+            ring50.BN = D.BN(go & D.cue==44 & D.stimFinger==99919);
+            ring50.TN = D.TN(go & D.cue==44 & D.stimFinger==99919);
+            ring50.cue = D.cue(go & D.cue==44 & D.stimFinger==99919);
+            ring50.stimFinger = D.stimFinger(go & D.cue==44 & D.stimFinger==99919);
+            ring50.Onset = D.startTimeReal(go & D.cue==44 & D.stimFinger==99919)... 
+                + D.baselineWait(go & D.cue==44 & D.stimFinger==99919)...
+                + D.planTime(go & D.cue==44 & D.stimFinger==99919);
+            ring50.Duration = zeros(length(ring50.BN), 1);
+            ring50.eventtype = repmat({'50-50%,ring'}, [length(ring50.BN), 1]);
+
+            %% ring 25% (go)
+            ring75.BN = D.BN(go & D.cue==21 & D.stimFinger==99919);
+            ring75.TN = D.TN(go & D.cue==21 & D.stimFinger==99919);
+            ring75.cue = D.cue(go & D.cue==21 & D.stimFinger==99919);
+            ring75.stimFinger = D.stimFinger(go & D.cue==21 & D.stimFinger==99919);
+            ring75.Onset = D.startTimeReal(go & D.cue==21 & D.stimFinger==99919)...
+                + D.baselineWait(go & D.cue==21 & D.stimFinger==99919)...
+                + D.planTime(go & D.cue==21 & D.stimFinger==99919);
+            ring75.Duration = zeros(length(ring75.BN), 1);
+            ring75.eventtype = repmat({'75-25%,ring'}, [length(ring75.BN), 1]);
+
+            %% index 75% (go)
+            index25.BN = D.BN(go & D.cue==12 & D.stimFinger==91999);
+            index25.TN = D.TN(go & D.cue==12 & D.stimFinger==91999);
+            index25.cue = D.cue(go & D.cue==12 & D.stimFinger==91999);
+            index25.stimFinger = D.stimFinger(go & D.cue==12 & D.stimFinger==91999);
+            index25.Onset = D.startTimeReal(go & D.cue==12 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==12 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==12 & D.stimFinger==91999);
+            index25.Duration = zeros(length(index25.BN), 1);
+            index25.eventtype = repmat({'25-75%,index'}, [length(index25.BN), 1]);
+
+            %% index 50% (go)
+            index50.BN = D.BN(go & D.cue==44 & D.stimFinger==91999);
+            index50.TN = D.TN(go & D.cue==44 & D.stimFinger==91999);
+            index50.cue = D.cue(go & D.cue==44 & D.stimFinger==91999);
+            index50.stimFinger = D.stimFinger(go & D.cue==44 & D.stimFinger==91999);
+            index50.Onset = D.startTimeReal(go & D.cue==44 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==44 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==44 & D.stimFinger==91999);
+            index50.Duration = zeros(length(index50.BN), 1);
+            index50.eventtype = repmat({'50-50%,index'}, [length(index50.BN), 1]);
+
+            %% index 25% (go)
+            index75.BN = D.BN(go & D.cue==21 & D.stimFinger==91999);
+            index75.TN = D.TN(go & D.cue==21 & D.stimFinger==91999);
+            index75.cue = D.cue(go & D.cue==21 & D.stimFinger==91999);
+            index75.stimFinger = D.stimFinger(go & D.cue==21 & D.stimFinger==91999);
+            index75.Onset = D.startTimeReal(go & D.cue==21 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==21 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==21 & D.stimFinger==91999);
+            index75.Duration = zeros(length(index75.BN), 1);
+            index75.eventtype = repmat({'75-25%,index'}, [length(index75.BN), 1]);
+
+            %% index 0% (go)
+            index100.BN = D.BN(go & D.cue==39 & D.stimFinger==91999);
+            index100.TN = D.TN(go & D.cue==39 & D.stimFinger==91999);
+            index100.cue = D.cue(go & D.cue==39 & D.stimFinger==91999);
+            index100.stimFinger = D.stimFinger(go & D.cue==39 & D.stimFinger==91999);
+            index100.Onset = D.startTimeReal(go & D.cue==39 & D.stimFinger==91999)...
+                + D.baselineWait(go & D.cue==39 & D.stimFinger==91999)...
+                + D.planTime(go & D.cue==39 & D.stimFinger==91999);
+            index100.Duration = zeros(length(index100.BN), 1);
+            index100.eventtype = repmat({'100-0%,index'}, [length(index100.BN), 1]);
             
             %% make table
             
@@ -302,13 +602,46 @@ function varargout = smp2_glm(what, varargin)
             plan50 = struct2table(plan50);
             plan75 = struct2table(plan75);
             plan100 = struct2table(plan100);
-            exec = struct2table(exec);
+            ring0 = struct2table(ring0);
+            ring25 = struct2table(ring25);
+            ring50 = struct2table(ring50);
+            ring75 = struct2table(ring75);
+            index25 = struct2table(index25);
+            index50 = struct2table(index50);
+            index75 = struct2table(index75);
+            index100 = struct2table(index100);
 
-            events = [plan0; plan25; plan50; plan75; plan100; exec];
+            events = [plan0; plan25; plan50; plan75; plan100; ring0; ring25; ring50; ring75; index25; index50; index75; index100];
             
             %% convert to secs
             events.Onset = events.Onset ./ 1000;
             events.Duration = events.Duration ./ 1000;                 
+                       
+            varargout{1}= events;
+            
+            % %% exec
+            % exec.BN = D.BN(go);
+            % exec.TN = D.TN(go);
+            % exec.cue = D.cue(go);
+            % exec.stimFinger = D.stimFinger(go);
+            % exec.Onset = D.startTimeReal(go) + D.baselineWait(go);
+            % exec.Duration = zeros(length(exec.BN), 1);
+            % exec.eventtype = repmat({'exec'}, [length(exec.BN), 1]);
+            % 
+            % %% make table
+            % 
+            % plan0 = struct2table(plan0);
+            % plan25 = struct2table(plan25);
+            % plan50 = struct2table(plan50);
+            % plan75 = struct2table(plan75);
+            % plan100 = struct2table(plan100);
+            % exec = struct2table(exec);
+            % 
+            % events = [plan0; plan25; plan50; plan75; plan100; exec];
+            % 
+            % %% convert to secs
+            % events.Onset = events.Onset ./ 1000;
+            % events.Duration = events.Duration ./ 1000;                 
                        
             varargout{1}= events;
         
@@ -330,7 +663,7 @@ function varargout = smp2_glm(what, varargin)
             plan0.stimFinger = D.stimFinger(D.cue==93 & ~go);
             plan0.Onset = D.startTimeReal(D.cue==93 & ~go) + D.baselineWait(D.cue==93 & ~go);
             plan0.Duration = zeros(length(plan0.BN), 1);
-            plan0.eventtype = repmat({'100%'}, [length(plan0.BN), 1]);
+            plan0.eventtype = repmat({'0-100%'}, [length(plan0.BN), 1]);
 
             %% planning 25%
             plan25.BN = D.BN(D.cue==12 & ~go);
@@ -339,7 +672,7 @@ function varargout = smp2_glm(what, varargin)
             plan25.stimFinger = D.stimFinger(D.cue==12 & ~go);
             plan25.Onset = D.startTimeReal(D.cue==12 & ~go) + D.baselineWait(D.cue==12 & ~go);
             plan25.Duration = zeros(length(plan25.BN), 1);
-            plan25.eventtype = repmat({'75%'}, [length(plan25.BN), 1]);
+            plan25.eventtype = repmat({'25-75%'}, [length(plan25.BN), 1]);
 
             %% planning 50% 
             plan50.BN = D.BN(D.cue==44 & ~go);
@@ -348,7 +681,7 @@ function varargout = smp2_glm(what, varargin)
             plan50.stimFinger = D.stimFinger(D.cue==44 & ~go);
             plan50.Onset = D.startTimeReal(D.cue==44 & ~go) + D.baselineWait(D.cue==44 & ~go);
             plan50.Duration = zeros(length(plan50.BN), 1);
-            plan50.eventtype = repmat({'50%'}, [length(plan50.BN), 1]);
+            plan50.eventtype = repmat({'50-50%'}, [length(plan50.BN), 1]);
 
             %% planning 75% 
             plan75.BN = D.BN(D.cue==21 & ~go);
@@ -357,7 +690,7 @@ function varargout = smp2_glm(what, varargin)
             plan75.stimFinger = D.stimFinger(D.cue==21 & ~go);
             plan75.Onset = D.startTimeReal(D.cue==21 & ~go) + D.baselineWait(D.cue==21 & ~go);
             plan75.Duration = zeros(length(plan75.BN), 1);
-            plan75.eventtype = repmat({'25%'}, [length(plan75.BN), 1]);
+            plan75.eventtype = repmat({'75-25%'}, [length(plan75.BN), 1]);
 
             %% planning 100% 
             plan100.BN = D.BN(D.cue==39 & ~go);
@@ -366,25 +699,16 @@ function varargout = smp2_glm(what, varargin)
             plan100.stimFinger = D.stimFinger(D.cue==39 & ~go);
             plan100.Onset = D.startTimeReal( D.cue==39 & ~go) + D.baselineWait( D.cue==39 & ~go);
             plan100.Duration = zeros(length(plan100.BN), 1);
-            plan100.eventtype = repmat({'0%'}, [length(plan100.BN), 1]);
+            plan100.eventtype = repmat({'100-0%'}, [length(plan100.BN), 1]);
             
-            %% exec index
-            exec.BN = D.BN(go & D.stimFinger==91999);
-            exec.TN = D.TN(go & D.stimFinger==91999);
-            exec.cue = D.cue(go & D.stimFinger==91999);
-            exec.stimFinger = D.stimFinger(go & D.stimFinger==91999);
-            exec.Onset = D.startTimeReal(go & D.stimFinger==91999) + D.baselineWait(go & D.stimFinger==91999);
+            %% exec 
+            exec.BN = D.BN(go);
+            exec.TN = D.TN(go);
+            exec.cue = D.cue(go);
+            exec.stimFinger = D.stimFinger(go);
+            exec.Onset = D.startTimeReal(go) + D.baselineWait(go) + D.planTime(go);
             exec.Duration = zeros(length(exec.BN), 1);
-            exec.eventtype = repmat({'exec,index'}, [length(exec.BN), 1]);
-
-            %% exec ring
-            exec.BN = D.BN(go & D.stimFinger==99919);
-            exec.TN = D.TN(go & D.stimFinger==99919);
-            exec.cue = D.cue(go & D.stimFinger==99919);
-            exec.stimFinger = D.stimFinger(go & D.stimFinger==99919);
-            exec.Onset = D.startTimeReal(go & D.stimFinger==99919) + D.baselineWait(go & D.stimFinger==99919);
-            exec.Duration = zeros(length(exec.BN), 1);
-            exec.eventtype = repmat({'exec,ring'}, [length(exec.BN), 1]);
+            exec.eventtype = repmat({'exec'}, [length(exec.BN), 1]);
             
             %% make table
             
@@ -873,8 +1197,9 @@ function varargout = smp2_glm(what, varargin)
 %             hrf_params = [6 12 1 1 6 0 32]; % best 6 14
             derivs = [0, 0];
             vararginoptions(varargin,{'sn', 'glm', 'derivs'})
-            
-            hrf_params = pinfo.hrf_params(pinfo.sn==sn, :);
+
+            hrf_params = dload(fullfile(baseDir, [glmEstDir num2str(glm)], 'hrf_params.tsv'));
+            hrf_params = hrf_params.P(hrf_params.sn==sn, :);
             
             spm_get_defaults('cmdline', true);  % Suppress GUI prompts, no request for overwirte
                 

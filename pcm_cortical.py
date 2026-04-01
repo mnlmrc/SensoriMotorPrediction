@@ -534,7 +534,7 @@ def main(args):
                     pcm_dict['BF'].extend(c_bf['BF'].to_numpy())
                     pcm_dict['component'].extend(c_bf['component'].to_numpy())
                     pcm_dict['participant_id'].extend(args.sns * len(components[epoch]))
-                    pass
+
         df = pd.DataFrame(pcm_dict)
         df.to_csv(os.path.join(gl.baseDir, args.experiment, gl.pcmDir, 'component_model.BOLD.tsv'), sep='\t', index=False)
     if args.what == 'corr2tsv':
