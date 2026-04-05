@@ -10,9 +10,9 @@ if __name__ == '__main__':
 
     atlas='ROI'
     experiment = 'smp2'
-    GLMs=[12, 13, 14, 15]
+    GLMs=[12, 16]
 
-    epochs = ['plan', 'exec'] # 'regr_out_preact_ols']
+    epochs = ['plan', ] # 'regr_out_preact_ols']
     label = []
     
     components = {
