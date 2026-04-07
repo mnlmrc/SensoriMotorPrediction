@@ -23,23 +23,23 @@ def save_spm_as_mat7(sn, glm):
     spm_path = os.path.join(path_glm, 'SPM.mat')
     backup_path = spm_path + ".backup"
 
-    if os.path.exists(backup_path):
-        resp = input(
-            f"Backup already exists for participant {sn}.\n"
-            f"This will overwrite SPM.mat using the backup.\n"
-            f"Continue? [y/N]: "
-        ).strip().lower()
+    # if os.path.exists(backup_path):
+    #     resp = input(
+    #         f"Backup already exists for participant {sn}.\n"
+    #         f"This will overwrite SPM.mat using the backup.\n"
+    #         f"Continue? [y/N]: "
+    #     ).strip().lower()
 
-        if resp not in ["y", "yes"]:
-            print("Skipping conversion.")
-            return
-        else:
-            print("Proceeding with replacement.")
+    #     if resp not in ["y", "yes"]:
+    #         print("Skipping conversion.")
+    #         return
+    #     else:
+    #         print("Proceeding with replacement.")
 
-    else:
-        # Step 1: Backup the original file
-        shutil.copy(spm_path, backup_path)
-        print(f"Backed up {spm_path} to {backup_path}")
+    # else:
+    # Step 1: Backup the original file
+    shutil.copy(spm_path, backup_path)
+    print(f"Backed up {spm_path} to {backup_path}")
 
     # Step 2: Run MATLAB command
     matlab_cmd = (
