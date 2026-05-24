@@ -17,7 +17,11 @@ def make_smooth_cifti(sns, glm, experiment='smp2'):
         cifti_img = nt.join_giftis_to_cifti(giftis)
 
         row_axis = cifti_img.header.get_axis(0).name
-        plan_col_names = [col for col in row_axis if 'index' not in col and 'ring' not in col]
+        plan_col_names = [col for col in row_axis if 'index' not in col 
+                                                    and 'ring' not in col 
+                                                    # these two are because of GLM 17
+                                                    and 'exec' not in col 
+                                                    and 'plan' not in col]
         exec_col_names = [col for col in row_axis if 'index' in col or 'ring' in col or 'exec' in col]
 
         data_tmp = cifti_img.get_fdata()
@@ -50,6 +54,7 @@ def make_smooth_cifti(sns, glm, experiment='smp2'):
     giftis = nt.split_cifti_to_giftis(cifti_img, column_names=['plan', 'exec'], type='func')
     nb.save(giftis[0], os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.con.L.plan-exec.smooth.func.gii'))
     nb.save(giftis[1], os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.con.R.plan-exec.smooth.func.gii'))
+
 
 
 def main(args):

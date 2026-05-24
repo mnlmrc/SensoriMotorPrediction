@@ -4,14 +4,25 @@ import pandas as pd
 import time
 import argparse
 import os
-import globals as gl
+import SensoriMotorPrediction.globals as gl
 import pickle
 import PcmPy as pcm
-from lfp import make_freq_masks
 from sklearn.decomposition import PCA, NMF, TruncatedSVD
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-def align_kinematics(kin, trial_info, preProb=20, postProb=64, prePert=30, postPert=40,):
+def align_kinematics(monkey, rec, preProb=20, postProb=64, prePert=30, postPert=40,):
+    # load trial_info
+    trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, f'{monkey}', f'trial_info-{rec}.tsv'), sep='\t')
+
+    # load kinematics
+    kin = load_kinematics(os.path.join(gl.nhpDir, gl.behavDir, f'{monkey}', f'elbow_angle-{rec}.mat'))
+
+    # remove catch and adaptation
+    idx = np.where((trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0))[0]
+    kin = [kin[i] for i in idx]
+    trial_info = trial_info.loc[idx].reset_index()
+
+    # segment trials
     cueTime = trial_info.probTime.to_numpy()
     pertTime = trial_info.pertTime.to_numpy()
     kin_aligned = np.zeros((preProb + postProb + prePert + postPert, len(kin))) # time_unit_trial
@@ -20,6 +31,7 @@ def align_kinematics(kin, trial_info, preProb=20, postProb=64, prePert=30, postP
         pertRange = np.arange(pT - prePert, pT + postPert)
         fullRange = np.concatenate([probRange, pertRange])
         kin_aligned[..., t] = kin[t][fullRange]
+    np.save(os.path.join(gl.nhpDir, gl.behavDir, f'{monkey}', f'kin_aligned-{rec}.npy'), kin_aligned)
     return kin_aligned
 
 
@@ -27,7 +39,7 @@ def load_kinematics(file_path):
     mat = mat73.loadmat(file_path)
     kin = mat['elbKin']
     return kin
-
+    
 
 def main(args):
     monkey = ['Pert', 'Malfoy']
@@ -46,8 +58,7 @@ def main(args):
             arg = argparse.Namespace(
                 what='align',
                 recording=rec,
-                monkey=args.monkey,
-            )
+                monkey=args.monkey,)
             main(arg)
     if args.what=='excursion':
         rois = ['M1', 'S1']
@@ -65,8 +76,7 @@ def main(args):
             for mon in monkey:
                 for rec in gl.recordings[mon][roi]:
                     print(f'doing {mon}, recording {rec}-{roi}')
-                    trial_info = pd.read_csv(
-                        os.path.join(gl.nhpDir, gl.recDir, f'{mon}', f'trial_info-{rec}.tsv'), sep='\t')
+                    trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, f'{mon}', f'trial_info-{rec}.tsv'), sep='\t')
                     idx = np.where((trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0))[0]
                     trial_info = trial_info.loc[idx].reset_index()
                     mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}

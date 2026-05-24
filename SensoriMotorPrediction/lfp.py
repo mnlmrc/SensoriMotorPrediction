@@ -6,15 +6,15 @@ import pandas as pd
 import time
 import argparse
 import os
-import globals as gl
+import SensoriMotorPrediction.globals as gl
 import pickle
 
-def load_lfp(file_path):
+def _load_lfp(file_path):
     mat = mat73.loadmat(file_path)
     return mat['lfp']
 
 
-def align_lfp(lfp, cfg, trial_info, preProb=20, postProb=64, prePert=30, postPert=40,):
+def _align_lfp(lfp, cfg, trial_info, preProb=20, postProb=64, prePert=30, postPert=40,):
     #cueTime = trial_info.probTime.to_numpy() - 1
     #pertTime = trial_info.pertTime.to_numpy() - trial_info.probTime.to_numpy()
     cueTime = trial_info.cueTime.to_numpy()
@@ -31,6 +31,17 @@ def align_lfp(lfp, cfg, trial_info, preProb=20, postProb=64, prePert=30, postPer
         fullRange = np.concatenate([probRange, pertRange]).astype(int)
         lfp_aligned[..., t] = lfp[fullRange, :, :, t]
     return lfp_aligned
+
+
+def align_lfp(monkey='Malfoy', roi='M1', rec=1):
+    print(f'loading lfps Recording-{rec}...')
+    trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, f'{monkey}/trial_info-{rec}.tsv'), sep='\t')
+    lfp = load_lfp(os.path.join(gl.nhpDir, gl.lfpDir, f'{monkey}/lfp.{roi}-{rec}.mat'))
+    cfg = mat73.loadmat(os.path.join(gl.nhpDir, gl.lfpDir, f'{monkey}/cfg.{roi}-{rec}.mat'))
+    lfp = lfp[..., (trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+    trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+    lfp_aligned = align_lfp(lfp, cfg, trial_info, postProb=30)
+    np.save(os.path.join(gl.nhpDir, gl.lfpDir, monkey, f'lfp_aligned.{roi}-{rec}.npy'), lfp_aligned)
 
 
 def make_freq_masks(cfg):

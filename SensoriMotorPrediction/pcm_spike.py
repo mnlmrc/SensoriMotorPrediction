@@ -5,27 +5,62 @@ import pandas as pd
 import time
 import argparse
 import os
-import globals as gl
+import SensoriMotorPrediction.globals as gl
 import pickle
-from pcm_models import find_model
-from depreciated.pcm_lfp import make_execution_models
+from SensoriMotorPrediction.pcm_models import find_model
 from joblib import Parallel, delayed, parallel_backend
 from imaging_pipelines.util import bootstrap_correlation, bootstrap_summary
 from sigproc.statistics import permutation_t_test_1samp_tf
 
-def load_spike(file_path):
-    mat = sio.loadmat(file_path)
-    return mat['spikes_s']
+def corrective_drive(roi='M1', monkey='Malfoy', rec=1):
 
-def save_spike_aligned(monkey='Malfoy', rec=1):
-    print('loading spikes...')
-    path = os.path.join(gl.baseDir, args.experiment, 'spikes', monkey)
-    trial_info = pd.read_csv(path + f'/trial_info-{rec}.tsv', sep='\t')
-    spike = load_spike(path + f'/spike-{rec}.mat')
-    spike = spike[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
-    trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
-    spike_aligned = align_spike(spike, trial_info)
-    np.save(os.path.join(path, f'spike_aligned-{rec}.npy'), spike_aligned)
+    print(f'doing {monkey}, recording {rec}-{roi}')
+
+    # load trial info
+    trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, monkey, f'trial_info-{rec}.tsv'), sep='\t')
+    idx = np.where((trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0))[0]
+    trial_info = trial_info.loc[idx].reset_index()
+    mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
+    trial_info.cond = trial_info.cond.map(mapping)
+
+    # load spk
+    spk = np.load(os.path.join(gl.nhpDir, gl.spkDir, f'{monkey}', f'spk_aligned.{roi}-{rec}.npy'))
+    spk_win = spk[gl.pertIdx + 4:gl.pertIdx + 24, :, :].mean(axis=0)
+    
+    # find perturbation dimension in each run
+    spk_grouped, _, part_vec = pcm.group_by_condition(spk_win, trial_info.cond, trial_info.block, axis=-1)
+    part = np.unique(part_vec)
+    n_unit = spk_grouped.shape[-1]
+    n_part = len(part)
+    obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
+    mask_dir = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
+                'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
+    ext = spk_grouped[mask_dir['ext']].reshape(n_part, 4, n_unit).mean(axis=1)
+    flx = spk_grouped[mask_dir['flx']].reshape(n_part, 4, n_unit).mean(axis=1)
+    v_pert = flx - ext
+
+    sig = []
+    for r, row in trial_info.iterrows():
+        print(f'doing trial {r+1}, {monkey}, {roi}')
+
+        # filter trials in partition
+        block = row.block
+        mask_part = part != block
+        mask_trial = (trial_info.block != block).to_numpy()
+
+        # find direction of perturbation dimension in partition
+        v_pert_tmp = v_pert[mask_part].mean(axis=0)
+        v_pert_tmp /= np.linalg.norm(v_pert_tmp)
+        
+        spk_tmp = spk[gl.pertIdx:, :, r]
+        mu = spk[gl.pertIdx:, :, mask_trial].mean(axis=-1)
+        spk_tmp_centered = spk_tmp - mu
+        sig_tmp = spk_tmp_centered @ v_pert_tmp[None, :].T
+        sig.append(sig_tmp)
+
+    np.save(os.path.join(gl.nhpDir, gl.spkDir, monkey, f'corrective_drive.{roi}-{rec}.npy'), np.array(sig))
+
 
 
 class Spikes:
@@ -177,7 +212,7 @@ def main(args):
         for mon in monkey:
             for rec in gl.recordings[mon][args.region]:
                 run_pcm(args.epoch, mon, M=M, roi=args.region, model=args.model, rec=rec)
-    if args.what=='tot_variance':
+    if args.what == 'tot_variance':
         for mon in monkey:
             for r, rec in enumerate(gl.recordings[mon][args.region]):
                 print(f'doing {mon}, recording {rec}')

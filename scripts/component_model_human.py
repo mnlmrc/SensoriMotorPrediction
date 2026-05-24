@@ -10,10 +10,9 @@ if __name__ == '__main__':
 
     atlas='ROI'
     experiment = 'smp2'
-    GLMs=[12, 16]
+    GLMs=[16]
 
-    epochs = ['plan', ] # 'regr_out_preact_ols']
-    label = []
+    epochs = ['plan', 'exec'] # 'regr_out_preact_ols']
     
     components = {
         'plan': ['expectation', 'uncertainty'],
@@ -23,7 +22,7 @@ if __name__ == '__main__':
     
     pcm_dict = {
         'epoch': [],
-        'label': [],
+        'method': [],
         'glm': [],
         'Hem': [],
         'roi': [],
@@ -42,7 +41,7 @@ if __name__ == '__main__':
             n_param_c = Mc.n_param
             MF = pcm.model.ModelFamily(Mc.Gc, comp_names=components[epoch], basecomponents=np.eye(8)[None, :, :] if epoch=='exec' else None)
 
-            if not (epoch == 'exec' and glm == 15): # exclude glm 15 from exec
+            if not (epoch == 'exec' and glm == 17): # exclude glm 17 from exec
                 for H in gl.Hem:
                     for roi in gl.rois[atlas]:
 
@@ -68,11 +67,11 @@ if __name__ == '__main__':
                         pcm_dict['component'].extend(c_bf['component'].to_numpy())
                         pcm_dict['participant_id'].extend(gl.sns * len(components[epoch]))
                         pcm_dict['glm'].extend([glm] * weight.size)
-                        pcm_dict['label'].extend(['none'] * weight.size)
+                        pcm_dict['method'].extend(['raw'] * weight.size)
 
     # add regressed out force
     epoch = 'plan'
-    GLMs=[12, 15]
+    GLMs=[16]
     Mc, idxc = find_model(os.path.join(gl.baseDir, experiment, gl.pcmDir, f'M.{epoch}.p'), 'component')
 
     n_param_c = Mc.n_param
@@ -82,7 +81,7 @@ if __name__ == '__main__':
         for H in gl.Hem:
             for roi in gl.rois[atlas]:
 
-                f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'theta_in.{epoch}.regr_out_preact_ancova.glm{glm}.{H}.{roi}.p'), "rb")
+                f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'theta_in.{epoch}.ols.glm{glm}.{H}.{roi}.p'), "rb")
 
                 param = pickle.load(f)
                 param_c = param[idxc][:n_param_c]
@@ -90,7 +89,7 @@ if __name__ == '__main__':
                 weight_sum = np.exp(param_c).sum(axis=0)
                 weight = np.exp(param_c).reshape(-1)
 
-                T = pd.read_pickle(os.path.join(gl.baseDir, experiment, gl.pcmDir, f'T.model_family.{epoch}.regr_out_preact_ancova.glm{glm}.{H}.{roi}.p'))
+                T = pd.read_pickle(os.path.join(gl.baseDir, experiment, gl.pcmDir, f'T.model_family.{epoch}.ols.glm{glm}.{H}.{roi}.p'))
                 c_bf = MF.component_bayesfactor(T.likelihood, method='AIC', format='DataFrame')
                 c_bf = pd.melt(c_bf, var_name='component', value_name='BF')
 
@@ -104,7 +103,7 @@ if __name__ == '__main__':
                 pcm_dict['component'].extend(c_bf['component'].to_numpy())
                 pcm_dict['participant_id'].extend(gl.sns * len(components[epoch]))
                 pcm_dict['glm'].extend([glm] * weight.size)
-                pcm_dict['label'].extend(['regr_out_preact_ancova'] * weight.size)
+                pcm_dict['method'].extend(['ols'] * weight.size)
 
     df = pd.DataFrame(pcm_dict)
     df['BF'] = df['BF'].astype(float).replace(np.inf, df.loc[df['BF'] != np.inf, 'BF'].max())

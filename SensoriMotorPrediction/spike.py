@@ -4,12 +4,20 @@ import pandas as pd
 import time
 import argparse
 import os
-import globals as gl
+import SensoriMotorPrediction.globals as gl
 import pickle
 from sklearn.decomposition import PCA, NMF, TruncatedSVD
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-def align_spike(spike, trial_info, preProb=20, postProb=64, prePert=30, postPert=40,):
+
+def _load_spike(file_path):
+    mat = mat73.loadmat(file_path)
+    spk = mat['spike_s']
+    spk = [s[0] for s in spk]
+    return spk
+
+
+def _align_spike(spike, trial_info, preProb=20, postProb=64, prePert=30, postPert=40,):
     cueTime = trial_info.probTime.to_numpy()
     pertTime = trial_info.pertTime.to_numpy()
     n_unit = spike[0].shape[1]
@@ -22,11 +30,15 @@ def align_spike(spike, trial_info, preProb=20, postProb=64, prePert=30, postPert
     return spike_aligned
 
 
-def load_spike(file_path):
-    mat = mat73.loadmat(file_path)
-    spk = mat['spike_s']
-    spk = [s[0] for s in spk]
-    return spk
+def align_spike(monkey='Malfoy', roi='M1', rec=1):
+    print(f'loading spikes Recording-{rec}...')
+    trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, monkey, f'trial_info-{rec}.tsv'), sep='\t')
+    spk = _load_spike(os.path.join(gl.nhpDir, gl.spkDir, monkey, f'spike_s.{roi}-{rec}.mat'))
+    idx = np.where((trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0))[0]
+    spk = [spk[i] for i in idx]
+    trial_info = trial_info.loc[idx].reset_index()
+    spk_aligned = _align_spike(spk, trial_info)
+    np.save(os.path.join(gl.nhpDir, gl.spkDir, monkey, f'spk_aligned.{roi}-{rec}.npy'), spk_aligned)    
 
 
 def main(args):

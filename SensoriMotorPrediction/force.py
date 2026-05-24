@@ -127,7 +127,7 @@ def calc_rt(X, thresh, fs):
     return idx / fs if np.any(above) else np.nan
 
 
-def calc_behaviour(experiment=None, sn=None, blocks=None, win=[(-1.5, 0), (.25, .45), ]):
+def single_trial_behaviour(experiment=None, sn=None, blocks=None, win=[(-1.5, 0), (.25, .45), ]):
 
     pinfo = pd.read_csv(os.path.join(gl.baseDir, experiment, 'participants.tsv'), sep='\t')
     blocks = pinfo[pinfo.sn == sn].reset_index(drop=True).FuncRuns[0].split('.')

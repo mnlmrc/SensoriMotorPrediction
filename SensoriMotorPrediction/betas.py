@@ -51,6 +51,45 @@ def save_spm_as_mat7(sn, glm):
     print(f"Processed {spm_path} with MATLAB")
 
 
+def roi_contrasts(sns, atlas_name='ROI', glm=16, experiment='smp2'):
+    con_dict = {
+            'con': [],
+            'condition': [],
+            'sn': [],
+            'roi': [],
+            'Hem': [],
+            'epoch': []}
+    regr_idx = {
+        12: [2, 10, 7, 4, 0,  3, 11, 8, 5,  6, 9, 12, 1],
+        16: [2, 10, 7, 4, 0,  3, 11, 8, 5,  6, 9, 12, 1],
+        17: [1, 4, 3, 2, 0,  6,  5]
+    }
+    for sn in sns:
+        print(f'Processing subj{sn}')
+        path_glm = os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', f'subj{sn}')
+        path_rois = os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}')
+        cifti = nb.load(path_glm + '/' + 'contrast.dscalar.nii')
+        regr = cifti.header.get_axis(0).name[regr_idx[glm]]
+        vol = nt.volume_from_cifti(cifti, struct_names=gl.struct)
+        for H in gl.Hem:
+            for roi in gl.rois[atlas_name]:
+                mask = os.path.join(path_rois, f'ROI.{H}.{roi}.nii')
+                coords = nt.get_mask_coords(mask)
+                con = nt.sample_image(vol, coords[0], coords[1], coords[2],0)
+                con = np.nanmean(con, axis=0)[regr_idx[glm]]
+                for i, c in enumerate(con):
+                    con_dict['con'].append(c)
+                    con_dict['condition'].append(regr[i])
+                    con_dict['sn'].append(str(sn))
+                    con_dict['roi'].append(roi)
+                    con_dict['Hem'].append(H)
+                    epoch = 'exec' if ('index' in regr[i]) or ('ring' in regr[i]) else 'plan'
+                    con_dict['epoch'].append(epoch)
+    con = pd.DataFrame.from_dict(con_dict)
+    con.to_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', 'ROI.con.avg.tsv'), sep='\t', index=False)
+
+
+
 def make_cifti(sn, glm=None, type='beta', experiment='smp2'):
     print(f'doing participant {sn}, {type}...')
     path_glm = os.path.join(gl.baseDir, experiment, f'glm{glm}', f'subj{sn}')
@@ -61,26 +100,11 @@ def make_cifti(sn, glm=None, type='beta', experiment='smp2'):
     if type == 'beta':
         cifti = bt.make_cifti_betas(masks, gl.struct, path_glm=path_glm, row_axis=row_axis, )
         nb.save(cifti, path_glm + '/' + 'beta.dscalar.nii')
-    elif type == 'repetition_suppression':
-        cifti = nb.load(path_glm + '/' + 'beta.dscalar.nii')
-        brain_axis = cifti.header.get_axis(1)
-        data = cifti.get_fdata()
-        rep1 = data[::2]
-        rep2 = data[1::2]
-        suppr = rep2 - rep1
-        reginfo = reginfo[::2].reset_index()
-        chord_sess_rep = reginfo.name.str.split(',', expand=True)
-        run = reginfo.run
-        row_axis = chord_sess_rep.astype(str)[0] + ',' + chord_sess_rep[1] + '.' + run.astype(str)
-        row_axis = nb.cifti2.ScalarAxis(row_axis)
-        header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
-        cifti_suppr = nb.Cifti2Image(dataobj=suppr,  header=header)
-        nb.save(cifti_suppr, path_glm + '/' + 'beta.dscalar.nii')
     elif type == 'residual':
         residuals = bt.make_cifti_residuals(path_glm=path_glm, masks=masks, struct=gl.struct)
         nb.save(residuals, path_glm + '/' + 'residual.dtseries.nii')
     elif type == 'contrast':
-        cifti = bt.make_cifti_contrasts(path_glm, masks, im.struct, reginfo.name)
+        cifti = bt.make_cifti_contrasts(path_glm, masks, gl.struct, reginfo.name.str.replace(' ', '', regex=False))
         nb.save(cifti, path_glm + '/' + 'contrast.dscalar.nii')
     elif type =='psc':
         contrast = nb.load(path_glm + '/' + 'contrast.dscalar.nii')
@@ -194,8 +218,7 @@ def main(args=None):
                         epoch = 'exec' if ('index' in regr[i]) or ('ring' in regr[i]) else 'plan'
                         con_dict['epoch'].append(epoch)
         con = pd.DataFrame.from_dict(con_dict)
-        con.to_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', 'ROI.con.avg.tsv'),
-                   sep='\t', index=False)
+        con.to_csv(os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', 'ROI.con.avg.tsv'), sep='\t', index=False)
     if args.what == 'make_residuals_cifti':
         path_glm = os.path.join(gl.baseDir, args.experiment, f'{gl.glmDir}{args.glm}', f'subj{args.sn}')
         masks = [os.path.join(path_rois, f'subj{args.sn}', f'Hem.{H}.nii') for H in Hem]

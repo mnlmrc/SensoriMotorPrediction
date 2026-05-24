@@ -228,8 +228,7 @@ def plot_aligned_deviation(fig, ax, force, descr):
     ax.set_ylabel('ring force (N)', fontsize=10)
     ax.set_title('Force trajectories')
 
-def plot_binned_cue(fig, ax, dat, x='cue', y=None, markersize=2, jitter=.2, show_individuals=True):
-    order = gl.cues
+def plot_binned_cue(fig, ax, dat, x='cue', y=None, order=gl.cues, markersize=2, jitter=.2, show_individuals=True):
     color = list(gl.colour_mapping.values())[:5]
     #sb.boxplot(data=dat, x=x, y=y, ax=ax, fill=False, palette=color, order=order, showfliers=False, linewidth=1)
     sb.pointplot(ax=ax, data=dat, x=x, y=y, order=order, errorbar='se', ls='none', palette=color, legend=True, lw=2)
@@ -353,7 +352,7 @@ def plot_surf(fig, ax, surf_data, H, vmin=-10, vmax=10, cmap='viridis', col=0, t
     Hem = ['L', 'R']
     h = Hem.index(H)
 
-    surf = nb.load(os.path.join(gl.atlasDir, f'fs_LR.32k.{H}.very_inflated.surf.gii'))
+    surf = nb.load(os.path.join(gl.atlasDir, f'fs_LR.32k.{H}.inflated.surf.gii'))
     coords = surf.darrays[0].data
     faces = surf.darrays[1].data.astype(np.uint32)  # pyvista requires uint32
     faces = np.hstack([np.full((faces.shape[0], 1), 3), faces]).astype(np.int32).flatten()
@@ -383,8 +382,9 @@ def plot_surf(fig, ax, surf_data, H, vmin=-10, vmax=10, cmap='viridis', col=0, t
 
     border_verts = load_border_vertices_xml(os.path.join(gl.atlasDir, f'fs_LR.32k.{H}.border'))
     border = coords[border_verts]
+    
     p = pv.Plotter(window_size=(600, 600), off_screen=True)
-    p.add_mesh(mesh, scalars="sulc", cmap="Greys", clim=[-2, 2], lighting=True, show_scalar_bar=False)
+    p.add_mesh(mesh, scalars="sulc", cmap="Greys", clim=[-2, 2], show_scalar_bar=False)
     p.add_mesh(mesh,
                scalars=overlay,
                cmap=cmap if overlay=='overlay' else None,
@@ -534,20 +534,19 @@ def plot_heatmap_transitions(fig, ax, probs, chi2, p, name):
 def plot_avg_activation(fig, axs, con, H, rois):
     for r, roi in enumerate(rois):
         ax = axs[r]
-        conditions = list(gl.regressor_mapping.keys())[:13]
         sb.pointplot(con[(con['roi'] == roi) & (con['Hem'] == H)],
                    ax=ax,
                    y='con',
                    x='condition',
-                   order=conditions,
-                   palette=[gl.colour_mapping[cond] for cond in conditions],
+                   order=gl.conditions,
+                   palette=[gl.colour_mapping[cond] for cond in gl.conditions],
                    # showfliers=False,
                    errorbar='se',
                    lw=2,
                    #width=1,
                    legend=False
                    )
-        ax.axhline(0, ls='-', color='k', lw=.8)
+        ax.axhline(0, ls=':', color='k', lw=.8)
         ax.set_title(roi)
         ax.set_ylabel('')
         ax.set_xlabel('')
@@ -558,9 +557,8 @@ def plot_avg_activation(fig, axs, con, H, rois):
         else:
             ax.tick_params(axis='y', width=0)
 
-    return fig, axs
 
-def plot_rdm(fig, axs, panel, D, ticklabels, vmin=None, vmax=None, sqrt=False, source=None):
+def plot_rdm(fig, axs, panel, D, ticklabels, vmin=None, vmax=None, sqrt=False, source=None, cmap='viridis', show_t_stat=True):
     if panel is not None:
         ax = axs[panel]
     else:
@@ -574,16 +572,15 @@ def plot_rdm(fig, axs, panel, D, ticklabels, vmin=None, vmax=None, sqrt=False, s
 
     if sqrt:
         D = np.sign(D) * np.sqrt(np.abs(D))
-    h = ax.imshow(D.mean(axis=0) if D.ndim>2 else D, vmin=vmin,vmax=vmax)
+    h = ax.imshow(D.mean(axis=0) if D.ndim>2 else D, vmin=vmin,vmax=vmax, cmap=cmap)
     ax.set_xticks(np.linspace(0, D.shape[1] - 1, D.shape[1]))
     ax.set_yticks(np.linspace(0, D.shape[1] - 1, D.shape[1]))
     ax.set_xticklabels(ticklabels, rotation=90)
     ax.set_yticklabels(ticklabels)
 
-    tval, pval = ttest_1samp(Dd, 0, alternative='greater')
-    print(f'{source}: tval={tval}, pval={pval}')
-
-    return fig, axs
+    if show_t_stat:
+        tval, pval = ttest_1samp(Dd, 0, alternative='greater')
+        print(f'{source}: tval={tval:.03f}, pval={pval:.03f}')
 
 # def plot_likelihood(fig, axs, likelihood, x='roi', color='k', width=.8):
 #     likelihood = pd.DataFrame(likelihood)
@@ -702,7 +699,7 @@ def plot_force_repr_corr(fig, axs, panel, param_c, diff):
 
     return fig, axs
 
-def plot_correlation(fig, axs, panel, x, y, alternative_slope='two-sided', alternative_intercept='two-sided'):
+def plot_linear_model(fig, axs, panel, x, y, alternative_slope='two-sided', alternative_intercept='two-sided'):
     if isinstance(axs, plt.Axes):
         ax = axs
     elif isinstance(axs, np.ndarray):
@@ -758,8 +755,6 @@ def plot_correlation(fig, axs, panel, x, y, alternative_slope='two-sided', alter
     print(f'slope: {slope}, p = {p_slope:.3f}')
     print(f'intercept: {intercept}, p_intercept = {p_intercept:.3f}')
     print(f'R2 = {R2:.3f}')
-
-    return fig, axs
 
 
 def plot_interaction(fig, ax, interaction, x='roi', color='cyan', width=.8, alternative='two-sided'):

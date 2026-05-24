@@ -7,12 +7,12 @@ import time
 import argparse
 import glob
 import os
-import globals as gl
+import SensoriMotorPrediction.globals as gl
 from sklearn.preprocessing import MinMaxScaler
 import pickle
-from pcm_models import find_model
+from SensoriMotorPrediction.pcm_models import find_model
 from imaging_pipelines.util import bootstrap_correlation, bootstrap_summary
-from lfp import make_freq_masks
+from SensoriMotorPrediction.lfp import make_freq_masks
 from joblib import Parallel, delayed, parallel_backend
 from sigproc.statistics import permutation_t_test_1samp_tf
 
@@ -171,6 +171,64 @@ def run_pcm(epoch='plan', monkey='Malfoy', roi='PMd', M=None, model='component',
     np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'theta_in.lfp.{model}.{roi}.{epoch}-{rec}.npy'), theta_in, )
     np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'G_obs.lfp.{roi}.{epoch}-{rec}.npy'), G_obs, )
     np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'c_bf.lfp.{model}.{roi}.{epoch}-{rec}.npy'), c_bf, )
+
+
+
+def corrective_drive(roi='M1', monkey='Malfoy', rec=1):
+    cfg = mat73.loadmat(os.path.join(gl.nhpDir, gl.lfpDir, 'Malfoy', f'cfg.PMd-19.mat'))['cfg']
+    freq_masks = make_freq_masks(cfg)
+    freqs = ['alpha', 'beta-gamma']
+    mask_freq = {
+        'alpha': freq_masks['alpha'],
+        'beta-gamma': freq_masks['beta'] + freq_masks['gamma']}
+    for freq in freqs:
+        for rec in gl.recordings_roi[monkey][roi]:
+
+            print(f'doing {monkey}, recording {rec}-{roi}')
+
+            # load trial info
+            trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, monkey, f'trial_info-{rec}.tsv'), sep='\t')
+            idx = np.where((trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0))[0]
+            trial_info = trial_info.loc[idx].reset_index()
+            mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
+            trial_info.cond = trial_info.cond.map(mapping)
+
+            # load lfp
+            lfp = np.load(os.path.join(gl.nhpDir, gl.lfpDir, f'{monkey}', f'lfp_aligned.{roi}-{rec}.npy'))
+            lfp_win = lfp[gl.pertIdx + 4:gl.pertIdx + 24, :, mask_freq[freq], :].mean(axis=(0, 2))
+            
+            # find perturbation dimension in each run
+            lfp_grouped, _, part_vec = pcm.group_by_condition(lfp_win, trial_info.cond, trial_info.block, axis=-1)
+            part = np.unique(part_vec)
+            n_part = len(part)
+            obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                        'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
+            mask_dir = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
+                        'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
+            ext = lfp_grouped[mask_dir['ext']].reshape(n_part, 4, 32).mean(axis=1)
+            flx = lfp_grouped[mask_dir['flx']].reshape(n_part, 4, 32).mean(axis=1)
+            v_pert = flx - ext
+
+            sig = []
+            for r, row in trial_info.iterrows():
+                print(f'doing trial {r+1}, {monkey}, {roi}')
+
+                # filter trials in partition
+                block = row.block
+                mask_part = part != block
+                mask_trial = (trial_info.block != block).to_numpy()
+
+                # find direction of perturbation dimension in partition
+                v_pert_tmp = v_pert[mask_part].mean(axis=0)
+                v_pert_tmp /= np.linalg.norm(v_pert_tmp)
+                
+                lfp_tmp = lfp[gl.pertIdx:, :, mask_freq[freq], r].mean(axis=-1)
+                mu = lfp[gl.pertIdx:, :, mask_freq[freq]][:, :, :, mask_trial].mean(axis=(2, 3))
+                lfp_tmp_centered = lfp_tmp - mu
+                sig_tmp = lfp_tmp_centered @ v_pert_tmp[None, :].T
+                sig.append(sig_tmp)
+
+            np.save(os.path.join(gl.nhpDir, gl.lfpDir, monkey, f'corrective_drive.{freq}.{roi}-{rec}.npy'), np.array(sig))
 
 
 def main(args):
@@ -484,18 +542,21 @@ def main(args):
             for mon in monkey:
                 for rec in gl.recordings[mon][roi]:
                     print(f'doing {mon}, recording {rec}-{roi}')
-                    trial_info = pd.read_csv(
-                        os.path.join(gl.nhpDir, gl.recDir, f'{mon}', f'trial_info-{rec}.tsv'), sep='\t')
+
+                    # load trial info
+                    trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, f'{mon}', f'trial_info-{rec}.tsv'), sep='\t')
                     idx = np.where((trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0))[0]
                     trial_info = trial_info.loc[idx].reset_index()
                     mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
                     trial_info.cond = trial_info.cond.map(mapping)
+
+                    
                     lfp = np.load(os.path.join(gl.nhpDir, gl.lfpDir, f'{mon}', f'lfp_aligned.{roi}-{rec}.npy'))
                     lfp_win = lfp[gl.pertIdx + 4:gl.pertIdx + 24, :, mask_freq, :].mean(axis=(0, 2))
-                    lfp_grouped, _, part_vec = pcm.group_by_condition(lfp_win, trial_info.cond, trial_info.block,
-                                                                      axis=-1)
+                    lfp_grouped, _, part_vec = pcm.group_by_condition(lfp_win, trial_info.cond, trial_info.block, axis=-1)
                     part = np.unique(part_vec)
                     n_part = len(part)
+                    
                     obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
                                'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
                     mask_dir = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),

@@ -58,12 +58,9 @@ def G_to_cosine(G):
             An n_cond x n_cond matrix where each entry (i, j) represents
             the cosine angle between condition i and condition j.
     """
-    # Normalize each row to unit length
-    norm_G = np.linalg.norm(G, axis=1, keepdims=True)
-    G_norm = G / norm_G
-
-    # Compute cosine similarity matrix
-    cosine_similarity = np.dot(G_norm, G_norm.T)
+    # Compute norms from diagonal (G[i,i] = ||x_i||^2 in the second-moment sense)
+    norms = np.sqrt(np.diag(G))
+    cosine_similarity = G / np.outer(norms, norms)
 
     # Clip to prevent numerical issues outside the valid domain of arccos
     cosine_similarity = np.clip(cosine_similarity, -1.0, 1.0)

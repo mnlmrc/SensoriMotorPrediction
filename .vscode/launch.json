@@ -34,7 +34,7 @@
                 "--sns",
                 "102",
                 "--glm",
-                "15"
+                "16"
             ]
         },
         {
@@ -47,11 +47,56 @@
             "args": [
                 "pcm_rois",
                 "--glm",
-                "15",
+                "17",
                 "--epoch",
                 "plan",
                 "--sns",
                 "102"
+            ]
+        },
+        {
+            "name": "calc_G",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": [
+                "calc_G",
+                "--glm",
+                "16",
+                "--epoch",
+                "plan",
+                "--sns",
+                "102"
+            ]
+        },
+        {
+            "name": "roi_contrasts",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": [
+                "roi_contrasts",
+                "--glm",
+                "17",
+                "--sns",
+                "102"
+            ]
+        },
+        {
+            "name": "smooth_surf_activation",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": [
+                "smooth_surf_activation",
+                "--glm",
+                "17",
             ]
         },
         {
@@ -68,6 +113,42 @@
                 "--sns",
                 "102"
             ]
+        },
+        {
+            "name": "align_kinematics",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": ["align_kinematics"]
+        },
+        {
+            "name": "corrective_drive_spike",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": ["corrective_drive_spike"]
+        },
+        {
+            "name": "corrective_drive_lfp",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": ["corrective_drive_slfp"]
+        },
+        {
+            "name": "align_spike",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": ["align_spike"]
         },
     ]
 }

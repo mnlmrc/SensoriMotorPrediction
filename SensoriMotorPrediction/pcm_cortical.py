@@ -6,7 +6,7 @@ import nibabel as nb
 import pickle
 import pandas as pd
 import imaging_pipelines.model as md
-from SensoriMotorPrediction.pcm_models import find_model 
+from SensoriMotorPrediction.pcm_models import find_model
 
 
 def pcm_rois(sns, glm, epoch, label=None, n_jobs=6, experiment='smp2'):
@@ -31,6 +31,8 @@ def pcm_rois(sns, glm, epoch, label=None, n_jobs=6, experiment='smp2'):
     glm_path = os.path.join(gl.baseDir, 'smp2', f'glm{glm}')
     cifti_img = [os.path.join(glm_path, f'subj{sn}', f'beta{(f".{label}" if label is not None else "")}.dscalar.nii') for sn in sns]
     res_img = [os.path.join(glm_path, f'subj{sn}', 'residual.dtseries.nii') for sn in sns]
+    pcm_path = os.path.join(gl.baseDir, 'smp2', gl.pcmDir)
+    os.makedirs(pcm_path, exist_ok=True)
 
     # make roi dict
     roi_path = os.path.join(gl.baseDir, 'smp2', gl.roiDir)
@@ -64,25 +66,22 @@ def pcm_rois(sns, glm, epoch, label=None, n_jobs=6, experiment='smp2'):
         for roi in rois:
             r = res_comp_model['roi'].index(roi)
 
-            path = os.path.join(gl.baseDir, 'smp2', gl.pcmDir)
-            os.makedirs(path, exist_ok=True)
-
             if do_model_family:
-                res_model_family['T'][r].to_pickle(os.path.join(path, f'T.model_family.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'))
-                f = open(os.path.join(path, f'theta.model_family.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'), 'wb')
+                res_model_family['T'][r].to_pickle(os.path.join(pcm_path, f'T.model_family.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'))
+                f = open(os.path.join(pcm_path, f'theta.model_family.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'), 'wb')
                 pickle.dump(res_model_family['theta'][r], f)
 
-            res_comp_model['T_in'][r].to_pickle(os.path.join(path, f'T_in.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'))
-            res_comp_model['T_cv'][r].to_pickle(os.path.join(path, f'T_cv.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'))
-            res_comp_model['T_gr'][r].to_pickle(os.path.join(path, f'T_gr.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'))
+            res_comp_model['T_in'][r].to_pickle(os.path.join(pcm_path, f'T_in.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'))
+            res_comp_model['T_cv'][r].to_pickle(os.path.join(pcm_path, f'T_cv.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'))
+            res_comp_model['T_gr'][r].to_pickle(os.path.join(pcm_path, f'T_gr.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'))
 
-            np.save(os.path.join(path, f'G_obs.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.npy'), res_comp_model['G_obs'][r])
+            np.save(os.path.join(pcm_path, f'G_obs.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.npy'), res_comp_model['G_obs'][r])
 
-            f = open(os.path.join(path, f'theta_in.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'), 'wb')
+            f = open(os.path.join(pcm_path, f'theta_in.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'), 'wb')
             pickle.dump(res_comp_model['theta_in'][r], f)
-            f = open(os.path.join(path, f'theta_cv.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'), 'wb')
+            f = open(os.path.join(pcm_path, f'theta_cv.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'), 'wb')
             pickle.dump(res_comp_model['theta_cv'][r], f)
-            f = open(os.path.join(path, f'theta_gr.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'), 'wb')
+            f = open(os.path.join(pcm_path, f'theta_gr.{epoch}{(f".{label}" if label is not None else "")}.glm{glm}.{H}.{roi}.p'), 'wb')
             pickle.dump(res_comp_model['theta_gr'][r], f)
             
 
@@ -102,9 +101,6 @@ def regress_out_preactivation(sn, glm, method='ancova'):
     # extract reginfo to match with force df
     reginfo = pd.read_csv(os.path.join(glm_path, f'subj{sn}_reginfo.tsv'), sep='\t')
     reginfo.name = reginfo.name.str.replace(' ', '')
-    #reginfo = pd.DataFrame({'reginfo': reginfo})
-    #tmp = reginfo['reginfo'].str.split('.', expand=True)
-    #reginfo['cond'] = tmp[0]
     reginfo['BN'] = reginfo['run']
     tmp = reginfo['name'].str.split(',', expand=True)
     reginfo['cue'] = tmp[0]
@@ -116,81 +112,93 @@ def regress_out_preactivation(sn, glm, method='ancova'):
     # load force
     dat = pd.read_csv(os.path.join(gl.baseDir, 'smp2', gl.behavDir, 'behaviour.block.cue.tsv'), sep='\t')
     dat_s = dat[(dat.sn==sn) & (dat.BN.astype(str).isin(FuncRuns))].reset_index()
-    force_df = reginfo.merge(dat_s[['BN', 'cue', 'index0', 'ring0', 'diff']], on=['BN','cue'], how='left')
+    force_df = reginfo.merge(dat_s[['BN', 'cue', 'index0', 'ring0', 'diff0']], on=['BN','cue'], how='left')
     cond_vec = force_df['cue'].map(gl.regressor_mapping)
+    part_vec = reginfo.run.to_numpy()
     Z = pcm.indicator(cond_vec)
-    F = force_df['diff'].to_numpy()[:, None]
+    #F = force_df['diff0'].to_numpy()[:, None]
 
     # calc residuals
     print(f'Calculating residuals with {method} regression')
     if method=='ols':
-        F = np.column_stack([np.ones(F.shape[0]), F])
-        W, _, _, _ = np.linalg.lstsq(F, B, rcond=None)
-        B_hat = F @ W
+        F = force_df[['diff0']].to_numpy()
+        F = F - F.mean(axis=0, keepdims=True)
+        X = np.c_[np.ones(F.shape[0]), F]
+        W = np.linalg.pinv(X) @ B
+        B_hat = X @ W
         B_res = B - B_hat
-        label = 'regr_out_preact_ols'
-    if method=='cv':
-        F = np.column_stack([np.ones(F.shape[0]), F])
-        part_vec = reginfo.run.to_numpy()
-        B_res = _regress_out_preactivation_cv(B, F, part_vec)
-        label = 'regr_out_preact_cv'
     if method=='ancova':
-        F = np.c_[F, Z]
-        W = np.linalg.pinv(F) @ B #np.linalg.lstsq(F, B, rcond=None) # use ols formula
+        F = force_df[['diff0']].to_numpy()
+        F = F - F.mean(axis=0, keepdims=True)
+        X = np.c_[F, Z] 
+        W = np.linalg.pinv(X) @ B 
         B_hat = np.outer(F[:, 0], W[0]) #F[:, 0] @ W[0].T
+        #B_hat = F @ W[:2]
         B_res = B - B_hat
-        label = 'regr_out_preact_ancova'
+    if method=='ancova_cv':
+        F = force_df[['diff0']].to_numpy()
+        F = F - F.mean(axis=0, keepdims=True)
+        X = np.c_[F, Z]
+        B_res, W = _regress_out_ancova_cv(B, F, Z, part_vec)
 
     # save residuals
     row_axis = nb.cifti2.ScalarAxis(reginfo.name + '.' + reginfo['run'].astype(str))
     brain_axis = cifti_img.header.get_axis(1)
     header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
     cifti = nb.Cifti2Image(dataobj=B_res, header=header)
-    nb.save(cifti, glm_path + '/' + f'beta.{label}.dscalar.nii')
+    nb.save(cifti, glm_path + '/' + f'beta.{method}.dscalar.nii')
 
     # save coefficients
-    row_axis = nb.cifti2.ScalarAxis(np.arange(F.shape[1]))
+    row_axis = nb.cifti2.ScalarAxis(np.arange(X.shape[1]))
     brain_axis = cifti_img.header.get_axis(1)
     header = nb.Cifti2Header.from_axes((row_axis, brain_axis))
     cifti = nb.Cifti2Image(dataobj=W, header=header)
-    nb.save(cifti, glm_path + '/' + f'W.{label}.dscalar.nii')
+    nb.save(cifti, glm_path + '/' + f'W.{method}.dscalar.nii')
 
 
-def _regress_out_preactivation_cv(B, F, part_vec):
+def _regress_out_ancova_cv(B, F, Z, part_vec):
     """
-    Cross-validated regression of force out of betas using leave-one-block-out OLS.
+    Leave-one-partition-out ANCOVA regression.
+
+    For each partition p, estimates the effect of F on B using all
+    *other* partitions (jointly with Z), then applies the correction
+    to partition p. This avoids leaking partition p's data into its
+    own correction, keeping the partitions independent for crossnobis.
 
     Parameters
     ----------
-    B : array, shape (n_samples, n_voxels)
-        Cortical betas.
-    F : array, shape (n_samples, n_features)
-        Force features.
-    part_vec : array, shape (n_samples,)
-        Block labels.
+    B        : (n_obs, n_vox)   data matrix
+    F        : (n_obs, n_f)     nuisance regressors to remove
+    Z        : (n_obs, n_cond)  condition indicators (kept in model, not removed)
+    part_vec : (n_obs,)         integer partition labels
 
     Returns
     -------
-    B_resid : array, shape (n_samples, n_voxels)
-        Residual betas after removing the cross-validated force prediction.
-    B_pred : array, shape (n_samples, n_voxels)
-        Cross-validated force-predicted component.
+    B_cv  : (n_obs, n_vox)  corrected data
+    W_avg : (n_f, n_vox)    regression weights for F averaged across partitions
     """
+    if F.ndim==1:
+        F = F[:, None]
+    n_f      = F.shape[1]
+    B_cv     = B.copy()
+    parts    = np.unique(part_vec)
+    W_folds  = []
 
-    B_hat = np.full_like(B, np.nan)
+    for p in parts:
+        train = part_vec != p   # all partitions except p
+        test  = part_vec == p   # partition p
 
-    for part in np.unique(part_vec):
-        train_idx = part_vec != part
-        test_idx = part_vec == part
+        # Estimate W_F on training data only (joint model accounts for Z)
+        X_train = np.c_[F[train], Z[train]]
+        W_train = np.linalg.pinv(X_train) @ B[train]
 
-        F_train = F[train_idx]
-        B_train = B[train_idx]
-        F_test = F[test_idx]
+        # Apply only F's contribution to the test partition
+        B_cv[test] = B[test] - F[test] @ W_train[:n_f]
 
-        # OLS fit on training blocks
-        W, _, _, _ = np.linalg.lstsq(F_train, B_train, rcond=None)
+        W_folds.append(W_train)
 
-        # Predict held-out block
-        B_hat[test_idx] = F_test @ W
+    W_avg = np.mean(W_folds, axis=0) 
 
-    return B - B_hat
+    return B_cv, W_avg
+
+

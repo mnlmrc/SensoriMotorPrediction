@@ -12,6 +12,32 @@ import SensoriMotorPrediction.globals as gl
 import os
 
 
+def upper_noise_ceiling(X):
+
+    N = X.shape[0]
+
+    X_mean = X.mean(axis=0)
+    ceil = 0
+    for i in range(N):
+        x = X[i]
+        ceil += np.corrcoef(x, X_mean)[0, 1]
+    ceil /= N
+
+    return ceil
+
+def lower_noise_ceiling(X):
+    
+    N = X.shape[0]
+
+    ceil = 0
+    for i in range(N):
+        X_mean = np.delete(X, i, axis=0).mean(axis=0)
+        x = X[i]
+        ceil += np.corrcoef(x, X_mean)[0, 1]
+    ceil /= N
+
+    return ceil
+
 def anova_finger_cue(dat, dv=('index0', 'ring0'), within='cue'):
 
     # index perturbation
@@ -49,29 +75,45 @@ def anova_finger_cue(dat, dv=('index0', 'ring0'), within='cue'):
     display(anova.style.hide(axis="index"))
 
 
-def calc_R2(Y, Yhat):
-    ss_res = np.nansum((Y - Yhat) ** 2)
-    ss_tot = np.nansum((Y - np.nanmean(Y)) ** 2)
+def fit_lm(data, y_var=None, X_var=None):
+    X = np.c_[np.ones(len(data)), data[X_var].to_numpy()]
+    y = data[y_var].to_numpy()
+    B = np.linalg.inv(X.T @ X) @ X.T @ y
+    return pd.Series({col: B[1:, c][0] for c, col in enumerate(y_var)})
 
-    return 1 - ss_res / ss_tot
 
+def load_glm_onset(sn, glm, experiment='smp2'):
+    dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}', f'{experiment}_{sn}.dat'), sep='\t')
+    bmap = dict(zip(dat.BN.unique(), np.arange(dat.BN.nunique())))
+    dat.BN = dat.BN.map(bmap)
+    # onset = dat.startTRReal + dat.BN * gl.nTR
+    onset = round((dat.startTimeReal+dat.planTime) / 1000) + dat.BN * gl.nTR
+    # events = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}', f'glm{glm}_events.tsv'), sep='\t')
+    # bmap = dict(zip(events.BN.unique(), np.arange(events.BN.nunique())))
+    # events.BN = events.BN.map(bmap)
+    # if glm in [12, 16]:
+    #     onsetGo = events[events.eventtype.str.contains('index|ring')]
+    # elif glm in [15, 17]:
+    #     onsetGo = events[events.eventtype=='exec']
+    onsetGo = onset[dat.stimFinger!=99999].to_numpy().astype(int)
+    onsetNogo = onset[dat.stimFinger==99999].to_numpy().astype(int)
+    # onsetGo = (np.round(onsetGo.Onset * gl.TR) + onsetGo.BN * gl.nTR).to_numpy().astype(int)
+    # onsetNogo = (np.round(onsetNogo.Onset * gl.TR) + onsetNogo.BN * gl.nTR).to_numpy().astype(int)
 
-
-def load_glm_onset(sn, glm):
-    pinfo = pd.read_csv(os.path.join(gl.baseDir, 'smp2', 'participants.tsv'), sep='\t')
-    func_runs = pinfo.loc[pinfo.sn == sn, "FuncRuns"].iloc[0].split('.')
-    func_runs = np.array(func_runs, dtype=int)
-    func_runs = np.array([func_runs + func_runs.size * i for i in range(3)]).flatten()
-    events = pd.read_csv(os.path.join(gl.baseDir, 'smp2', gl.behavDir, f'subj{sn}', f'glm{glm}_events.tsv'), sep='\t')
-    events = events[events.BN.isin(func_runs)]
-    bmap = dict(zip(events.BN.unique(), np.arange(events.BN.nunique())))
-    events.BN = events.BN.map(bmap)
-    BN_go = events[events.stimFinger!=99999].BN.to_numpy() 
-    BN_nogo = events[events.stimFinger==99999].BN.to_numpy()
-    onset_b_go = events[events.stimFinger!=99999].Onset.to_numpy()
-    onset_b_nogo = events[events.stimFinger==99999].Onset.to_numpy()
-    onsetGo = (np.round(onset_b_go * gl.TR) + BN_go * gl.nTR).astype(int)
-    onsetNogo = (np.round(onset_b_nogo * gl.TR) + BN_nogo * gl.nTR).astype(int)
+    # pinfo = pd.read_csv(os.path.join(gl.baseDir, 'smp2', 'participants.tsv'), sep='\t')
+    # func_runs = pinfo.loc[pinfo.sn == sn, "FuncRuns"].iloc[0].split('.')
+    # func_runs = np.array(func_runs, dtype=int)
+    # func_runs = np.array([func_runs + func_runs.size * i for i in range(3)]).flatten()
+    # events = pd.read_csv(os.path.join(gl.baseDir, 'smp2', gl.behavDir, f'subj{sn}', f'glm{glm}_events.tsv'), sep='\t')
+    # events = events[events.BN.isin(func_runs)]
+    # bmap = dict(zip(events.BN.unique(), np.arange(events.BN.nunique())))
+    # events.BN = events.BN.map(bmap)
+    # BN_go = events[events.stimFinger!=99999].BN.to_numpy() 
+    # BN_nogo = events[events.stimFinger==99999].BN.to_numpy()
+    # onset_b_go = events[events.stimFinger!=99999].Onset.to_numpy()
+    # onset_b_nogo = events[events.stimFinger==99999].Onset.to_numpy()
+    # onsetGo = (np.round(onset_b_go * gl.TR) + BN_go * gl.nTR).astype(int)
+    # onsetNogo = (np.round(onset_b_nogo * gl.TR) + BN_nogo * gl.nTR).astype(int)
     return np.sort(onsetGo), np.sort(onsetNogo)
 
 
