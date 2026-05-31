@@ -111,20 +111,18 @@ def make_cifti(sn, glm=None, type='beta', experiment='smp2'):
         intercept = nb.load(path_glm + '/' + 'intercept.dscalar.nii')
         SPM = spm.SpmGlm(path_glm)
         SPM.get_info_from_spm_mat()
-        cifti = bt.make_cifti_psc(contrast=contrast, intercept=intercept, SPM=SPM, masks=masks, struct=im.struct)
+        cifti = bt.make_cifti_psc(contrast=contrast, intercept=intercept, SPM=SPM, masks=masks, struct=gl.struct)
         nb.save(cifti, path_glm + '/' + 'psc.dscalar.nii')
     elif type == 'intercept':
-        session = reginfo.name.str.split(',', n=1, expand=True)[1]
-        nRuns = [reginfo[session == sess].run.nunique() for sess in session.unique()]
+        nRuns = reginfo.run.nunique()
         nRegressors = reginfo.shape[0]
         intercept = []
-        for sess in range(dn.nSess):
-            for run in range(nRuns[sess]):
-                intercept.append(os.path.join(path_glm, f'beta_0{nRegressors + run + 1 + sess * nRuns[0]}.nii'))
-        masks = [os.path.join(path_rois, f'Hem.{H}.nii') for H in im.Hem]
-        cond_vec = np.sort(np.array([f'{sess},{run}' for run in range(nRuns[sess]) for sess in range(dn.nSess)]))
+        for run in range(nRuns):
+            intercept.append(os.path.join(path_glm, f'beta_{nRegressors + run + 1:04d}.nii'))
+        masks = [os.path.join(path_rois, f'Hem.{H}.nii') for H in gl.Hem]
+        cond_vec = np.sort(np.array([run for run in range(nRuns)]))
         row_axis = nb.cifti2.ScalarAxis(cond_vec)
-        cifti = bt.make_cifti_betas(masks, im.struct, intercept, row_axis=row_axis, )
+        cifti = bt.make_cifti_betas(masks, gl.struct, intercept, row_axis=row_axis, )
         nb.save(cifti, path_glm + '/' + 'intercept.dscalar.nii')
     else:
         raise Exception(f'Unknown type {type}. Must be beta, residual, contrast or intercept.')

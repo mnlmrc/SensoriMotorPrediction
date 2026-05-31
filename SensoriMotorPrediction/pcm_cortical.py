@@ -6,10 +6,12 @@ import nibabel as nb
 import pickle
 import pandas as pd
 import imaging_pipelines.model as md
+from imaging_pipelines.util import bootstrap_correlation
 from SensoriMotorPrediction.pcm_models import find_model
+from joblib import Parallel, delayed
 
 
-def pcm_rois(sns, glm, epoch, label=None, n_jobs=6, experiment='smp2'):
+def component_model(sns, glm, rois, epoch, label=None, n_jobs=6, experiment='smp2'):
 
     if epoch=='plan': #, 'regr_out_preact_ols', 'regr_out_preact_cv', 'regr_out_preact_ancova']:
         regr_interest = [0, 1, 2, 3, 4]
@@ -200,5 +202,106 @@ def _regress_out_ancova_cv(B, F, Z, part_vec):
     W_avg = np.mean(W_folds, axis=0) 
 
     return B_cv, W_avg
+
+def _correlation_masks(B, n_part, corr):
+
+    if corr=='plan-exec':
+        i_x = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]
+        r_x = [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+        i_y = [0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0]
+        r_y = [0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1]
+    elif corr=='cue-finger':
+        i_x = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]
+        r_x = [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]
+        i_y = [0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0]
+        r_y = [0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1]
+
+    i_x_sum = np.array(i_x).sum()
+    r_x_sum = np.array(r_x).sum()
+    i_y_sum = np.array(i_y).sum()
+    r_y_sum = np.array(r_y).sum()
+
+    mask_x = {'i': np.array(i_x * n_part, dtype=bool),
+              'r': np.array(r_x * n_part, dtype=bool)}
+    mask_y = {'i': np.array(i_y * n_part, dtype=bool),
+              'r': np.array(r_y * n_part, dtype=bool)}
+
+    xi = B[mask_x['i']].reshape(n_part, i_x_sum, -1).mean(axis=1)
+    xr = B[mask_x['r']].reshape(n_part, r_x_sum, -1).mean(axis=1)
+    yi = B[mask_y['i']].reshape(n_part, i_y_sum, -1).mean(axis=1)
+    yr = B[mask_y['r']].reshape(n_part, r_y_sum, -1).mean(axis=1)
+
+    x = xi - xr
+    y = yi - yr
+
+    return x, y
+
+def correlation(sns, glm, rois, corr='plan-exec', experiment='smp2'):
+
+    # define paths
+    glm_path = os.path.join(gl.baseDir, experiment, f'glm{glm}')
+    roi_path = os.path.join(gl.baseDir, experiment, gl.roiDir)
+    pcm_path = os.path.join(gl.baseDir, experiment, gl.pcmDir)
+
+    # load correlation model
+    f = open(os.path.join(pcm_path, f'M.corr.p'), "rb")
+    Mflex = pickle.load(f)
+
+    for H in gl.Hem:
+        for roi in rois:
+            N = len(sns)
+            Y = list()
+
+            # loop over participants
+            for s, sn in enumerate(sns):
+                print(f'doing ROI.{H}.{roi}, participant {sn}...')
+
+                # load betas, residuals and roi masks
+                betas = nb.load(os.path.join(glm_path, f'subj{sn}', 'beta.dscalar.nii'))
+                residuals = nb.load(os.path.join(glm_path, f'subj{sn}', 'residual.dtseries.nii'))
+                mask = nb.load(os.path.join(roi_path, f'subj{sn}', f'ROI.{H}.{roi}.nii'))
+
+                # prewhiten betas
+                betas_prewhitened = md.calc_prewhitened_betas(betas, residuals, mask)
+
+                # extract cond_vec and part_vec
+                reginfo = np.char.split(betas.header.get_axis(0).name, sep='.')
+                cond_vec = np.array([gl.regressor_mapping[r[0]] for r in reginfo])
+                part_vec = np.array([int(r[1]) for r in reginfo])
+
+                # mask correlation terms
+                n_part = len(np.unique(part_vec))
+                x, y = _correlation_masks(betas_prewhitened, n_part, corr)
+
+                # centre prewhitened betas
+                beta_corr = np.r_[x - x.mean(axis=-1, keepdims=True), 
+                                  y - y.mean(axis=-1, keepdims=True)]
+                obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                           'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
+                Y.append(pcm.dataset.Dataset(beta_corr, obs_descriptors=obs_des))
+            
+            # estimate MLE correlations
+            T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False, verbose=False)
+            T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True, verbose=False)
+
+            # save results
+            T_in.to_pickle(os.path.join(pcm_path, f'T_in.corr_{corr}.glm{glm}.{H}.{roi}.p'))
+            T_gr.to_pickle(os.path.join(pcm_path, f'T_gr.corr_{corr}.glm{glm}.{H}.{roi}.p'))
+            f = open(os.path.join(pcm_path, f'theta_in.corr_{corr}.glm{glm}.{H}.{roi}.p'), 'wb')
+            pickle.dump(theta_in, f)
+            f = open(os.path.join(pcm_path, f'theta_gr.corr_{corr}.glm{glm}.{H}.{roi}.p'), 'wb')
+            pickle.dump(theta_gr, f)
+
+            # do bootstrap
+            B = 1000
+            S = len(Y)
+            rng = np.random.default_rng(0)
+            indeces = rng.integers(0, S, size=(B, S))
+            results = Parallel(n_jobs=16, backend='loky')(
+                delayed(bootstrap_correlation)(idx, Y, Mflex) for idx in indeces)
+            r_bootstrap = np.array([r for r in results if r is not None])
+            n_disc = len(results) - len(r_bootstrap)
+            print(f'ROI.{H}.{roi}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
+            np.save(os.path.join(pcm_path, f'r_bootstrap.corr_{corr}.{H}.{roi}.npy'), r_bootstrap)
 
 

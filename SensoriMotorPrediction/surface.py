@@ -5,6 +5,7 @@ import nitools as nt
 import os
 import SensoriMotorPrediction.globals as gl
 import numpy as np
+from surfAnalysisPy.map import vol_to_surf
 import SUITPy.flatmap as flatmap
 
 
@@ -12,17 +13,35 @@ def make_smooth_cifti(sns, glm, experiment='smp2'):
     data = []
     for sn in sns:
         print(f'Processing participant {sn}')
-        path = os.path.join(gl.baseDir, experiment, gl.wbDir, f'subj{sn}')
-        giftis = [path + '/' + f'glm{glm}.con.{H}.func.gii' for H in gl.Hem]
-        cifti_img = nt.join_giftis_to_cifti(giftis)
 
-        row_axis = cifti_img.header.get_axis(0).name
+        # load cifti PSC
+        path = os.path.join(gl.baseDir, experiment, f'glm{glm}', f'subj{sn}', 'psc.dscalar.nii')
+        #giftis = [path + '/' + f'glm{glm}.con.{H}.func.gii' for H in gl.Hem]
+        cifti_psc = nb.load(path)
+
+        # convert to nifti list
+        nifti_psc = nt.volume_from_cifti(cifti_psc, struct_names=gl.struct)
+        vol_list_psc = [nb.Nifti2Image(nifti_psc.get_fdata()[..., i], nifti_psc.affine) for i in range(nifti_psc.shape[-1])]
+
+        # load white and pial
+        whiteL = os.path.join(gl.baseDir, experiment, gl.wbDir, f'subj{sn}', f'subj{sn}.L.white.32k.surf.gii')
+        whiteR = os.path.join(gl.baseDir, experiment, gl.wbDir, f'subj{sn}', f'subj{sn}.R.white.32k.surf.gii')
+        pialL = os.path.join(gl.baseDir, experiment, gl.wbDir, f'subj{sn}', f'subj{sn}.L.pial.32k.surf.gii')
+        pialR = os.path.join(gl.baseDir, experiment, gl.wbDir, f'subj{sn}', f'subj{sn}.R.pial.32k.surf.gii')
+
+        # retrieve names
+        row_axis = cifti_psc.header.get_axis(0).name
         plan_col_names = [col for col in row_axis if 'index' not in col 
                                                     and 'ring' not in col 
                                                     # these two are because of GLM 17
                                                     and 'exec' not in col 
                                                     and 'plan' not in col]
         exec_col_names = [col for col in row_axis if 'index' in col or 'ring' in col or 'exec' in col]
+
+        # project to surface
+        giftiL = nt.gifti.make_func_gifti(vol_to_surf(vol_list_psc, whiteL, pialL), anatomical_struct='CortexLeft', column_names=row_axis) 
+        giftiR = nt.gifti.make_func_gifti(vol_to_surf(vol_list_psc, whiteR, pialR), anatomical_struct='CortexRight', column_names=row_axis)
+        cifti_img = nt.join_giftis_to_cifti([giftiL, giftiR])
 
         data_tmp = cifti_img.get_fdata()
 
@@ -45,15 +64,15 @@ def make_smooth_cifti(sns, glm, experiment='smp2'):
         dataobj=data,  # Stack them along the rows (adjust as needed)
         header=header,  # Use one of the headers (may need to modify)
     )
-    nb.save(cifti_img, os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.con.plan-exec.dscalar.nii'))
+    nb.save(cifti_img, os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.psc.plan-exec.dscalar.nii'))
 
-    nt.smooth_cifti(os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.con.plan-exec.dscalar.nii'),
-                    os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.con.plan-exec.smooth.dscalar.nii'),
+    nt.smooth_cifti(os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.psc.plan-exec.dscalar.nii'),
+                    os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.psc.plan-exec.smooth.dscalar.nii'),
                     'atlases/fs_LR.32k.L.flat.surf.gii', 'atlases/fs_LR.32k.R.flat.surf.gii')
 
-    giftis = nt.split_cifti_to_giftis(cifti_img, column_names=['plan', 'exec'], type='func')
-    nb.save(giftis[0], os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.con.L.plan-exec.smooth.func.gii'))
-    nb.save(giftis[1], os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.con.R.plan-exec.smooth.func.gii'))
+    # giftis = nt.split_cifti_to_giftis(cifti_img, column_names=['plan', 'exec'], type='func')
+    # nb.save(giftis[0], os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.psc.L.plan-exec.smooth.func.gii'))
+    # nb.save(giftis[1], os.path.join(gl.baseDir, experiment, gl.wbDir, f'glm{glm}.psc.R.plan-exec.smooth.func.gii'))
 
 
 
