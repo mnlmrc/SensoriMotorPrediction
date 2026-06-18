@@ -12,6 +12,29 @@ from joblib import Parallel, delayed, parallel_backend
 from imaging_pipelines.util import bootstrap_correlation, bootstrap_summary
 from sigproc.statistics import permutation_t_test_1samp_tf
 
+
+def tot_variance(roi='M1', monkey='Malfoy', rec=1, epoch='plan'):
+    
+    print(f'doing {monkey}, recording {rec}')
+    spk = np.load(os.path.join(gl.nhpDir, gl.spkDir, monkey, f'spk_aligned.{roi}-{rec}.npy'))
+    spk = np.sqrt(spk)
+    trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, monkey, f'trial_info-{rec}.tsv'), sep='\t')
+    trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+    trial_info.cond = trial_info.cond.map(gl.ephys_mapping)
+    spk_grouped, cond_vec, part_vec = pcm.group_by_condition(spk, trial_info.prob if epoch=='plan' else trial_info.cond, trial_info.block, axis=-1)
+    n_timep = spk_grouped.shape[1]
+    Var = np.zeros(n_timep)
+    Var_xval = np.zeros_like(Var)
+    for t in range(n_timep):
+        Y = spk_grouped[:, t]
+        G_obs, _ = pcm.est_G(Y, cond_vec, part_vec, X=pcm.indicator(part_vec))
+        G_obs_xval, _ = pcm.est_G_crossval(Y, cond_vec, part_vec, X=pcm.indicator(part_vec))
+        Var[t] = np.trace(G_obs)
+        Var_xval[t] = np.trace(G_obs_xval)
+    np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'var_tot.spk.{roi}.{roi}-{rec}.npy'), Var)
+    np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'sig_tot.spk.{roi}.{epoch}-{rec}.npy'), Var_xval)
+
+
 def corrective_drive(roi='M1', monkey='Malfoy', rec=1):
 
     print(f'doing {monkey}, recording {rec}-{roi}')
@@ -60,7 +83,6 @@ def corrective_drive(roi='M1', monkey='Malfoy', rec=1):
         sig.append(sig_tmp)
 
     np.save(os.path.join(gl.nhpDir, gl.spkDir, monkey, f'corrective_drive.{roi}-{rec}.npy'), np.array(sig))
-
 
 
 class Spikes:
@@ -202,6 +224,44 @@ def run_pcm(epoch='plan', monkey='Malfoy', roi='PMd', M=None, model='component',
     np.save(os.path.join(baseDir, pcmDir ,monkey, f'G_obs.spk.{roi}.{epoch}-{rec}.npy'), G_obs, )
     np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'c_bf.spk.{model}.{roi}.{epoch}-{rec}.npy'), c_bf, )
 
+
+def cluster_based_perm(epoch='plan', roi='PMd'):
+    
+    for seg in ['Cue', 'Pert']:
+        c_bf, sig_tot = [], []
+        print('loading component bayes factor...')
+        for mon in gl.monkey:
+            for r, rec in enumerate(gl.recordings_roi[mon][roi]):
+                print(f'loading component bayes factor for {mon}, recording{rec})')
+                c_bf_tmp = np.load(os.path.join(gl.nhpDir, gl.pcmDir, mon, f'c_bf.spk.component.{roi}.{epoch}-{rec}.npy'))
+                sig_tot_tmp = np.load(os.path.join(gl.nhpDir, gl.pcmDir, mon, f'sig_tot.spk.{roi}.{epoch}-{rec}.npy'))
+                if seg=='Cue':
+                    c_bf_tmp = c_bf_tmp[:gl.cuePost, :]
+                    sig_tot_tmp = sig_tot_tmp[:gl.cuePost]
+                elif seg=='Pert':
+                    c_bf_tmp = c_bf_tmp[gl.pertPre:, :]
+                    sig_tot_tmp = sig_tot_tmp[gl.pertPre:]
+
+                c_bf.append(c_bf_tmp)
+                sig_tot.append(sig_tot_tmp)
+
+        c_bf = np.array(c_bf)
+        sig_tot = np.array(sig_tot)
+
+        n_sess, n_timep, n_comp = c_bf.shape
+        significant_bf = np.zeros((n_timep, n_comp))
+        n_comp = c_bf.shape[-1]
+
+        print('Bayes factor, doing permutations...')
+        for i in range(n_comp):
+            _, _, significant_bf[:,  i] = permutation_t_test_1samp_tf(c_bf[:, :, i])
+        np.save(os.path.join(gl.nhpDir, gl.pcmDir, f'significant_bf.spk.{seg}.{roi}.{epoch}.npy'), significant_bf)
+
+        print('Total variance, doing permutations...')
+        _, pval, significant_sig_tot = permutation_t_test_1samp_tf(sig_tot)
+        np.save(os.path.join(gl.nhpDir, gl.pcmDir, f'significant_sig_tot.spk.{seg}.{roi}.{epoch}.npy'), significant_sig_tot)
+
+
 def main(args):
 
     monkey = ['Malfoy', 'Pert']
@@ -227,11 +287,15 @@ def main(args):
                                                                          trial_info.block, axis=-1)
                 n_timep = spk_grouped.shape[1]
                 Var = np.zeros(n_timep)
+                Var_xval = np.zeros_like(Var)
                 for t in range(n_timep):
                     Y = spk_grouped[:, t]
                     G_obs, _ = pcm.est_G(Y, cond_vec, part_vec, X=pcm.indicator(part_vec))
+                    G_obs_xval, _ = pcm.est_G_crossval(Y, cond_vec, part_vec, X=pcm.indicator(part_vec))
                     Var[t] = np.trace(G_obs)
+                    Var_xval[t] = np.trace(G_obs_xval)
                 np.save(os.path.join(gl.nhpDir, gl.pcmDir, mon, f'var_tot.spk.{args.region}.{args.epoch}-{rec}.npy'), Var)
+                np.save(os.path.join(gl.nhpDir, gl.pcmDir, mon, f'sig_tot.spk.{args.region}.{args.epoch}-{rec}.npy'), Var_xval)
     if args.what=='cluster-based_perm':
         for seg in ['Cue', 'Pert']:
             c_bf = []
@@ -240,7 +304,7 @@ def main(args):
                 for r, rec in enumerate(gl.recordings[mon][args.region]):
                     print(f'loading component bayes factor for {mon}, recording{rec})')
                     c_bf_tmp = np.load(os.path.join(gl.nhpDir, gl.pcmDir, mon,
-                                         f'c_bf.spk.{args.model}.{args.region}.{args.epoch}-{rec}.npy'))
+                                         f'c_bf.spk.component.{args.region}.{args.epoch}-{rec}.npy'))
                     if seg=='Cue':
                         c_bf_tmp = c_bf_tmp[:gl.cuePost, :]
                     elif seg=='Pert':

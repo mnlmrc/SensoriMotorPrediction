@@ -8,8 +8,30 @@ import scipy
 from scipy.signal import firwin, filtfilt
 
 import SensoriMotorPrediction.globals as gl
-
+import pickle
 import os
+
+
+def load_model(epoch):
+    
+    if epoch=='plan': #, 'regr_out_preact_ols', 'regr_out_preact_cv', 'regr_out_preact_ancova']:
+        regr_interest = [0, 1, 2, 3, 4]
+        comp_names = ['expectation', 'uncertainty']
+        f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan.p'), "rb")
+    # elif epoch=='warp':
+    #     regr_interest = [0, 1, 2, 3, 4]
+    #     f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.warp.p'), "rb")
+    elif epoch=='exec':
+        regr_interest = [5, 6, 7, 8, 9, 10, 11, 12,]
+        comp_names = ['sensory input', 'expectation', 'surprise']
+        f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.exec.p'), "rb")
+    else:
+        pass
+    
+    M = pickle.load(f)
+
+    return M, comp_names, regr_interest
+
 
 
 def upper_noise_ceiling(X):
@@ -66,13 +88,14 @@ def anova_finger_cue(dat, dv=('index0', 'ring0'), within='cue'):
 
     #print('rmANOVA ring perturbation')
     #display(anova_ring)
-    anova = pd.concat([anova_index, anova_ring])
-    cols = anova.columns
+    aov = pd.concat([anova_index, anova_ring])
+    cols = aov.columns
     if 'DF' in cols:
-        anova = anova[['Perturbation', 'Source', 'F', 'DF', 'p-unc']]
+        aov = aov[['Perturbation', 'Source', 'F', 'DF', 'p-unc']]
     if 'ddof1' in cols and 'ddof2' in cols:
-        anova = anova[['Perturbation', 'Source', 'F', 'ddof1', 'ddof2', 'p-unc']]
-    display(anova.style.hide(axis="index"))
+        aov = aov[['Perturbation', 'Source', 'F', 'ddof1', 'ddof2', 'p-unc']]
+    
+    return aov
 
 
 def fit_lm(data, y_var=None, X_var=None):
@@ -86,34 +109,10 @@ def load_glm_onset(sn, glm, experiment='smp2'):
     dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}', f'{experiment}_{sn}.dat'), sep='\t')
     bmap = dict(zip(dat.BN.unique(), np.arange(dat.BN.nunique())))
     dat.BN = dat.BN.map(bmap)
-    # onset = dat.startTRReal + dat.BN * gl.nTR
     onset = round((dat.startTimeReal+dat.planTime) / 1000) + dat.BN * gl.nTR
-    # events = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}', f'glm{glm}_events.tsv'), sep='\t')
-    # bmap = dict(zip(events.BN.unique(), np.arange(events.BN.nunique())))
-    # events.BN = events.BN.map(bmap)
-    # if glm in [12, 16]:
-    #     onsetGo = events[events.eventtype.str.contains('index|ring')]
-    # elif glm in [15, 17]:
-    #     onsetGo = events[events.eventtype=='exec']
     onsetGo = onset[dat.stimFinger!=99999].to_numpy().astype(int)
     onsetNogo = onset[dat.stimFinger==99999].to_numpy().astype(int)
-    # onsetGo = (np.round(onsetGo.Onset * gl.TR) + onsetGo.BN * gl.nTR).to_numpy().astype(int)
-    # onsetNogo = (np.round(onsetNogo.Onset * gl.TR) + onsetNogo.BN * gl.nTR).to_numpy().astype(int)
 
-    # pinfo = pd.read_csv(os.path.join(gl.baseDir, 'smp2', 'participants.tsv'), sep='\t')
-    # func_runs = pinfo.loc[pinfo.sn == sn, "FuncRuns"].iloc[0].split('.')
-    # func_runs = np.array(func_runs, dtype=int)
-    # func_runs = np.array([func_runs + func_runs.size * i for i in range(3)]).flatten()
-    # events = pd.read_csv(os.path.join(gl.baseDir, 'smp2', gl.behavDir, f'subj{sn}', f'glm{glm}_events.tsv'), sep='\t')
-    # events = events[events.BN.isin(func_runs)]
-    # bmap = dict(zip(events.BN.unique(), np.arange(events.BN.nunique())))
-    # events.BN = events.BN.map(bmap)
-    # BN_go = events[events.stimFinger!=99999].BN.to_numpy() 
-    # BN_nogo = events[events.stimFinger==99999].BN.to_numpy()
-    # onset_b_go = events[events.stimFinger!=99999].Onset.to_numpy()
-    # onset_b_nogo = events[events.stimFinger==99999].Onset.to_numpy()
-    # onsetGo = (np.round(onset_b_go * gl.TR) + BN_go * gl.nTR).astype(int)
-    # onsetNogo = (np.round(onset_b_nogo * gl.TR) + BN_nogo * gl.nTR).astype(int)
     return np.sort(onsetGo), np.sort(onsetNogo)
 
 

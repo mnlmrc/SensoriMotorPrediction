@@ -125,6 +125,8 @@ regressor_mapping = {
     'plan  ': 19
 }
 
+ephys_mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
+
 freqs = ['delta', 'theta', 'alpha-beta', 'gamma']
 monkey = ['Malfoy', 'Pert']
 recordings = {
@@ -181,8 +183,6 @@ colour_mapping = {
     '0-100%,ring': '#00AEEF', #col_ring[3],
 }
 
-###############
-
 reg_interest = {
     'exec': [5, 6, 7, 8, 9, 10, 11, 12],
     'plan': [0, 1, 2, 3, 4]
@@ -204,8 +204,7 @@ print(f'Atlases dir found: {atlasDir}')
 
 struct = ['CortexLeft', 'CortexRight']
 Hem = ['L', 'R']
-rois = {
-        'Desikan': [
+rois = {'Desikan': [
             'rostralmiddlefrontal',
             'caudalmiddlefrontal',
             'precentral',
@@ -218,6 +217,37 @@ rois = {
         ],
         'ROI': [
             'SMA', 'PMd', 'PMv', 'M1', 'S1', 'SPLa', 'SPLp',
+        ],
+        'Thalamus': [
+            'AV', 
+            # 'CeM', 
+            # 'CL', 
+            'CM',
+            # 'LD', 
+            'LGN', 
+            #'LP', 
+            # 'Sg',
+            'MDl', 
+            'MDm', 
+            # 'MGN', 
+            # 'MV(Re)',
+            # 'Pc', 
+            # 'Pf', 
+            # 'Pt', 
+            'PuA',
+            'PuI', 
+            'PuL', 
+            'PuM', 
+            #'R',
+            'VA', 
+            # 'VAmc', 
+            'VLa', 
+            'VLp',
+            # 'VM', 
+            'VPL', 
+            #'PaV', 
+            #'PuMm',
+            #'PuMl'
         ]
     }
 

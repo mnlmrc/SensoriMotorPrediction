@@ -55,20 +55,29 @@
             ]
         },
         {
-            "name": "calc_G",
+            "name": "correlation12",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "python": "${workspaceFolder}/venv/bin/python",
             "args": [
-                "calc_G",
+                "correlation_plan-exec",
+                "--glm",
+                "12",
+            ]
+        },
+        {
+            "name": "correlation16",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": [
+                "correlation_plan-exec",
                 "--glm",
                 "16",
-                "--epoch",
-                "plan",
-                "--sns",
-                "102"
             ]
         },
         {
@@ -96,7 +105,7 @@
             "args": [
                 "smooth_surf_activation",
                 "--glm",
-                "17",
+                "16",
             ]
         },
         {
@@ -133,13 +142,13 @@
             "args": ["corrective_drive_spike"]
         },
         {
-            "name": "corrective_drive_lfp",
+            "name": "cluster_based_perm",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "python": "${workspaceFolder}/venv/bin/python",
-            "args": ["corrective_drive_slfp"]
+            "args": ["cluster_based_perm_spike"]
         },
         {
             "name": "align_spike",
@@ -149,6 +158,47 @@
             "console": "integratedTerminal",
             "python": "${workspaceFolder}/venv/bin/python",
             "args": ["align_spike"]
+        },
+        {
+            "name": "make_cifti",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": ["make_cifti_psc",
+                        "--glm",
+                    "16"]
+        },
+        {
+            "name": "component_model_searchlight",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": ["component_model_searchlight",
+                    "--glm",
+                    "12",
+                    "--epoch",
+                    "plan"]
+        },
+        {
+            "name": "component_model_rois",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "python": "${workspaceFolder}/venv/bin/python",
+            "args": ["component_model_rois",
+                    "--glm",
+                    "12",
+                    "--epoch",
+                    "exec",
+                    "--atlas_name", 
+                    "Thalamus",
+                    "--method",
+                    "thalamus"]
         },
     ]
 }

@@ -89,6 +89,20 @@ def roi_contrasts(sns, atlas_name='ROI', glm=16, experiment='smp2'):
     con.to_csv(os.path.join(gl.baseDir, experiment, f'{gl.glmDir}{glm}', 'ROI.con.avg.tsv'), sep='\t', index=False)
 
 
+def make_cifti_thalamus(sn, glm=None, type='beta', experiment='smp2'):
+    print(f'doing participant {sn}, {type}...')
+    path_glm = os.path.join(gl.baseDir, experiment, f'glm{glm}', f'subj{sn}')
+    path_rois = os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}')
+    masks = [os.path.join(path_rois, f'Thalamus.{H}.nii') for H in gl.Hem]
+    reginfo = pd.read_csv(os.path.join(path_glm, f'subj{sn}_reginfo.tsv'), sep='\t')
+    row_axis = nb.cifti2.ScalarAxis(reginfo['name'] + '.' + reginfo['run'].astype(str))
+    if type == 'beta':
+        cifti = bt.make_cifti_betas(masks, struct=['ThalamusLeft', 'ThalamusRight'], path_glm=path_glm, row_axis=row_axis, )
+        nb.save(cifti, path_glm + '/' + 'beta.thalamus.dscalar.nii')
+    elif type == 'residual':
+        residuals = bt.make_cifti_residuals(path_glm=path_glm, masks=masks, struct=['ThalamusLeft', 'ThalamusRight'])
+        nb.save(residuals, path_glm + '/' + 'residual.thalamus.dtseries.nii')
+
 
 def make_cifti(sn, glm=None, type='beta', experiment='smp2'):
     print(f'doing participant {sn}, {type}...')

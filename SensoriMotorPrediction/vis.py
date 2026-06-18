@@ -228,12 +228,12 @@ def plot_aligned_deviation(fig, ax, force, descr):
     ax.set_ylabel('ring force (N)', fontsize=10)
     ax.set_title('Force trajectories')
 
-def plot_binned_cue(fig, ax, dat, x='cue', y=None, order=gl.cues, markersize=2, jitter=.2, show_individuals=True):
+def plot_binned_cue(fig, ax, dat, x='cue', y=None, order=gl.cues, markersize=3, jitter=.2, show_individuals=True):
     color = list(gl.colour_mapping.values())[:5]
     #sb.boxplot(data=dat, x=x, y=y, ax=ax, fill=False, palette=color, order=order, showfliers=False, linewidth=1)
     sb.pointplot(ax=ax, data=dat, x=x, y=y, order=order, errorbar='se', ls='none', palette=color, legend=True, lw=2)
     if show_individuals:
-        sb.stripplot(ax=ax, data=dat, size=markersize, jitter=jitter, dodge=False, x=x, y=y, order=order, color='k', legend=False)
+        sb.stripplot(ax=ax, data=dat, size=markersize, jitter=jitter, alpha=.3, dodge=False, palette=color, x=x, y=y, order=order, legend=False)
     ax.tick_params(labelbottom=False, bottom=False)
     ax.spines[['bottom', 'right', 'top']].set_visible(False)
     ax.set_xlabel('')
@@ -242,7 +242,7 @@ def plot_binned_cue(fig, ax, dat, x='cue', y=None, order=gl.cues, markersize=2, 
 
 
 def plot_binned_finger_cue(fig, axs, dat, x='cue', y=('index0', 'ring0'), finger=('nogo', 'nogo'), 
-                            markersize=2, jitter=.2, show_boxplot=False, show_individuals=True):
+                            markersize=3, jitter=.2, show_boxplot=False, show_individuals=True):
 
     order0 = list(gl.regressor_mapping)[0:4]
     order1 = list(gl.regressor_mapping)[1:5]
@@ -259,13 +259,13 @@ def plot_binned_finger_cue(fig, axs, dat, x='cue', y=('index0', 'ring0'), finger
 
     if show_individuals:
         sb.stripplot(dat[dat['stimFinger'] == finger[1]],
-            x=x, y=y[1], ax=axs[1], size=markersize, 
+            x=x, y=y[1], ax=axs[1], size=markersize, alpha=.3,
             order=list(gl.regressor_mapping)[1:5],
-            color='black', jitter=jitter, dodge=False,)
+            palette=palette1, jitter=jitter, dodge=False,)
         sb.stripplot(dat[dat['stimFinger'] == finger[0]],
             x=x, y=y[0], ax=axs[0], size=markersize,
-            order=list(gl.regressor_mapping)[0:4],
-            color='black', jitter=jitter, dodge=False,)
+            order=list(gl.regressor_mapping)[0:4], alpha=.3,
+            palette=palette0, jitter=jitter, dodge=False,)
 
     for ax in axs:
         ax.set_xticks([])
@@ -392,7 +392,7 @@ def plot_surf(fig, ax, surf_data, H, vmin=-10, vmax=10, cmap='viridis', col=0, t
                clim=[vmin, vmax],
                lighting=True,
                show_scalar_bar=False)
-    p.add_points(border[::3], color='w', point_size=6, render_points_as_spheres=True)
+    p.add_points(border[::3], color='k', point_size=6, render_points_as_spheres=True)
     p.set_background("white")
     if H == 'L':
         p.view_vector((-.8, 0, 1))

@@ -15,6 +15,7 @@ from imaging_pipelines.util import bootstrap_correlation, bootstrap_summary
 from SensoriMotorPrediction.lfp import make_freq_masks
 from joblib import Parallel, delayed, parallel_backend
 from sigproc.statistics import permutation_t_test_1samp_tf
+from tqdm import tqdm
 
 class LFPs:
     def __init__(self, M: list,
@@ -126,6 +127,32 @@ class LFPs:
         return res_dict
 
 
+def tot_variance(monkey='Malfoy', rec=1, epoch='plan', roi='M1'):
+
+    print(f'loading {monkey}, recording {rec}, epoch {epoch}, region {roi}')
+    lfp = np.load(os.path.join(gl.nhpDir, gl.lfpDir, monkey, f'lfp_aligned.{roi}-{rec}.npy'))
+    trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, monkey, f'trial_info-{rec}.tsv'), sep='\t')
+    trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+    lfp_grouped, cond_vec, part_vec = pcm.group_by_condition(lfp,
+                                                                trial_info.prob if epoch=='plan' else trial_info.cond,
+                                                                trial_info.block, axis=-1)
+    n_cond, n_timep, n_unit, n_freq = 5, lfp_grouped.shape[1], lfp_grouped.shape[2], lfp_grouped.shape[3]
+    n_sample, n_feat = lfp_grouped.shape[0], lfp_grouped.shape[-1]
+    Var = np.zeros((n_timep, n_freq))
+    Var_xval = np.zeros_like(Var)
+    for f in range(n_freq):
+        for t in range(n_timep):
+            print(f'doing {monkey}, recording {rec}, epoch {epoch}, region {roi}, {100 * f / n_freq}% completed')
+            Y = lfp_grouped[:, t, :, f]
+            G_obs, _ = pcm.est_G(Y, cond_vec, part_vec, X=pcm.indicator(part_vec))
+            G_obs_xval, _ = pcm.est_G_crossval(Y, cond_vec, part_vec, X=pcm.indicator(part_vec))
+            Var[t, f] = np.trace(G_obs)
+            Var_xval[t, f] = np.trace(G_obs_xval)
+
+    np.save(os.path.join(gl.nhpDir, gl.pcmDir, mon, f'var_tot.lfp.{roi}.{epoch}-{rec}.npy'), Var)
+    np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'sig_tot.lfp.{roi}.{epoch}-{rec}.npy'), Var_xval)
+
+
 def run_pcm(epoch='plan', monkey='Malfoy', roi='PMd', M=None, model='component', rec=1):
 
     _, idx = find_model(M, model)
@@ -172,7 +199,44 @@ def run_pcm(epoch='plan', monkey='Malfoy', roi='PMd', M=None, model='component',
     np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'G_obs.lfp.{roi}.{epoch}-{rec}.npy'), G_obs, )
     np.save(os.path.join(gl.nhpDir, gl.pcmDir, monkey, f'c_bf.lfp.{model}.{roi}.{epoch}-{rec}.npy'), c_bf, )
 
+def cluster_based_perm(roi='M1', epoch='plan'):
 
+    cfg = mat73.loadmat(os.path.join(gl.nhpDir, gl.lfpDir, 'Malfoy', f'cfg.PMd-19.mat'))['cfg']
+
+    for seg in ['Cue', 'Pert']:
+        c_bf, sig_tot = [], []
+        freq_thresh = np.where(cfg['foi'] > 5)[0][0]
+        print('loading component bayes factor...')
+        for mon in gl.monkey:
+            for r, rec in enumerate(gl.recordings_roi[mon][roi]):
+                print(f'loading component bayes factor for {mon}, recording{rec})')
+                c_bf_tmp = np.load(os.path.join(gl.nhpDir, gl.pcmDir, mon, f'c_bf.lfp.component.{roi}.{epoch}-{rec}.npy'))
+                sig_tot_tmp = np.load(os.path.join(gl.nhpDir, gl.pcmDir, mon, f'sig_tot.lfp.{roi}.{epoch}-{rec}.npy'))
+                if seg=='Cue':
+                    c_bf_tmp = c_bf_tmp[:, :gl.cuePost, :]
+                    sig_tot_tmp = sig_tot_tmp[:gl.cuePost].T
+                elif seg=='Pert':
+                    c_bf_tmp = c_bf_tmp[:, gl.pertPre:, :]
+                    sig_tot_tmp = sig_tot_tmp[gl.pertPre:].T
+                c_bf.append(c_bf_tmp)
+                sig_tot.append(sig_tot_tmp)
+
+        c_bf = np.array(c_bf)
+        sig_tot = np.array(sig_tot)
+
+        n_sess, n_freq, n_timep, n_comp = c_bf.shape
+
+        significant_bf = np.zeros((n_freq, n_timep, n_comp))
+        significant_sig_tot = np.zeros((n_freq, n_timep))
+        n_comp = c_bf.shape[-1]
+        print('doing permutations...')
+        for i in range(n_comp):
+            _, _, significant_bf[freq_thresh:, :, i] = permutation_t_test_1samp_tf(c_bf[:, freq_thresh:, :, i])
+            
+        _, pval, significant_sig_tot[freq_thresh:, :] = permutation_t_test_1samp_tf(sig_tot[:, freq_thresh:, :])
+
+        #np.save(os.path.join(gl.nhpDir, gl.pcmDir, f'significant_bf.lfp.{seg}.{roi}.{epoch}.npy'), significant_bf)
+        np.save(os.path.join(gl.nhpDir, gl.pcmDir, f'significant_sig_tot.lfp.{seg}.{roi}.{epoch}.npy'), significant_sig_tot)
 
 def corrective_drive(roi='M1', monkey='Malfoy', rec=1):
     cfg = mat73.loadmat(os.path.join(gl.nhpDir, gl.lfpDir, 'Malfoy', f'cfg.PMd-19.mat'))['cfg']
