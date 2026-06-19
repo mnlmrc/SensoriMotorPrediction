@@ -108,7 +108,6 @@ if __name__ == '__main__':
     df.loc[df.roi.isin(['SMA', 'PMd', 'PMv', 'SPLa', 'SPLp']), 'cluster'] = 'premotor-parietal'
     df.to_csv(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, 'component_model.BOLD.tsv'), sep='\t', index=False)
 
-
     # M1-S1 to premotor-parietal ratio
     df_plan = df[(df.epoch=='plan') & (df.method=='raw')]
     df_cluster = df_plan.groupby(['cluster', 'participant_id', 'component', 'Hem']).mean(numeric_only=True).reset_index()
@@ -120,7 +119,8 @@ if __name__ == '__main__':
 
     df_exec = df[df.epoch=='exec']
     df_cluster = df_exec.groupby(['cluster', 'participant_id', 'component', 'Hem']).mean(numeric_only=True).reset_index()
-    df_input = df_cluster[df_cluster['component']=='sensory input']
+    df_cluster = df_cluster[df_cluster.component.isin(['sensory input', 'surprise'])]
+    df_input = df_cluster[df_cluster['component']=='sensory input'].reset_index()
     df_sum = df_cluster.groupby(['cluster', 'participant_id', 'Hem']).sum(numeric_only=True).reset_index()
     df_ratio_exec = df_input.copy()
     df_ratio_exec['ratio'] = df_input['weight'].to_numpy() / df_sum['weight'].to_numpy()
