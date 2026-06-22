@@ -2,7 +2,7 @@ import os.path
 import nitools as nt
 import pandas as pd
 
-import globals as gl
+import SensoriMotorPrediction.globals as gl
 
 # def main():
 

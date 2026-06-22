@@ -60,50 +60,6 @@ def lower_noise_ceiling(X):
 
     return ceil
 
-def anova_finger_cue(dat, dv=('index0', 'ring0'), within='cue'):
-
-    # index perturbation
-    anova_index = pg.rm_anova(
-        data=dat[dat['stimFinger'] == 'index'],
-        dv=dv[0],
-        within=within,
-        subject='sn',
-        detailed=True
-    )
-    anova_index['Perturbation'] = 'index'
-
-    #print('rmANOVA index perturbation')
-    #display(anova_index)
-
-
-    # ring perturbation
-    anova_ring = pg.rm_anova(
-        data=dat[dat['stimFinger'] == 'ring'],
-        dv=dv[1],
-        within=within,
-        subject='sn',
-        detailed=True
-    )
-    anova_ring['Perturbation'] = 'ring'
-
-    #print('rmANOVA ring perturbation')
-    #display(anova_ring)
-    aov = pd.concat([anova_index, anova_ring])
-    cols = aov.columns
-    if 'DF' in cols:
-        aov = aov[['Perturbation', 'Source', 'F', 'DF', 'p-unc']]
-    if 'ddof1' in cols and 'ddof2' in cols:
-        aov = aov[['Perturbation', 'Source', 'F', 'ddof1', 'ddof2', 'p-unc']]
-    
-    return aov
-
-
-def fit_lm(data, y_var=None, X_var=None):
-    X = np.c_[np.ones(len(data)), data[X_var].to_numpy()]
-    y = data[y_var].to_numpy()
-    B = np.linalg.inv(X.T @ X) @ X.T @ y
-    return pd.Series({col: B[1:, c][0] for c, col in enumerate(y_var)})
-
 
 def load_glm_onset(sn, glm, experiment='smp2'):
     dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}', f'{experiment}_{sn}.dat'), sep='\t')

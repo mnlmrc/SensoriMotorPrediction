@@ -69,7 +69,6 @@ def detect_trig(trig_sig, time_trig, amp_threshold=None, edge='rising', min_dura
     return rise_times, rise_idx
 
 
-
 def emg_segment(data, timestamp, prestim=None, poststim=None, fsample=None):
     """
 
@@ -152,6 +151,33 @@ def load_delsys(filepath, trigger_name=None, muscle_names=None):
     df_out['time'] = df_raw.loc[:, 0]
 
     return df_out
+
+
+def align_emg(experiment='smp0', sn=sn):
+
+    pinfo = pd.read_csv(os.path.join(gl.baseDir, experiment, 'participants.tsv'), sep='\t')
+    blocks = pinfo[pinfo.sn==args.sn].reset_index().blocks_emg_task[0]
+    if type(blocks) is str:
+        blocks = blocks.split(',')
+    else:
+        blocks = [blocks]
+    channels_emg = pinfo[pinfo.sn==args.sn].reset_index().channels_emg[0].split(',')
+    dat = pd.read_csv(os.path.join(gl.baseDir, experiment, 'behavioural', f'subj{sn}', f'{experiment}_{sn}.dat'), sep='\t')
+
+    emg = []
+    for block in blocks:
+        print(f'subj{args.sn} - block {block}')
+        filepath = os.path.join(gl.baseDir, experiment, 'emg', f'subj{sn}', f'block_{block}.csv')
+        dat_tmp = dat[dat.BN==int(block)]
+        df_out = load_delsys(filepath, trigger_name='Trigger', muscle_names=channels_emg)
+        trig_sig = df_out.Trigger.to_numpy()
+        trig_time = df_out.time.astype(float).to_numpy()
+        _, timestamp = detect_trig(trig_sig, trig_time, amp_threshold=args.thresh)
+        emg.append(emg_segment(df_out.iloc[:, :-2], timestamp, prestim=0, poststim=4, fsample=2148))
+
+    emg = np.vstack(emg)
+
+    np.save(os.path.join(gl.baseDir, experiment, 'emg', f'subj{sn}', 'emg_raw.npy'), emg)
 
 
 def main(args):

@@ -40,7 +40,7 @@ def align_lfp(monkey='Malfoy', roi='M1', rec=1):
     cfg = mat73.loadmat(os.path.join(gl.nhpDir, gl.lfpDir, f'{monkey}/cfg.{roi}-{rec}.mat'))
     lfp = lfp[..., (trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
     trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
-    lfp_aligned = align_lfp(lfp, cfg, trial_info, postProb=30)
+    lfp_aligned = align_lfp(lfp, cfg, trial_info,)
     np.save(os.path.join(gl.nhpDir, gl.lfpDir, monkey, f'lfp_aligned.{roi}-{rec}.npy'), lfp_aligned)
 
 

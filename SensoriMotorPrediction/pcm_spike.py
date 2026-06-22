@@ -186,7 +186,7 @@ class Spikes:
         return res_dict
 
 
-def run_pcm(epoch='plan', monkey='Malfoy', roi='PMd', M=None, model='component', rec=1):
+def component_model(epoch='plan', monkey='Malfoy', roi='PMd', M=None, model='component', rec=1):
 
     _, idx = find_model(M, model)
 
@@ -260,6 +260,81 @@ def cluster_based_perm(epoch='plan', roi='PMd'):
         print('Total variance, doing permutations...')
         _, pval, significant_sig_tot = permutation_t_test_1samp_tf(sig_tot)
         np.save(os.path.join(gl.nhpDir, gl.pcmDir, f'significant_sig_tot.spk.{seg}.{roi}.{epoch}.npy'), significant_sig_tot)
+
+
+def correlation(rois=['M1', 'S1']):
+    f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")
+    Mflex = pickle.load(f)
+    G, Y, i = [], [], 0
+    for roi in rois:
+        for mon in gl.monkey:
+            for r, rec in enumerate(gl.recordings_roi[mon][roi]):
+                print(f'doing {mon}, recording {rec}')
+
+                spk = np.load(os.path.join(gl.nhpDir, gl.spkDir, mon, f'spk_aligned.{roi}-{rec}.npy'))
+                spk = np.sqrt(spk)
+                trial_info = pd.read_csv(os.path.join(gl.nhpDir, gl.recDir, mon, f'trial_info-{rec}.tsv'), sep='\t')
+                trial_info = trial_info[(trial_info.isCatch == 0) & (trial_info.AdaptationBlock == 0)]
+                mapping = {1: 1, 2: 8, 3: 3, 4: 6, 5: 2, 6: 5, 7: 4, 8: 7}
+                trial_info.cond = trial_info.cond.map(mapping)
+
+                spk_grouped, _, part_vec = pcm.group_by_condition(spk, trial_info.cond, trial_info.block, axis=-1)
+                n_part = len(np.unique(part_vec))
+                obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
+                           'part_vec': np.r_[np.arange(0, n_part), np.arange(0, n_part)]}
+                n_unit = spk.shape[1]
+                mask_plan = {'ext': np.array([0, 1, 0, 0, 1, 0, 0, 0] * n_part, dtype=bool),
+                             'flx': np.array([0, 0, 0, 1, 0, 0, 1, 0] * n_part, dtype=bool)}
+                mask_exec = {'ext': np.array([1, 1, 1, 1, 0, 0, 0, 0] * n_part, dtype=bool),
+                             'flx': np.array([0, 0, 0, 0, 1, 1, 1, 1] * n_part, dtype=bool)}
+
+                plan_ext = spk_grouped[mask_plan['ext']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
+                plan_flx = spk_grouped[mask_plan['flx']].reshape(n_part, 2, 154, n_unit).mean(axis=1)
+                plan = plan_ext - plan_flx
+                plan = plan[:, gl.pertIdx+4:gl.pertIdx+24].mean(axis=1)
+                plan = plan - plan.mean(axis=-1, keepdims=True)
+
+                exec_ext = spk_grouped[mask_exec['ext']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
+                exec_flx = spk_grouped[mask_exec['flx']].reshape(n_part, 4, 154, n_unit).mean(axis=1)
+                exec = exec_ext - exec_flx
+                exec = exec[:, gl.pertIdx+4:gl.pertIdx+24].mean(axis=1)
+                exec = exec - exec.mean(axis=-1, keepdims=True)
+
+                data = np.r_[plan, exec]
+                X = pcm.indicator(obs_des['part_vec'])
+                beta, *_ = np.linalg.lstsq(X, data)
+                err = data - X @ beta
+                cov = (err.T @ err) / err.shape[0]
+                data_prewhitened = data / np.sqrt(np.diag(cov))
+
+                Y.append(pcm.dataset.Dataset(data_prewhitened, obs_descriptors=obs_des))
+                G.append(pcm.est_G_crossval(
+                    Y[-1].measurements,
+                    Y[-1].obs_descriptors['cond_vec'],
+                    Y[-1].obs_descriptors['part_vec'])[0])
+
+    np.save(os.path.join(baseDir, pcmDir, f'G_obs.spk.corr_cue-dir.{"-".join(rois)}.early.npy'), np.array(G))
+    T_in, theta_in = pcm.fit_model_individ(Y, Mflex, fixed_effect=None, fit_scale=False, verbose=True)
+    T_gr, theta_gr = pcm.fit_model_group(Y, Mflex, fixed_effect=None, fit_scale=True, verbose=False)
+    T_in.to_pickle(os.path.join(baseDir, pcmDir, f'T_in.spk.corr_cue-dir.{"-".join(rois)}.early.p'))
+    T_gr.to_pickle(os.path.join(baseDir, pcmDir, f'T_gr.spk.corr_cue-dir.{"-".join(rois)}.early.p'))
+
+    f = open(os.path.join(baseDir, pcmDir, f'theta_in.spk.corr_cue-dir.{"-".join(rois)}.early.p'), 'wb')
+    pickle.dump(theta_in, f)
+    f = open(os.path.join(baseDir, pcmDir, f'theta_gr.spk.corr_cue-dir.{"-".join(rois)}.early.p'), 'wb')
+    pickle.dump(theta_gr, f)
+
+    # do bootstrap
+    B = 1000
+    S = len(Y)
+    indeces = rng.integers(0, S, size=(B, S))
+    results = Parallel(n_jobs=16, backend='loky')(
+        delayed(bootstrap_correlation)(idx, Y, Mflex) for idx in indeces
+    )
+    r_bootstrap = np.array([r for r in results if r is not None])
+    n_disc = len(results) - len(r_bootstrap)
+    print(f'{"-".join(rois)}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
+    np.save(os.path.join(baseDir, pcmDir, f'r_bootstrap.spk.corr_cue-dir.{"-".join(rois)}.early.npy'), r_bootstrap)
 
 
 def main(args):

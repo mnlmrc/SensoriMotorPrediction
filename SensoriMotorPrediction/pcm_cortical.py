@@ -319,13 +319,7 @@ def correlation(sns, glm, rois, corr='plan-exec', experiment='smp2'):
 
                 # load betas, residuals and roi masks
                 betas = nb.load(os.path.join(glm_path, f'subj{sn}', 'beta.dscalar.nii'))
-                #beta_img = nt.volume_from_cifti(betas, struct_names=gl.struct)
                 mask = nb.load(os.path.join(roi_path, f'subj{sn}', f'ROI.{H}.{roi}.nii'))
-                #coords = nt.get_mask_coords(mask)
-                #B = nt.sample_image(beta_img, coords[0], coords[1], coords[2], interpolation=0).T
-
-                #keep = ~np.isnan(B).all(axis=0)
-                #B = B[:, keep]
 
                 residuals = nb.load(os.path.join(glm_path, f'subj{sn}', 'residual.dtseries.nii'))
                 
@@ -334,7 +328,6 @@ def correlation(sns, glm, rois, corr='plan-exec', experiment='smp2'):
 
                 # extract cond_vec and part_vec
                 reginfo = np.char.split(betas.header.get_axis(0).name, sep='.')
-                # cond_vec = np.array([gl.regressor_mapping[r[0]] for r in reginfo])
                 part_vec = np.array([int(r[1]) for r in reginfo])
                 n_part = len(np.unique(part_vec))
                 obs_des = {'cond_vec': np.r_[np.zeros(n_part), np.ones(n_part)],
@@ -371,5 +364,9 @@ def correlation(sns, glm, rois, corr='plan-exec', experiment='smp2'):
             n_disc = len(results) - len(r_bootstrap)
             print(f'ROI.{H}.{roi}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
             np.save(os.path.join(pcm_path, f'r_bootstrap.corr_{corr}.glm{glm}.{H}.{roi}.npy'), r_bootstrap)
+
+
+
+
 
 
