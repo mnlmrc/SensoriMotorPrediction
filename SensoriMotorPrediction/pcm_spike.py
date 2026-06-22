@@ -394,6 +394,7 @@ def main(args):
         n_disc = len(results) - len(r_bootstrap)
         print(f'{args.region}: kept {len(r_bootstrap)}/{B} (discarded {n_disc})')
         np.save(os.path.join(baseDir, pcmDir, f'r_bootstrap.spk.corr_plan-exec.{args.region}.npy'), r_bootstrap)
+        
     if args.what=='correlation_cue-direction':
         rng = np.random.default_rng(0)  # seed for reprodocibility
         f = open(os.path.join(gl.baseDir, 'smp2', gl.pcmDir, f'M.plan-exec.p'), "rb")

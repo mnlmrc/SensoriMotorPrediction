@@ -326,6 +326,7 @@ def main(args):
                                              X=pcm.matrix.indicator(Y.obs_descriptors['part_vec']))
 
         np.save(os.path.join(path_pcm, f'G_obs.emg.npy'), G)
+        
     if args.what == 'corr2tsv':
         if args.what == 'corr2tsv':
             corrs = ['cue-finger']
