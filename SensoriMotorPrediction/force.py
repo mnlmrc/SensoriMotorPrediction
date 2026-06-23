@@ -98,8 +98,9 @@ def calc_md(X):
 
     d = np.array(d)
     MD = d.mean()
+    PD = d.max()
 
-    return MD, d
+    return MD, PD, d
 
 
 def calc_rt(X, thresh, fs):
@@ -138,6 +139,7 @@ def single_trial_behaviour(experiment=None, sn=None, blocks=None, win=[(-1.5, 0)
         'stimFinger': [],
         'cue': [],
         'MD': [],
+        'PD': [],
         'forceDiff': [],
         'Unexpected': [],
         'RT_global': [],
@@ -194,7 +196,7 @@ def single_trial_behaviour(experiment=None, sn=None, blocks=None, win=[(-1.5, 0)
                 unexp = 0
 
             X_md = mov[onset + int(.05 * gl.fsample_mov):onset + int(.5 * gl.fsample_mov), ch_idx] # skip electro-mechanical delay (50ms)
-            md, _ = calc_md(X_md[:, [1, 3]])
+            md, peak_d, _ = calc_md(X_md[:, [1, 3]])
             bs = mov[onset - int(.1 * gl.fsample_mov):onset, ch_idx].mean(axis=0, keepdims=True)
             X_rt = mov[onset:onset + int(.4 * gl.fsample_mov), ch_idx]
             rt_global = calc_rt(X_rt - bs, rt_thresh, gl.fsample_mov) - .05 # skip electro-mechanical delay (50ms)
@@ -205,6 +207,7 @@ def single_trial_behaviour(experiment=None, sn=None, blocks=None, win=[(-1.5, 0)
             else:
                 rt_stimFinger = np.nan
             force_dict['MD'].append(md)
+            force_dict['PD'].append(peak_d)
             force_dict['RT_global'].append(rt_global)
             force_dict['RT_stimFinger'].append(rt_stimFinger)
             force_dict['Unexpected'].append(unexp)
@@ -220,7 +223,6 @@ def single_trial_behaviour(experiment=None, sn=None, blocks=None, win=[(-1.5, 0)
     force_df.to_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, f'subj{sn}',
                                      f'{experiment}_{sn}_force_single_trial.tsv'), sep='\t', index=False)
 
-    #return force_df
 
 def calc_G_force(dat, experiment='smp2', prewhiten=True):
     #dat = pd.read_csv(os.path.join(gl.baseDir, experiment, gl.behavDir, 'behaviour.block.cue.tsv'), sep='\t')

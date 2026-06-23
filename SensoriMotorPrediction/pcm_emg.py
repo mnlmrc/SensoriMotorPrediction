@@ -3,7 +3,6 @@ import time
 import argparse
 import pickle
 from itertools import combinations
-import rsatoolbox as rsa
 import PcmPy as pcm
 from pathlib import Path
 from joblib import Parallel, delayed, parallel_backend
