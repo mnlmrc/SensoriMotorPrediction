@@ -104,7 +104,7 @@ def make_cifti_thalamus(sn, glm=None, type='beta', experiment='smp2'):
         nb.save(residuals, path_glm + '/' + 'residual.thalamus.dtseries.nii')
 
 
-def make_cifti(sn, glm=None, type='beta', experiment='smp2'):
+def make_cifti_cortex(sn, glm=None, type='beta', experiment='smp2'):
     print(f'doing participant {sn}, {type}...')
     path_glm = os.path.join(gl.baseDir, experiment, f'glm{glm}', f'subj{sn}')
     path_rois = os.path.join(gl.baseDir, experiment, gl.roiDir, f'subj{sn}')
