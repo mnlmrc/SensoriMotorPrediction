@@ -69,7 +69,7 @@ def make_execution_models():
     M.append(pcm.FixedModel('null', np.eye(8)))  # 0
     M.append(pcm.FixedModel('finger', G_finger))  # 1
     M.append(pcm.FixedModel('cue', G_cue))  # 2
-    M.append(pcm.FixedModel('uncertainty', G_cert))  # 3
+    # M.append(pcm.FixedModel('uncertainty', G_cert))  # 3
     M.append(pcm.FixedModel('surprise', G_surprise))  # 4
     M.append(pcm.ComponentModel('component', G_component))  # 5
     # M.append(pcm.ComponentModel('component_fc', G_component_fc))  # 5
