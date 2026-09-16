@@ -41,6 +41,44 @@ def align_spike(monkey='Malfoy', roi='M1', rec=1):
     np.save(os.path.join(gl.nhpDir, gl.spkDir, monkey, f'spk_aligned.{roi}-{rec}.npy'), spk_aligned)    
 
 
+def baseline_subtract(rois=('PMd', 'M1', 'S1')):
+    """Pool trial-averaged spiking activity across recordings and subtract the pre-cue baseline.
+
+    Loads `spk_aligned.avg.{roi}-{rec}.npy` for every recording of every monkey in `rois`,
+    averages it over units, and subtracts each recording's baseline (mean activity from the
+    start of the aligned window up to 5 bins before cue onset).
+
+    Saves `spk_aligned.avg.baseline_subtracted.npz` in the spikes directory, holding the
+    baseline-subtracted activity (recording x time), the ROI label of each recording and the
+    time axis the recordings are aligned to.
+    """
+    t_cue = np.linspace(0, gl.cuePost - 1, gl.cuePost)
+    t_pert = np.linspace(gl.pertPre, gl.pertPost - 1, gl.pertPost - gl.pertPre) + 5
+    t = np.concatenate((t_cue, t_pert))
+    bs_mask = (t >= 0) & (t <= gl.cueIdx - 5)
+
+    spk_list, roi_list = [], []
+    for roi in rois:
+        for mon in gl.monkey:
+            for rec in gl.recordings_roi[mon][roi]:
+                print(f'loading spikes {mon}, {roi}, Recording-{rec}...')
+                spk_aligned = np.load(os.path.join(gl.nhpDir, gl.spkDir, mon,
+                                                   f'spk_aligned.avg.{roi}-{rec}.npy'))
+                spk_list.append(spk_aligned.mean(axis=-1))  # average over units
+                roi_list.append(roi)
+
+    spk = np.stack(spk_list)                # (recording, time)
+    roi_labels = np.array(roi_list)
+
+    bs_spk = spk[:, bs_mask].mean(axis=1)   # (recording,)
+    spk = spk - bs_spk[:, None]
+
+    np.savez(os.path.join(gl.nhpDir, gl.spkDir, 'spk_aligned.avg.baseline_subtracted.npz'),
+             spk=spk, roi=roi_labels, t=t)
+
+    return spk, roi_labels, t
+
+
 def main(args):
     if args.what=='align':
         print(f'loading spikes Recording-{args.recording}...')

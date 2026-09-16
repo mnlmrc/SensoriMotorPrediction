@@ -1,5 +1,5 @@
 import argparse
-from SensoriMotorPrediction import force, pcm_cortical, searchlight, spike, pcm_lfp, pcm_spike, pcm_thalamus, pcm_models, hrf, betas, surface, kinematics, rois, pcm_emg
+from SensoriMotorPrediction import force, pcm_cortical, searchlight, spike, lfp, pcm_lfp, pcm_spike, pcm_thalamus, pcm_models, hrf, betas, surface, kinematics, rois, pcm_emg
 import time
 import SensoriMotorPrediction.globals as gl
 
@@ -124,11 +124,19 @@ def main(args):
                     spike.align_spike(roi=roi, monkey=mon, rec=rec)
 
     # time-align LFPs
-    elif args.what == 'align_slfp':
+    elif args.what == 'align_lfp':
         for mon in gl.monkey:
             for roi in ['PMd', 'M1', 'S1']:
                 for rec in gl.recordings_roi[mon][roi]:
-                    spike.align_spike(roi=roi, monkey=mon, rec=rec)
+                    spike.align_lfp(roi=roi, monkey=mon, rec=rec)
+
+    # subtract pre-cue baseline from trial-averaged spiking activity
+    elif args.what == 'baseline_subtract_spike':
+        spike.baseline_subtract(rois=['PMd', 'M1', 'S1'])
+
+    # express trial-averaged LFP power as change from pre-cue baseline (dB)
+    elif args.what == 'baseline_normalise_lfp':
+        lfp.baseline_normalise(rois=['PMd', 'M1', 'S1'])
 
     # calc variance of cross-validated and non-cross-validated G matrix in LFPs
     elif args.what == 'tot_variance_lfp':

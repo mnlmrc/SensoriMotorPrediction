@@ -44,6 +44,48 @@ def align_lfp(monkey='Malfoy', roi='M1', rec=1):
     np.save(os.path.join(gl.nhpDir, gl.lfpDir, monkey, f'lfp_aligned.{roi}-{rec}.npy'), lfp_aligned)
 
 
+def baseline_normalise(rois=('PMd', 'M1', 'S1')):
+    """Pool trial-averaged LFP power across recordings and express it as change from baseline (dB).
+
+    Loads `lfp_aligned.avg.{roi}-{rec}.npy` for every recording of every monkey in `rois` and
+    divides it, frequency by frequency, by that recording's baseline power (mean power from the
+    start of the aligned window up to 5 bins before cue onset), in decibels.
+
+    Saves `lfp_aligned.avg.dB.npz` in the LFPs directory, holding the baseline-normalised power
+    (recording x time x frequency), the ROI label of each recording, the time axis the
+    recordings are aligned to and the frequencies of interest.
+    """
+    t_cue = np.linspace(0, gl.cuePost - 1, gl.cuePost)
+    t_pert = np.linspace(gl.pertPre, gl.pertPost - 1, gl.pertPost - gl.pertPre) + 5
+    t = np.concatenate((t_cue, t_pert))
+    bs_mask = (t >= 0) & (t <= gl.cueIdx - 5)
+
+    lfp_list, roi_list = [], []
+    foi = None
+    for roi in rois:
+        for mon in gl.monkey:
+            for rec in gl.recordings_roi[mon][roi]:
+                print(f'loading lfps {mon}, {roi}, Recording-{rec}...')
+                lfp_aligned = np.load(os.path.join(gl.nhpDir, gl.lfpDir, mon,
+                                                   f'lfp_aligned.avg.{roi}-{rec}.npy'))
+                if foi is None:
+                    cfg = mat73.loadmat(os.path.join(gl.nhpDir, gl.lfpDir, mon, f'cfg.{roi}-{rec}.mat'))
+                    foi = cfg['cfg']['foi']
+                lfp_list.append(lfp_aligned)
+                roi_list.append(roi)
+
+    lfp = np.stack(lfp_list)                    # (recording, time, freq)
+    roi_labels = np.array(roi_list)
+
+    bs_lfp = lfp[:, bs_mask, :].mean(axis=1)    # (recording, freq)
+    lfp_dB = 10 * np.log10(lfp / bs_lfp[:, None, :])
+
+    np.savez(os.path.join(gl.nhpDir, gl.lfpDir, 'lfp_aligned.avg.dB.npz'),
+             lfp_dB=lfp_dB, roi=roi_labels, t=t, foi=foi)
+
+    return lfp_dB, roi_labels, t, foi
+
+
 def make_freq_masks(cfg):
     foi = cfg['foi']
     delta = (foi >= 1) & (foi < 3)
