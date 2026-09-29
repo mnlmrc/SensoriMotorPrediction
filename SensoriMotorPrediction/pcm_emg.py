@@ -267,7 +267,7 @@ def correlation(experiment='smp0', sns=None):
         pickle.dump(theta_gr, f)
 
 
-# def main(args):
+def main(args):
 
 #     if args.what == 'force_planning':
 
